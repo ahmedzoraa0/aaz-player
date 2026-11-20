@@ -735,7 +735,9 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
         .title("AAZ Player")
         .inner_size(1200.0, 780.0)
         .min_inner_size(460.0, 540.0)
-        .resizable(true);
+        .resizable(true)
+        .decorations(false)
+        .shadow(true);
 
     #[cfg(target_os = "windows")]
     let builder = builder.additional_browser_args("--autoplay-policy=no-user-gesture-required");
@@ -989,6 +991,37 @@ fn aaz_set_fullscreen(window: WebviewWindow, enabled: bool) -> bool {
 #[tauri::command]
 fn aaz_is_fullscreen(window: WebviewWindow) -> bool {
     window.is_fullscreen().unwrap_or(false)
+}
+
+#[tauri::command]
+fn aaz_win_minimize(window: WebviewWindow) -> bool {
+    window.minimize().is_ok()
+}
+
+#[tauri::command]
+fn aaz_win_toggle_maximize(window: WebviewWindow) -> bool {
+    let currently_max = window.is_maximized().unwrap_or(false);
+    if currently_max {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+    window.is_maximized().unwrap_or(!currently_max)
+}
+
+#[tauri::command]
+fn aaz_win_is_maximized(window: WebviewWindow) -> bool {
+    window.is_maximized().unwrap_or(false)
+}
+
+#[tauri::command]
+fn aaz_win_close(window: WebviewWindow) -> bool {
+    window.close().is_ok()
+}
+
+#[tauri::command]
+fn aaz_win_start_drag(window: WebviewWindow) -> bool {
+    window.start_dragging().is_ok()
 }
 
 #[tauri::command]
@@ -1352,6 +1385,11 @@ pub fn run() {
             aaz_set_always_on_top,
             aaz_set_fullscreen,
             aaz_is_fullscreen,
+            aaz_win_minimize,
+            aaz_win_toggle_maximize,
+            aaz_win_is_maximized,
+            aaz_win_close,
+            aaz_win_start_drag,
             aaz_save_snapshot,
             aaz_list_system_fonts,
             aaz_check_updates,
