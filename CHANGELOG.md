@@ -4,6 +4,18 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.4.1] - 2026-06-02
+
+### Fixed & Improved
+- **Playlist Drag-and-Drop Reordering**: Replaced native HTML5 drag with a smooth Pointer-Events reorder engine with live drop indicator, floating ghost preview, and edge auto-scroll (fixes WebView2 blocked drag cursor).
+- **Resizable Playlist Sidebar**: Added a draggable vertical split-pane handle between the player stage and playlist sidebar (LTR & RTL support, double-click to reset, persisted width).
+- **Default Audio Output Auto-Play**: Fixed silent initial playback in WebView2 by keeping native audio output active until DSP/Visualizer is needed and binding the default WASAPI sink cleanly.
+- **Top Bar Double-Click Maximize**: Removed conflicting native drag-region double-toggle and added a drag movement threshold + cooldown so double-clicking the top bar cleanly maximizes/restores.
+- **Cast Button Placement**: Kept the Cast button exclusively in the top video toolbar (removed duplicate bottom dock button).
+- **Concise README**: Streamlined repository README into clean scannable Arabic & English headlines.
+
+---
+
 ## [1.4.0] - 2026-06-01
 
 ### Added — Playlist Powerhouse

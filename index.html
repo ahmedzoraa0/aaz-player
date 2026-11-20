@@ -637,7 +637,7 @@
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 380px;
+      grid-template-columns: minmax(0, 1fr) 5px var(--sidebar-w, 360px);
       overflow: hidden;
     }
 
@@ -645,8 +645,58 @@
       grid-template-columns: 1fr;
     }
 
-    .app-shell.is-sidebar-hidden .sidebar-pane {
+    .app-shell.is-sidebar-hidden .sidebar-pane,
+    .app-shell.is-sidebar-hidden .sidebar-resizer {
       display: none;
+    }
+
+    /* Draggable Split-Pane Resizer between Stage & Playlist Sidebar */
+    .sidebar-resizer {
+      position: relative;
+      width: 5px;
+      cursor: col-resize;
+      background-color: transparent;
+      z-index: 12;
+      touch-action: none;
+      transition: background-color 140ms var(--ease-out);
+    }
+
+    .sidebar-resizer::before {
+      content: '';
+      position: absolute;
+      inset: 0 -3px;
+    }
+
+    .sidebar-resizer::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 44px;
+      border-radius: 2px;
+      background-color: var(--border-strong);
+      opacity: 0.45;
+      transition: opacity 140ms var(--ease-out), height 140ms var(--ease-out), background-color 140ms var(--ease-out);
+    }
+
+    .sidebar-resizer:hover,
+    .sidebar-resizer.is-resizing {
+      background-color: var(--accent-soft);
+    }
+
+    .sidebar-resizer:hover::after,
+    .sidebar-resizer.is-resizing::after {
+      background-color: var(--accent);
+      opacity: 1;
+      height: 76px;
+    }
+
+    body.is-resizing-sidebar,
+    body.is-resizing-sidebar * {
+      cursor: col-resize !important;
+      user-select: none !important;
     }
 
     /* Stage Column (Left / Main) */
@@ -1799,6 +1849,44 @@
 
     .track-drag-handle:active {
       cursor: grabbing;
+    }
+
+    body.is-reordering-tracks,
+    body.is-reordering-tracks * {
+      cursor: grabbing !important;
+      user-select: none !important;
+    }
+
+    .track-drag-ghost {
+      position: fixed;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 300;
+      max-width: 300px;
+      padding: 7px 12px;
+      border-radius: var(--radius-control);
+      background-color: var(--dropdown-bg);
+      border: 1px solid var(--accent);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      opacity: 0.96;
+    }
+
+    .track-drag-ghost-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--accent);
+      flex-shrink: 0;
     }
 
     .track-index {
@@ -3440,6 +3528,10 @@
         grid-template-rows: minmax(210px, 44%) minmax(0, 1fr);
       }
 
+      .sidebar-resizer {
+        display: none;
+      }
+
       .sidebar-pane,
       html[dir="rtl"] .sidebar-pane {
         border-left: none;
@@ -3478,7 +3570,7 @@
   <!-- Browser-Style Multi-Tab Workspace Shell (Active only in top-level frame!) -->
   <div class="workspace-shell" id="workspaceShell" hidden>
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="AAZ Player Tabs">
-      <div class="tabstrip-brand" id="tabStripBrand" title="AAZ Player" data-tauri-drag-region>
+      <div class="tabstrip-brand" id="tabStripBrand" title="AAZ Player">
         <svg width="19" height="19" viewBox="0 0 40 40" fill="none" aria-hidden="true">
           <defs>
             <linearGradient id="aazTabBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
@@ -3499,7 +3591,7 @@
       </div>
       <div class="tabstrip-tabs" id="tabStripTabs"></div>
       <button type="button" class="tab-add-btn" id="newTabBtn" title="New Tab (Ctrl+T)" aria-label="Open new tab">+</button>
-      <div class="tabstrip-drag-spacer" id="tabDragSpacer" data-tauri-drag-region></div>
+      <div class="tabstrip-drag-spacer" id="tabDragSpacer"></div>
       <div class="win-controls" id="winControls" hidden>
         <button type="button" class="win-ctrl-btn" id="winMinBtn" title="Minimize" aria-label="Minimize">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
@@ -3768,7 +3860,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.4.0</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.4.1</div>
             </div>
           </div>
         </nav>
@@ -4136,6 +4228,9 @@
         <div class="bookmarks-strip" id="bookmarksStrip" hidden aria-label="Track Bookmarks"></div>
       </main>
 
+      <!-- Resizable Split-Pane Divider -->
+      <div class="sidebar-resizer" id="sidebarResizer" role="separator" aria-orientation="vertical" aria-label="Resize playlist sidebar" title="Drag to resize playlist (double-click to reset)"></div>
+
       <!-- ===================================================================
            LIBRARY SIDEBAR: Queue + Built-In Saved Playlists Library
            =================================================================== -->
@@ -4384,13 +4479,6 @@
             <input type="range" id="volumeSlider" class="range-input volume-slider" min="0" max="1" step="0.01" value="0.85" aria-label="Volume" />
             <span class="volume-readout" id="volumeReadout">85%</span>
           </div>
-
-          <button type="button" class="btn-icon" id="dockCastBtn" title="Cast to TV / Screen (C)" aria-label="Cast to TV / Screen">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
-              <line x1="2" y1="20" x2="2.01" y2="20"/>
-            </svg>
-          </button>
 
           <button type="button" class="btn-icon" id="dockFullscreenBtn" title="Fullscreen (F)" aria-label="Toggle Fullscreen" aria-pressed="false">
             <svg id="dockFsEnterIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -5107,19 +5195,63 @@
             });
           }
 
-          const bindWindowDrag = (elNode) => {
+          let lastMaxToggleAt = 0;
+          const safeToggleMaximize = () => {
+            const now = Date.now();
+            if (now - lastMaxToggleAt < 350) return;
+            lastMaxToggleAt = now;
+            shellDesktop.toggleMaximize?.().then(syncWinMaxIcons).catch(() => {});
+          };
+
+          const bindWindowDrag = (elNode, onlySelf = false) => {
             if (!elNode) return;
-            elNode.addEventListener('mousedown', (e) => {
-              if (e.button !== 0) return;
-              if (e.detail === 2) {
-                shellDesktop.toggleMaximize?.().then(syncWinMaxIcons).catch(() => {});
-              } else {
+            let dragArmed = null;
+
+            const cleanupDrag = () => {
+              dragArmed = null;
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', cleanupDrag);
+              window.removeEventListener('blur', cleanupDrag);
+            };
+
+            const onMove = (ev) => {
+              if (!dragArmed) return;
+              if ((ev.buttons & 1) === 0) {
+                cleanupDrag();
+                return;
+              }
+              const dx = ev.screenX - dragArmed.x;
+              const dy = ev.screenY - dragArmed.y;
+              if (Math.hypot(dx, dy) >= 5) {
+                cleanupDrag();
                 shellDesktop.startWindowDrag?.().catch(() => {});
               }
+            };
+
+            elNode.addEventListener('mousedown', (e) => {
+              if (e.button !== 0) return;
+              if (onlySelf && e.target !== elNode) return;
+              if (e.detail >= 2) {
+                cleanupDrag();
+                return;
+              }
+              dragArmed = { x: e.screenX, y: e.screenY };
+              window.addEventListener('mousemove', onMove);
+              window.addEventListener('mouseup', cleanupDrag);
+              window.addEventListener('blur', cleanupDrag);
+            });
+
+            elNode.addEventListener('dblclick', (e) => {
+              if (onlySelf && e.target !== elNode) return;
+              e.preventDefault();
+              e.stopPropagation();
+              cleanupDrag();
+              safeToggleMaximize();
             });
           };
-          bindWindowDrag(tabDragSpacer);
-          bindWindowDrag(tabStripBrand);
+          bindWindowDrag(tabDragSpacer, false);
+          bindWindowDrag(tabStripBrand, false);
+          bindWindowDrag(tabStripTabs, true);
 
           let resizeSyncTimer = null;
           const refreshMaximizedState = () => {
@@ -5240,6 +5372,9 @@
          ======================================================================= */
       const el = {
         shell: document.getElementById('appShell'),
+        workspace: document.querySelector('.workspace'),
+        sidebarResizer: document.getElementById('sidebarResizer'),
+        sidebarPane: document.getElementById('sidebarPane'),
         media: document.getElementById('mediaEngine'),
 
         menuBar: document.getElementById('menuBar'),
@@ -5435,7 +5570,6 @@
         volMuteIcon: document.getElementById('volMuteIcon'),
         volumeSlider: document.getElementById('volumeSlider'),
         volumeReadout: document.getElementById('volumeReadout'),
-        dockCastBtn: document.getElementById('dockCastBtn'),
         dockFullscreenBtn: document.getElementById('dockFullscreenBtn'),
         dockFsEnterIcon: document.getElementById('dockFsEnterIcon'),
         dockFsExitIcon: document.getElementById('dockFsExitIcon'),
@@ -5546,7 +5680,7 @@
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
-        appVersion: '1.4.0',
+        appVersion: '1.4.1',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
@@ -6203,62 +6337,139 @@
         ledLevels: new Array(32).fill(0),
         ledCaps: new Array(32).fill(0),
         orbEnergy: 0,
+        connecting: false,
+        unlockListenerBound: false,
 
-        ensureInit() {
-          if (this.initialized || this.failed) {
-            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-            return this.initialized;
+        hasActiveDSP() {
+          if (state.preampGain > 1.001) return true;
+          return Array.isArray(state.eqGains) && state.eqGains.some((g) => Math.abs(Number(g) || 0) > 0.05);
+        },
+
+        needsAudioGraph() {
+          return this.hasActiveDSP() || Boolean(el.audioStage && !el.audioStage.hidden);
+        },
+
+        bindGestureUnlock() {
+          if (this.unlockListenerBound) return;
+          this.unlockListenerBound = true;
+          const unlock = () => {
+            this.unlockListenerBound = false;
+            document.removeEventListener('pointerdown', unlock, true);
+            document.removeEventListener('keydown', unlock, true);
+            if (!this.initialized && this.needsAudioGraph() && !el.media.paused) {
+              this.ensureInit(true);
+            } else if (this.ctx && this.ctx.state === 'suspended') {
+              this.ctx.resume().catch(() => {});
+            }
+          };
+          document.addEventListener('pointerdown', unlock, true);
+          document.addEventListener('keydown', unlock, true);
+        },
+
+        ensureInit(force = false) {
+          if (this.failed) return false;
+          if (this.initialized) {
+            if (this.ctx && this.ctx.state === 'suspended') {
+              this.ctx.resume().catch(() => {});
+            }
+            return true;
           }
+          // Keep native <video>/<audio> OS default playback untouched until EQ, Preamp, or Audio Visualizer is actually needed!
+          // This prevents WebView2's AudioContext from silencing newly launched files before a channel is manually chosen.
+          if (!force && !this.needsAudioGraph()) {
+            return false;
+          }
+          if (this.connecting) return false;
+
           try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) {
               this.failed = true;
               return false;
             }
-            this.ctx = new AudioCtx();
-            this.source = this.ctx.createMediaElementSource(el.media);
-
-            this.filters = EQ_FREQUENCIES.map((freq, idx) => {
-              const filter = this.ctx.createBiquadFilter();
-              filter.type = idx === 0 ? 'lowshelf' : idx === EQ_FREQUENCIES.length - 1 ? 'highshelf' : 'peaking';
-              filter.frequency.value = freq;
-              filter.Q.value = 1.05;
-              filter.gain.value = state.eqGains[idx] || 0;
-              return filter;
-            });
-
-            this.preamp = this.ctx.createGain();
-            this.preamp.gain.value = state.preampGain || 1;
-
-            this.analyser = this.ctx.createAnalyser();
-            this.analyser.fftSize = 256;
-            this.analyser.smoothingTimeConstant = 0.8;
-            this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
-            this.timeData = new Uint8Array(this.analyser.fftSize);
-
-            let node = this.source;
-            for (const f of this.filters) {
-              node.connect(f);
-              node = f;
+            if (!this.ctx) {
+              this.ctx = new AudioCtx();
             }
-            node.connect(this.preamp);
-            this.preamp.connect(this.analyser);
-            this.analyser.connect(this.ctx.destination);
 
-            this.initialized = true;
-            if (state.audioSinkId && typeof this.ctx.setSinkId === 'function') {
-              this.ctx.setSinkId(state.audioSinkId).catch(() => {});
+            const finalizeGraph = () => {
+              if (this.initialized || this.failed || !this.ctx) return true;
+              try {
+                this.source = this.ctx.createMediaElementSource(el.media);
+
+                this.filters = EQ_FREQUENCIES.map((freq, idx) => {
+                  const filter = this.ctx.createBiquadFilter();
+                  filter.type = idx === 0 ? 'lowshelf' : idx === EQ_FREQUENCIES.length - 1 ? 'highshelf' : 'peaking';
+                  filter.frequency.value = freq;
+                  filter.Q.value = 1.05;
+                  filter.gain.value = state.eqGains[idx] || 0;
+                  return filter;
+                });
+
+                this.preamp = this.ctx.createGain();
+                this.preamp.gain.value = state.preampGain || 1;
+
+                this.analyser = this.ctx.createAnalyser();
+                this.analyser.fftSize = 256;
+                this.analyser.smoothingTimeConstant = 0.8;
+                this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+                this.timeData = new Uint8Array(this.analyser.fftSize);
+
+                let node = this.source;
+                for (const f of this.filters) {
+                  node.connect(f);
+                  node = f;
+                }
+                node.connect(this.preamp);
+                this.preamp.connect(this.analyser);
+                this.analyser.connect(this.ctx.destination);
+
+                this.initialized = true;
+                this.connecting = false;
+
+                // Explicitly bind default ('') or selected audio output sink on WebView2 so sound never starts silent
+                if (typeof this.ctx.setSinkId === 'function') {
+                  this.ctx.setSinkId(state.audioSinkId || '').catch(() => {});
+                }
+                return true;
+              } catch {
+                this.connecting = false;
+                this.failed = true;
+                return false;
+              }
+            };
+
+            // Only attach MediaElementSource when AudioContext is confirmed running — never hijack <video> with a suspended context!
+            if (this.ctx.state === 'running') {
+              return finalizeGraph();
             }
-            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-            return true;
+
+            this.connecting = true;
+            this.ctx.resume()
+              .then(() => {
+                this.connecting = false;
+                if (this.ctx && this.ctx.state === 'running') {
+                  finalizeGraph();
+                } else {
+                  this.bindGestureUnlock();
+                }
+              })
+              .catch(() => {
+                this.connecting = false;
+                this.bindGestureUnlock();
+              });
+            return false;
           } catch {
+            this.connecting = false;
             this.failed = true;
             return false;
           }
         },
 
         applyEQ() {
-          if (!this.initialized) return;
+          if (!this.initialized) {
+            if (this.hasActiveDSP()) this.ensureInit(true);
+            return;
+          }
           this.filters.forEach((filter, idx) => {
             filter.gain.setTargetAtTime(state.eqGains[idx] || 0, this.ctx.currentTime, 0.02);
           });
@@ -8276,7 +8487,7 @@
 
           if (autoPlay) {
             try {
-              AudioStudio.ensureInit();
+              if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
               await el.media.play();
             } catch (playErr) {
               if (playErr && playErr.name !== 'AbortError') console.warn('Autoplay blocked:', playErr);
@@ -8296,7 +8507,7 @@
         }
         if (el.media.paused) {
           try {
-            AudioStudio.ensureInit();
+            if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
             await el.media.play();
           } catch (err) {
             showNotice(`Playback failed: ${err?.message || 'Could not start media'}`, true);
@@ -9597,7 +9808,6 @@
           const row = document.createElement('div');
           row.className = `track-row${isActive ? ' is-active' : ''}${isWatched ? ' is-watched' : ''}`;
           row.dataset.key = track.key;
-          row.draggable = true;
           row.setAttribute('role', 'option');
           row.setAttribute('tabindex', '0');
           row.setAttribute('aria-selected', String(isActive));
@@ -9683,44 +9893,11 @@
             row.appendChild(bar);
           }
 
-          // Manual Drag-and-Drop Reordering
-          row.addEventListener('dragstart', (e) => {
-            state.dragTrackKey = track.key;
-            row.classList.add('is-dragging');
-            if (e.dataTransfer) {
-              e.dataTransfer.effectAllowed = 'move';
-              try { e.dataTransfer.setData('text/aaz-track-key', track.key); } catch {}
-            }
-          });
-          row.addEventListener('dragover', (e) => {
-            if (!state.dragTrackKey || state.dragTrackKey === track.key) return;
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-            const rect = row.getBoundingClientRect();
-            const isAfter = (e.clientY - rect.top) > rect.height / 2;
-            row.classList.toggle('is-drop-before', !isAfter);
-            row.classList.toggle('is-drop-after', isAfter);
-          });
-          row.addEventListener('dragleave', () => {
-            row.classList.remove('is-drop-before', 'is-drop-after');
-          });
-          row.addEventListener('drop', (e) => {
-            if (!state.dragTrackKey) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const fromKey = state.dragTrackKey;
-            const dropAfter = row.classList.contains('is-drop-after');
-            row.classList.remove('is-drop-before', 'is-drop-after');
-            state.dragTrackKey = '';
-            reorderTrack(fromKey, track.key, dropAfter);
-          });
-          row.addEventListener('dragend', () => {
-            state.dragTrackKey = '';
-            row.classList.remove('is-dragging');
-            el.playlistList.querySelectorAll('.is-drop-before, .is-drop-after').forEach((n) => {
-              n.classList.remove('is-drop-before', 'is-drop-after');
-            });
+          // Pointer-Events Manual Reorder (100% WebView2 / Tauri / Touch / Mouse compatible — no OS forbidden cursor!)
+          row.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('.track-star-btn')) return;
+            startPointerTrackReorder(e, row, track);
           });
 
           // Right-click Playlist Track Context Menu
@@ -9731,6 +9908,7 @@
           });
 
           const activate = () => {
+            if (Date.now() - pointerDragSuppressClickUntil < 260) return;
             if (track.key === state.currentKey) togglePlayPause();
             else loadTrackByKey(track.key, { autoPlay: true, startTime: undefined });
           };
@@ -9755,6 +9933,134 @@
           frag.appendChild(row);
         });
         el.playlistList.appendChild(frag);
+      }
+
+      let pointerDragSuppressClickUntil = 0;
+
+      function startPointerTrackReorder(downEvent, sourceRow, track) {
+        const startX = downEvent.clientX;
+        const startY = downEvent.clientY;
+        const startedOnGrip = Boolean(downEvent.target.closest('.track-drag-handle'));
+        let active = false;
+        let ghost = null;
+        let dropTargetKey = '';
+        let dropAfter = false;
+        let scrollRaf = null;
+        let lastClientY = startY;
+
+        const clearDropHints = () => {
+          el.playlistList.querySelectorAll('.is-drop-before, .is-drop-after').forEach((n) => {
+            n.classList.remove('is-drop-before', 'is-drop-after');
+          });
+        };
+
+        const updateDropTarget = (clientY) => {
+          clearDropHints();
+          dropTargetKey = '';
+          const rows = Array.from(el.playlistList.querySelectorAll('.track-row'));
+          if (rows.length < 2) return;
+
+          let bestRow = null;
+          let bestDist = Infinity;
+          let after = false;
+
+          for (const r of rows) {
+            const rect = r.getBoundingClientRect();
+            const mid = rect.top + rect.height / 2;
+            const dist = Math.abs(clientY - mid);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestRow = r;
+              after = clientY > mid;
+            }
+          }
+
+          if (bestRow && bestRow.dataset.key !== track.key) {
+            dropTargetKey = bestRow.dataset.key;
+            dropAfter = after;
+            bestRow.classList.toggle('is-drop-before', !after);
+            bestRow.classList.toggle('is-drop-after', after);
+          }
+        };
+
+        const runAutoScroll = () => {
+          if (!active) return;
+          const listRect = el.playlistList.getBoundingClientRect();
+          const edge = 38;
+          if (lastClientY < listRect.top + edge) {
+            el.playlistList.scrollTop -= Math.max(3, Math.round((listRect.top + edge - lastClientY) * 0.28));
+            updateDropTarget(lastClientY);
+          } else if (lastClientY > listRect.bottom - edge) {
+            el.playlistList.scrollTop += Math.max(3, Math.round((lastClientY - (listRect.bottom - edge)) * 0.28));
+            updateDropTarget(lastClientY);
+          }
+          scrollRaf = requestAnimationFrame(runAutoScroll);
+        };
+
+        const beginDrag = (ev) => {
+          active = true;
+          state.dragTrackKey = track.key;
+          sourceRow.classList.add('is-dragging');
+          document.body.classList.add('is-reordering-tracks');
+
+          ghost = document.createElement('div');
+          ghost.className = 'track-drag-ghost';
+          const dot = document.createElement('span');
+          dot.className = 'track-drag-ghost-dot';
+          const txt = document.createElement('span');
+          txt.textContent = track.displayName;
+          ghost.append(dot, txt);
+          ghost.style.transform = `translate3d(${ev.clientX + 14}px, ${ev.clientY - 16}px, 0)`;
+          document.body.appendChild(ghost);
+          scrollRaf = requestAnimationFrame(runAutoScroll);
+        };
+
+        const onPointerMove = (ev) => {
+          lastClientY = ev.clientY;
+          if (!active) {
+            const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+            if (dist < (startedOnGrip ? 3 : 7)) return;
+            beginDrag(ev);
+          }
+          ev.preventDefault();
+          if (ghost) {
+            const gx = Math.min(window.innerWidth - 220, Math.max(8, ev.clientX + 14));
+            const gy = Math.min(window.innerHeight - 40, Math.max(8, ev.clientY - 16));
+            ghost.style.transform = `translate3d(${gx}px, ${gy}px, 0)`;
+          }
+          updateDropTarget(ev.clientY);
+        };
+
+        const finish = (commit) => {
+          window.removeEventListener('pointermove', onPointerMove, true);
+          window.removeEventListener('pointerup', onPointerUp, true);
+          window.removeEventListener('pointercancel', onPointerCancel, true);
+          window.removeEventListener('blur', onPointerCancel);
+          if (scrollRaf) cancelAnimationFrame(scrollRaf);
+          clearDropHints();
+          sourceRow.classList.remove('is-dragging');
+          document.body.classList.remove('is-reordering-tracks');
+          if (ghost) ghost.remove();
+          const wasActive = active;
+          const target = dropTargetKey;
+          const isAfter = dropAfter;
+          active = false;
+          state.dragTrackKey = '';
+          if (wasActive) {
+            pointerDragSuppressClickUntil = Date.now();
+            if (commit && target && target !== track.key) {
+              reorderTrack(track.key, target, isAfter);
+            }
+          }
+        };
+
+        const onPointerUp = () => finish(true);
+        const onPointerCancel = () => finish(false);
+
+        window.addEventListener('pointermove', onPointerMove, true);
+        window.addEventListener('pointerup', onPointerUp, true);
+        window.addEventListener('pointercancel', onPointerCancel, true);
+        window.addEventListener('blur', onPointerCancel);
       }
 
       function highlightActivePlaylistRow(scrollIntoView = false) {
@@ -10103,7 +10409,6 @@
 
       function syncCastButtonState() {
         const active = Boolean(state.castServerInfo || state.activeCastDevice);
-        if (el.dockCastBtn) el.dockCastBtn.classList.toggle('is-casting', active);
         if (el.videoCastBtn) el.videoCastBtn.classList.toggle('is-active', active);
         if (el.castLanToggleBtn) {
           el.castLanToggleBtn.textContent = state.castServerInfo ? t('castStopLan') : t('castStartLan');
@@ -10655,10 +10960,19 @@
       });
 
       el.media.addEventListener('play', () => {
-        AudioStudio.ensureInit();
+        if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
+        else if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
+          AudioStudio.ctx.resume().catch(() => {});
+        }
         updatePlayButtonUI();
         startAutosaveTimer();
         if (!el.audioStage.hidden) AudioStudio.startVisualizer();
+      });
+
+      el.media.addEventListener('playing', () => {
+        if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
+          AudioStudio.ctx.resume().catch(() => {});
+        }
       });
 
       el.media.addEventListener('pause', () => {
@@ -10981,8 +11295,58 @@
       el.audioOnlyViewBtn.addEventListener('click', () => setVideoDisplayMode('audio', true));
       el.showVideoBtn.addEventListener('click', () => setVideoDisplayMode('video', true));
       if (el.videoCastBtn) el.videoCastBtn.addEventListener('click', openCastModal);
-      if (el.dockCastBtn) el.dockCastBtn.addEventListener('click', openCastModal);
       el.pipBtn.addEventListener('click', togglePictureInPicture);
+
+      // Resizable Split-Pane Playlist Sidebar (LTR & RTL aware + persisted width)
+      const SIDEBAR_WIDTH_KEY = 'aaz_sidebar_width';
+      function applySidebarWidth(widthPx, persist = false) {
+        if (!el.workspace) return;
+        const maxW = Math.max(280, Math.min(720, Math.floor(window.innerWidth * 0.65)));
+        const clamped = Math.max(240, Math.min(maxW, Math.round(widthPx)));
+        el.workspace.style.setProperty('--sidebar-w', `${clamped}px`);
+        if (persist) {
+          try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped)); } catch {}
+        }
+        if (el.audioStage && !el.audioStage.hidden) {
+          requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+        }
+      }
+
+      if (el.sidebarResizer && el.workspace) {
+        el.sidebarResizer.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const startX = e.clientX;
+          const startW = el.sidebarPane ? el.sidebarPane.getBoundingClientRect().width : 360;
+          const isRtl = document.documentElement.dir === 'rtl';
+          el.sidebarResizer.classList.add('is-resizing');
+          document.body.classList.add('is-resizing-sidebar');
+
+          const onMove = (ev) => {
+            // LTR: sidebar is on the right -> moving left increases sidebar width
+            // RTL: sidebar is on the left  -> moving right increases sidebar width
+            const delta = isRtl ? (ev.clientX - startX) : (startX - ev.clientX);
+            applySidebarWidth(startW + delta, false);
+          };
+          const onUp = () => {
+            window.removeEventListener('pointermove', onMove, true);
+            window.removeEventListener('pointerup', onUp, true);
+            window.removeEventListener('pointercancel', onUp, true);
+            el.sidebarResizer.classList.remove('is-resizing');
+            document.body.classList.remove('is-resizing-sidebar');
+            const finalW = el.sidebarPane ? el.sidebarPane.getBoundingClientRect().width : 360;
+            applySidebarWidth(finalW, true);
+          };
+
+          window.addEventListener('pointermove', onMove, true);
+          window.addEventListener('pointerup', onUp, true);
+          window.addEventListener('pointercancel', onUp, true);
+        });
+
+        el.sidebarResizer.addEventListener('dblclick', () => {
+          applySidebarWidth(360, true);
+        });
+      }
       el.dockFullscreenBtn.addEventListener('click', toggleFullscreen);
       el.audioExitFsBtn.addEventListener('click', toggleFullscreen);
       el.fsExitBtn.addEventListener('click', toggleFullscreen);
@@ -11415,13 +11779,26 @@
         setVizMode(savedViz, false);
         applyLanguage(savedLang, false, false);
 
-        // Restore per-tab audio output channel if set for this tab session
+        // Restore saved playlist sidebar width
+        try {
+          const savedW = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+          if (Number.isFinite(savedW) && savedW >= 240) {
+            applySidebarWidth(savedW, false);
+          }
+        } catch {}
+
+        // Restore per-tab audio output channel if set for this tab session; auto-fallback to OS Default if unavailable
         try {
           const savedSinkRaw = sessionStorage.getItem(SESSION_SINK_KEY);
           if (savedSinkRaw) {
             const parsedSink = JSON.parse(savedSinkRaw);
             if (parsedSink && typeof parsedSink.id === 'string' && parsedSink.id) {
-              await applyAudioOutputDevice(parsedSink.id, parsedSink.label || '', true);
+              const ok = await applyAudioOutputDevice(parsedSink.id, parsedSink.label || '', true);
+              if (!ok) {
+                state.audioSinkId = '';
+                state.audioSinkLabel = '';
+                sessionStorage.removeItem(SESSION_SINK_KEY);
+              }
             }
           }
         } catch {}
