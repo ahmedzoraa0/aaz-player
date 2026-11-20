@@ -1,0 +1,90 @@
+{
+  "name": "aaz-player",
+  "productName": "AAZ Player",
+  "version": "1.1.0",
+  "description": "AAZ Player — Local Audio & Video Playlist Player for Windows",
+  "main": "main.cjs",
+  "author": "AAZ",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "dist:release": "electron-builder --win --publish always",
+    "dist:nsis": "electron-builder --win nsis --publish never",
+    "dist:portable": "electron-builder --win portable --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "rcedit": "^4.0.1"
+  },
+  "build": {
+    "appId": "com.aaz.player",
+    "productName": "AAZ Player",
+    "asar": true,
+    "compression": "maximum",
+    "afterPack": "./scripts/afterPack.cjs",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "app/index.html",
+      "assets/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "AAZ-Player-Setup-${version}.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AAZ Player",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
+    },
+    "portable": {
+      "artifactName": "AAZ-Player-Portable-${version}.exe"
+    },
+    "fileAssociations": [
+      { "ext": "mp3", "name": "MP3 Audio", "role": "Viewer" },
+      { "ext": "flac", "name": "FLAC Audio", "role": "Viewer" },
+      { "ext": "wav", "name": "WAV Audio", "role": "Viewer" },
+      { "ext": "m4a", "name": "M4A Audio", "role": "Viewer" },
+      { "ext": "ogg", "name": "OGG Audio", "role": "Viewer" },
+      { "ext": "opus", "name": "Opus Audio", "role": "Viewer" },
+      { "ext": "mp4", "name": "MP4 Video", "role": "Viewer" },
+      { "ext": "webm", "name": "WebM Video", "role": "Viewer" },
+      { "ext": "mkv", "name": "MKV Video", "role": "Viewer" },
+      { "ext": "mov", "name": "MOV Video", "role": "Viewer" },
+      { "ext": "xspf", "name": "XSPF Playlist", "role": "Viewer" },
+      { "ext": "m3u8", "name": "M3U8 Playlist", "role": "Viewer" },
+      { "ext": "pls", "name": "PLS Playlist", "role": "Viewer" }
+    ]
+  }
+}

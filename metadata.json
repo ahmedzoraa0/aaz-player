@@ -1,0 +1,8 @@
+{
+  "name": "AAZ Player",
+  "description": "Lightweight single-file local MP3 playlist player with File System Access API, IndexedDB session resume, and keyboard shortcuts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

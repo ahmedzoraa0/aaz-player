@@ -1,0 +1,22 @@
+// @ts-nocheck
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('aazDesktop', {
+  isElectron: true,
+  getAppVersion: () => ipcRenderer.invoke('aaz:get-app-version'),
+  checkForUpdates: () => ipcRenderer.invoke('aaz:check-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('aaz:download-update'),
+  installUpdate: () => ipcRenderer.invoke('aaz:install-update'),
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('aaz:update-status', (_event, payload) => callback(payload));
+  },
+  selectFolder: () => ipcRenderer.invoke('aaz:select-folder'),
+  selectFiles: () => ipcRenderer.invoke('aaz:select-files'),
+  readFolder: (folderPath) => ipcRenderer.invoke('aaz:read-folder', folderPath),
+  readTextFile: (filePath) => ipcRenderer.invoke('aaz:read-text-file', filePath),
+  inspectPaths: (paths) => ipcRenderer.invoke('aaz:inspect-paths', paths),
+  setAlwaysOnTop: (enabled) => ipcRenderer.invoke('aaz:set-always-on-top', enabled),
+  onOpenExternal: (callback) => {
+    ipcRenderer.on('aaz:open-external', (_event, paths) => callback(paths));
+  }
+});
