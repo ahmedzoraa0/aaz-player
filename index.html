@@ -372,7 +372,9 @@
       position: absolute;
       top: calc(100% + 5px);
       left: 0;
-      min-width: 236px;
+      min-width: 244px;
+      max-height: min(76vh, 560px);
+      overflow-y: auto;
       padding: 5px;
       border-radius: var(--radius-control);
       background-color: var(--dropdown-bg);
@@ -404,6 +406,7 @@
       font-size: 12.5px;
       color: var(--text-primary);
       text-align: left;
+      flex-shrink: 0;
     }
 
     .menu-action:hover:not(:disabled) {
@@ -411,11 +414,13 @@
       color: var(--text-primary);
     }
 
-    .menu-action.is-checked::before {
+    .menu-action.is-checked::after {
       content: '✓';
       color: var(--accent);
       font-weight: 700;
-      margin-right: 6px;
+      margin-inline-start: auto;
+      padding-inline-start: 10px;
+      flex-shrink: 0;
     }
 
     .menu-action-label {
@@ -695,12 +700,41 @@
       display: none;
     }
 
+    .video-viewport-stage {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transform-origin: center center;
+      transition: transform 140ms var(--ease-out);
+    }
+
     #mediaEngine {
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
       cursor: pointer;
+    }
+
+    .video-snapshot-flash {
+      position: absolute;
+      inset: 0;
+      background-color: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 18;
+    }
+
+    .video-snapshot-flash.is-flashing {
+      animation: aazShutterFlash 260ms ease-out forwards;
+    }
+
+    @keyframes aazShutterFlash {
+      0% { opacity: 0.72; }
+      100% { opacity: 0; }
     }
 
     #mediaEngine::cue {
@@ -2101,9 +2135,8 @@
       text-align: right;
     }
 
-    html[dir="rtl"] .menu-action.is-checked::before {
-      margin-right: 0;
-      margin-left: 6px;
+    html[dir="rtl"] .menu-action.is-checked::after {
+      margin-inline-start: auto;
     }
 
     html[dir="rtl"] .sidebar-pane {
@@ -3021,6 +3054,8 @@
               <button type="button" class="menu-action" data-cmd="toggle-play"><span class="menu-action-label" data-i18n="cmdPlayPause">Play / Pause</span><span class="menu-shortcut">Space</span></button>
               <button type="button" class="menu-action" data-cmd="prev-track"><span class="menu-action-label" data-i18n="cmdPrev">Previous Track</span></button>
               <button type="button" class="menu-action" data-cmd="next-track"><span class="menu-action-label" data-i18n="cmdNext">Next Track</span></button>
+              <button type="button" class="menu-action" data-cmd="prev-frame"><span class="menu-action-label" data-i18n="cmdPrevFrame">Previous Frame</span><span class="menu-shortcut">,</span></button>
+              <button type="button" class="menu-action" data-cmd="next-frame"><span class="menu-action-label" data-i18n="cmdNextFrame">Next Frame</span><span class="menu-shortcut">.</span></button>
               <div class="menu-sep"></div>
               <button type="button" class="menu-action" data-cmd="toggle-shuffle"><span class="menu-action-label" data-i18n="cmdShuffle">Shuffle</span></button>
               <button type="button" class="menu-action" data-cmd="cycle-repeat"><span class="menu-action-label" data-i18n="cmdRepeat">Cycle Repeat Mode</span></button>
@@ -3066,9 +3101,35 @@
             <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false" data-i18n="menuVideo">Video</button>
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="toggle-video-view"><span class="menu-action-label" data-i18n="cmdToggleVideoView">Toggle Video / Audio-Only View</span></button>
-              <div class="menu-sep"></div>
+              <button type="button" class="menu-action" data-cmd="take-snapshot"><span class="menu-action-label" data-i18n="cmdSnapshot">Take Snapshot</span><span class="menu-shortcut">Shift+S</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
+              <div class="menu-sep"></div>
+              <div class="menu-heading" data-i18n="headingAspect">Aspect Ratio</div>
+              <button type="button" class="menu-action is-checked" data-aspect="default"><span class="menu-action-label" data-i18n="aspectDefault">Default</span></button>
+              <button type="button" class="menu-action" data-aspect="16:9"><span class="menu-action-label">16:9</span></button>
+              <button type="button" class="menu-action" data-aspect="4:3"><span class="menu-action-label">4:3</span></button>
+              <button type="button" class="menu-action" data-aspect="21:9"><span class="menu-action-label">21:9 (Cinema)</span></button>
+              <button type="button" class="menu-action" data-aspect="16:10"><span class="menu-action-label">16:10</span></button>
+              <button type="button" class="menu-action" data-aspect="1:1"><span class="menu-action-label">1:1</span></button>
+              <button type="button" class="menu-action" data-aspect="fill"><span class="menu-action-label" data-i18n="aspectFill">Fill / Stretch</span></button>
+              <div class="menu-sep"></div>
+              <div class="menu-heading" data-i18n="headingZoom">Zoom</div>
+              <button type="button" class="menu-action" data-zoom="0.25"><span class="menu-action-label" data-i18n="zoomQuarter">1:4 Quarter (0.25x)</span></button>
+              <button type="button" class="menu-action" data-zoom="0.5"><span class="menu-action-label" data-i18n="zoomHalf">1:2 Half (0.5x)</span></button>
+              <button type="button" class="menu-action is-checked" data-zoom="1"><span class="menu-action-label" data-i18n="zoomOriginal">1:1 Original</span></button>
+              <button type="button" class="menu-action" data-zoom="1.5"><span class="menu-action-label" data-i18n="zoomLarge">1.5:1 Large (1.5x)</span></button>
+              <button type="button" class="menu-action" data-zoom="2"><span class="menu-action-label" data-i18n="zoomDouble">2:1 Double (2.0x)</span></button>
+              <div class="menu-sep"></div>
+              <div class="menu-heading" data-i18n="headingCrop">Crop</div>
+              <button type="button" class="menu-action is-checked" data-crop="default"><span class="menu-action-label" data-i18n="cropDefault">Default (No Crop)</span></button>
+              <button type="button" class="menu-action" data-crop="16:9"><span class="menu-action-label">16:9</span></button>
+              <button type="button" class="menu-action" data-crop="21:9"><span class="menu-action-label">21:9 (Cinema)</span></button>
+              <button type="button" class="menu-action" data-crop="4:3"><span class="menu-action-label">4:3</span></button>
+              <button type="button" class="menu-action" data-crop="1:1"><span class="menu-action-label">1:1</span></button>
+              <button type="button" class="menu-action" data-crop="fill"><span class="menu-action-label" data-i18n="cropFill">Fill Screen</span></button>
+              <div class="menu-sep"></div>
+              <button type="button" class="menu-action" data-cmd="reset-video-transform"><span class="menu-action-label" data-i18n="cmdResetVideo">Reset Video Adjustments</span><span class="menu-shortcut">0</span></button>
             </div>
           </div>
 
@@ -3107,7 +3168,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.2</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.3.0</div>
             </div>
           </div>
         </nav>
@@ -3212,7 +3273,11 @@
         <div class="media-stage" id="mediaStage">
           <!-- VIDEO VIEWPORT (Auto-hides toolbar, HUD & cursor after 2s idle in fullscreen!) -->
           <div class="video-frame" id="videoFrame" hidden>
-            <video id="mediaEngine" preload="metadata" playsinline></video>
+            <div class="video-viewport-stage" id="videoViewportStage">
+              <video id="mediaEngine" preload="metadata" playsinline crossorigin="anonymous"></video>
+            </div>
+
+            <div class="video-snapshot-flash" id="videoSnapshotFlash" aria-hidden="true"></div>
 
             <!-- Custom Styled Subtitle Overlay (System Fonts, Colors, Borders, Background & RTL) -->
             <div class="subtitle-overlay" id="subtitleOverlay" hidden aria-live="polite">
@@ -3220,6 +3285,24 @@
             </div>
 
             <div class="video-toolbar" id="videoToolbar">
+              <button type="button" class="video-tool-btn" id="prevFrameBtn" title="Previous Frame (,)" aria-label="Previous Frame">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="6" y1="5" x2="6" y2="19"/>
+                  <polygon points="18 6 10 12 18 18 18 6" fill="currentColor"/>
+                </svg>
+              </button>
+              <button type="button" class="video-tool-btn" id="nextFrameBtn" title="Next Frame (.)" aria-label="Next Frame">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polygon points="6 6 14 12 6 18 6 6" fill="currentColor"/>
+                  <line x1="18" y1="5" x2="18" y2="19"/>
+                </svg>
+              </button>
+              <button type="button" class="video-tool-btn" id="snapshotBtn" title="Take Snapshot (Shift+S)" aria-label="Take Snapshot">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </button>
               <button type="button" class="video-tool-btn" id="audioOnlyViewBtn" title="Hide video and listen as audio">
                 <span data-i18n="btnAudioView">Audio View</span>
               </button>
@@ -3228,9 +3311,6 @@
               </button>
               <button type="button" class="video-tool-btn" id="pipBtn" title="Picture-in-Picture (P)">
                 <span>PiP</span>
-              </button>
-              <button type="button" class="video-tool-btn" id="fullscreenBtn" title="Fullscreen (F)">
-                <span data-i18n="btnFull">Full</span>
               </button>
             </div>
 
@@ -3243,10 +3323,28 @@
                     <svg id="fsPlayIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
                     <svg id="fsPauseIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4.5" height="16" rx="1"/><rect x="13.5" y="4" width="4.5" height="16" rx="1"/></svg>
                   </button>
+                  <button type="button" class="video-tool-btn" id="fsPrevFrameBtn" title="Previous Frame (,)" aria-label="Previous Frame">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <line x1="6" y1="5" x2="6" y2="19"/>
+                      <polygon points="18 6 10 12 18 18 18 6" fill="currentColor"/>
+                    </svg>
+                  </button>
+                  <button type="button" class="video-tool-btn" id="fsNextFrameBtn" title="Next Frame (.)" aria-label="Next Frame">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polygon points="6 6 14 12 6 18 6 6" fill="currentColor"/>
+                      <line x1="18" y1="5" x2="18" y2="19"/>
+                    </svg>
+                  </button>
                   <span class="fs-hud-time" id="fsTimeLabel">00:00 / 00:00</span>
                   <span class="fs-hud-title" id="fsTitleLabel"></span>
                 </div>
                 <div class="fs-hud-right">
+                  <button type="button" class="video-tool-btn" id="fsSnapshotBtn" title="Take Snapshot (Shift+S)" aria-label="Take Snapshot">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                  </button>
                   <button type="button" class="video-tool-btn" id="fsExitBtn" data-i18n="btnExitFull">Exit Full</button>
                 </div>
               </div>
@@ -3620,6 +3718,8 @@
         <span class="shortcut-desc" data-i18n="scCloseTab">Close current tab</span><span class="shortcut-key">Ctrl + W</span>
         <span class="shortcut-desc" data-i18n="scSwitchTab">Switch to next tab</span><span class="shortcut-key">Ctrl + Tab</span>
         <span class="shortcut-desc" data-i18n="scSubSync">Subtitle timing earlier / later</span><span class="shortcut-key">G / H</span>
+        <span class="shortcut-desc" data-i18n="scFrameStep">Step backward / forward 1 frame</span><span class="shortcut-key">, / .</span>
+        <span class="shortcut-desc" data-i18n="scSnapshot">Take video snapshot</span><span class="shortcut-key">Shift + S</span>
         <span class="shortcut-desc" data-i18n="cmdNewWindow">New Window</span><span class="shortcut-key">Ctrl + Shift + N</span>
       </div>
     </div>
@@ -3796,6 +3896,53 @@
   <script>
     (() => {
       'use strict';
+
+      /* =======================================================================
+         0A. Native Rust / Tauri v2 Desktop Bridge Adapter (window.aazDesktop)
+         ======================================================================= */
+      (function attachTauriBridge() {
+        if (window.aazDesktop && window.aazDesktop.isElectron) return;
+        let tauriApi = null;
+        try {
+          if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+            tauriApi = window.__TAURI__;
+          } else if (window.parent && window.parent !== window && window.parent.__TAURI__ && window.parent.__TAURI__.core) {
+            tauriApi = window.parent.__TAURI__;
+          }
+        } catch {}
+        if (!tauriApi) return;
+
+        const invoke = (cmd, args = {}) => tauriApi.core.invoke(cmd, args);
+        const listen = (eventName, cb) => {
+          if (tauriApi.event && typeof tauriApi.event.listen === 'function') {
+            tauriApi.event.listen(eventName, (ev) => cb(ev ? ev.payload : null)).catch(() => {});
+          }
+        };
+
+        window.aazDesktop = {
+          isElectron: true,
+          isTauri: true,
+          openNewWindow: () => invoke('aaz_new_window'),
+          getAppVersion: () => invoke('aaz_get_app_version'),
+          getLaunchFiles: () => invoke('aaz_get_launch_files'),
+          checkForUpdates: () => invoke('aaz_check_updates'),
+          downloadUpdate: () => invoke('aaz_download_update'),
+          installUpdate: () => invoke('aaz_install_update'),
+          onUpdateStatus: (callback) => listen('aaz:update-status', callback),
+          selectFolder: () => invoke('aaz_select_folder'),
+          selectFiles: () => invoke('aaz_select_files'),
+          readFolder: (folderPath) => invoke('aaz_read_folder', { folderPath }),
+          readTextFile: (filePath) => invoke('aaz_read_text_file', { filePath }),
+          findNearbySubtitle: (videoFullPath) => invoke('aaz_find_nearby_subtitle', { videoFullPath }),
+          inspectPaths: (paths) => invoke('aaz_inspect_paths', { paths }),
+          setAlwaysOnTop: (enabled) => invoke('aaz_set_always_on_top', { enabled: Boolean(enabled) }),
+          setWindowFullscreen: (enabled) => invoke('aaz_set_fullscreen', { enabled: Boolean(enabled) }),
+          isWindowFullscreen: () => invoke('aaz_is_fullscreen'),
+          saveSnapshot: (dataBase64, suggestedName) => invoke('aaz_save_snapshot', { dataBase64, suggestedName }),
+          listSystemFonts: () => invoke('aaz_list_system_fonts'),
+          onOpenExternal: (callback) => listen('aaz:open-external', callback)
+        };
+      })();
 
       /* =======================================================================
          0. Dual-Mode Bootstrap: Multi-Tab Workspace Shell vs. Tab Player Instance
@@ -4098,6 +4245,13 @@
               });
             });
           }
+          if (shellDesktop.getLaunchFiles) {
+            shellDesktop.getLaunchFiles()
+              .then((paths) => {
+                if (Array.isArray(paths) && paths.length > 0) routeExternalFilesToTab(paths);
+              })
+              .catch(() => {});
+          }
         }
 
         applyShellPrefs(shellTheme, shellLang);
@@ -4228,13 +4382,17 @@
 
         mediaStage: document.getElementById('mediaStage'),
         videoFrame: document.getElementById('videoFrame'),
+        videoViewportStage: document.getElementById('videoViewportStage'),
+        videoSnapshotFlash: document.getElementById('videoSnapshotFlash'),
         subtitleOverlay: document.getElementById('subtitleOverlay'),
         subtitleCueStack: document.getElementById('subtitleCueStack'),
         videoToolbar: document.getElementById('videoToolbar'),
+        prevFrameBtn: document.getElementById('prevFrameBtn'),
+        nextFrameBtn: document.getElementById('nextFrameBtn'),
+        snapshotBtn: document.getElementById('snapshotBtn'),
         audioOnlyViewBtn: document.getElementById('audioOnlyViewBtn'),
         subtitleBtn: document.getElementById('subtitleBtn'),
         pipBtn: document.getElementById('pipBtn'),
-        fullscreenBtn: document.getElementById('fullscreenBtn'),
 
         subtitleModal: document.getElementById('subtitleModal'),
         closeSubtitleModalBtn: document.getElementById('closeSubtitleModalBtn'),
@@ -4275,6 +4433,9 @@
         fsPlayBtn: document.getElementById('fsPlayBtn'),
         fsPlayIcon: document.getElementById('fsPlayIcon'),
         fsPauseIcon: document.getElementById('fsPauseIcon'),
+        fsPrevFrameBtn: document.getElementById('fsPrevFrameBtn'),
+        fsNextFrameBtn: document.getElementById('fsNextFrameBtn'),
+        fsSnapshotBtn: document.getElementById('fsSnapshotBtn'),
         fsTimeLabel: document.getElementById('fsTimeLabel'),
         fsTitleLabel: document.getElementById('fsTitleLabel'),
         fsExitBtn: document.getElementById('fsExitBtn'),
@@ -4441,7 +4602,10 @@
         theme: 'dark',                // 'dark' | 'light'
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
-        appVersion: '1.2.2',
+        videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
+        videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
+        videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
+        appVersion: '1.3.0',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
@@ -4630,7 +4794,32 @@
           scSubSync: 'Subtitle timing earlier / later',
           subSyncHint: 'Shortcuts: G (Earlier) / H (Later)',
           subSyncNotice: 'Subtitle timing: {offset}',
-          subAutoLoaded: 'Auto-loaded subtitle: {name}'
+          subAutoLoaded: 'Auto-loaded subtitle: {name}',
+          cmdPrevFrame: 'Previous Frame',
+          cmdNextFrame: 'Next Frame',
+          cmdSnapshot: 'Take Snapshot',
+          headingAspect: 'Aspect Ratio',
+          aspectDefault: 'Default',
+          aspectFill: 'Fill / Stretch',
+          headingZoom: 'Zoom',
+          zoomQuarter: '1:4 Quarter (0.25x)',
+          zoomHalf: '1:2 Half (0.5x)',
+          zoomOriginal: '1:1 Original',
+          zoomLarge: '1.5:1 Large (1.5x)',
+          zoomDouble: '2:1 Double (2.0x)',
+          headingCrop: 'Crop',
+          cropDefault: 'Default (No Crop)',
+          cropFill: 'Fill Screen',
+          cmdResetVideo: 'Reset Video Adjustments',
+          scFrameStep: 'Step backward / forward 1 frame',
+          scSnapshot: 'Take video snapshot',
+          snapshotSaved: 'Snapshot saved: {name}',
+          snapshotFailed: 'Could not capture video snapshot.',
+          snapshotNoVideo: 'Play a video first to take a snapshot.',
+          aspectChanged: 'Aspect Ratio: {val}',
+          zoomChanged: 'Video Zoom: {val}',
+          cropChanged: 'Video Crop: {val}',
+          videoResetNotice: 'Video aspect ratio, zoom & crop reset to default.'
         },
         ar: {
           dropTitle: 'أفلت ملفات الصوت أو الفيديو أو المجلد أو قائمة التشغيل هنا',
@@ -4806,7 +4995,32 @@
           scSubSync: 'تقديم أو تأخير الترجمة',
           subSyncHint: 'اختصار سريع: G للتقديم / H للتأخير',
           subSyncNotice: 'توقيت الترجمة: {offset}',
-          subAutoLoaded: 'تم ربط الترجمة تلقائيا: {name}'
+          subAutoLoaded: 'تم ربط الترجمة تلقائيا: {name}',
+          cmdPrevFrame: 'الإطار السابق',
+          cmdNextFrame: 'الإطار التالي',
+          cmdSnapshot: 'التقاط صورة من الفيديو',
+          headingAspect: 'نسبة العرض إلى الارتفاع',
+          aspectDefault: 'الافتراضي',
+          aspectFill: 'ملء وتمديد الشاشة',
+          headingZoom: 'التكبير والتصغير',
+          zoomQuarter: 'ربع الحجم (0.25x)',
+          zoomHalf: 'نصف الحجم (0.5x)',
+          zoomOriginal: 'الحجم الأصلي (1:1)',
+          zoomLarge: 'تكبير متوسط (1.5x)',
+          zoomDouble: 'ضعف الحجم (2.0x)',
+          headingCrop: 'قص الحواف',
+          cropDefault: 'بدون قص (الافتراضي)',
+          cropFill: 'ملء الشاشة بدون حواف',
+          cmdResetVideo: 'إعادة ضبط أبعاد الفيديو',
+          scFrameStep: 'ترجيع أو تقديم إطار واحد',
+          scSnapshot: 'التقاط صورة من الفيديو',
+          snapshotSaved: 'تم حفظ الصورة: {name}',
+          snapshotFailed: 'تعذر التقاط صورة من الفيديو.',
+          snapshotNoVideo: 'شغّل فيديو أولاً لالتقاط صورة.',
+          aspectChanged: 'نسبة العرض: {val}',
+          zoomChanged: 'التكبير: {val}',
+          cropChanged: 'قص الحواف: {val}',
+          videoResetNotice: 'تمت إعادة ضبط أبعاد وتكبير وقص الفيديو للافتراضي.'
         }
       };
 
@@ -7079,6 +7293,185 @@
         setPlaybackRate(SPEED_STEPS[(idx + 1) % SPEED_STEPS.length], true);
       }
 
+      /* =======================================================================
+         11B. Video Aspect Ratio, Zoom, Crop, Frame-by-Frame & HD Snapshot
+         ======================================================================= */
+      function parseRatioString(ratioStr) {
+        if (!ratioStr || !ratioStr.includes(':')) return null;
+        const [w, h] = ratioStr.split(':').map(Number);
+        if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+        return w / h;
+      }
+
+      function applyVideoTransform() {
+        const frame = el.videoFrame;
+        const stage = el.videoViewportStage;
+        const video = el.media;
+        if (!frame || !stage || !video) return;
+
+        const fw = frame.clientWidth || 0;
+        const fh = frame.clientHeight || 0;
+        const zoom = Number(state.videoZoom) || 1;
+        const aspect = state.videoAspect || 'default';
+        const crop = state.videoCrop || 'default';
+
+        // Reset defaults
+        stage.style.width = '100%';
+        stage.style.height = '100%';
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'contain';
+
+        if (crop !== 'default') {
+          if (crop === 'fill') {
+            video.style.objectFit = 'cover';
+          } else {
+            const targetRatio = parseRatioString(crop);
+            if (targetRatio && fw > 0 && fh > 0) {
+              let boxW = fw;
+              let boxH = fw / targetRatio;
+              if (boxH > fh) {
+                boxH = fh;
+                boxW = fh * targetRatio;
+              }
+              stage.style.width = `${Math.round(boxW)}px`;
+              stage.style.height = `${Math.round(boxH)}px`;
+              video.style.objectFit = 'cover';
+            }
+          }
+        } else if (aspect !== 'default') {
+          if (aspect === 'fill') {
+            video.style.objectFit = 'fill';
+          } else {
+            const targetRatio = parseRatioString(aspect);
+            if (targetRatio && fw > 0 && fh > 0) {
+              let boxW = fw;
+              let boxH = fw / targetRatio;
+              if (boxH > fh) {
+                boxH = fh;
+                boxW = fh * targetRatio;
+              }
+              stage.style.width = `${Math.round(boxW)}px`;
+              stage.style.height = `${Math.round(boxH)}px`;
+              video.style.objectFit = 'fill';
+            }
+          }
+        }
+
+        stage.style.transform = zoom === 1 ? 'none' : `scale(${zoom})`;
+
+        document.querySelectorAll('.menu-action[data-aspect]').forEach((item) => {
+          item.classList.toggle('is-checked', item.dataset.aspect === aspect);
+        });
+        document.querySelectorAll('.menu-action[data-zoom]').forEach((item) => {
+          item.classList.toggle('is-checked', Number(item.dataset.zoom) === zoom);
+        });
+        document.querySelectorAll('.menu-action[data-crop]').forEach((item) => {
+          item.classList.toggle('is-checked', item.dataset.crop === crop);
+        });
+      }
+
+      function setVideoAspect(val, notify = true) {
+        state.videoAspect = val || 'default';
+        if (state.videoAspect !== 'default') state.videoCrop = 'default';
+        applyVideoTransform();
+        if (notify) {
+          const label = val === 'default' ? t('aspectDefault') : val === 'fill' ? t('aspectFill') : val;
+          showNotice(t('aspectChanged', { val: label }));
+        }
+      }
+
+      function setVideoZoom(val, notify = true) {
+        const z = Number(val);
+        state.videoZoom = Number.isFinite(z) && z > 0 ? z : 1;
+        applyVideoTransform();
+        if (notify) {
+          showNotice(t('zoomChanged', { val: `${state.videoZoom}x` }));
+        }
+      }
+
+      function setVideoCrop(val, notify = true) {
+        state.videoCrop = val || 'default';
+        if (state.videoCrop !== 'default') state.videoAspect = 'default';
+        applyVideoTransform();
+        if (notify) {
+          const label = val === 'default' ? t('cropDefault') : val === 'fill' ? t('cropFill') : val;
+          showNotice(t('cropChanged', { val: label }));
+        }
+      }
+
+      function resetVideoTransform(notify = true) {
+        state.videoAspect = 'default';
+        state.videoZoom = 1;
+        state.videoCrop = 'default';
+        applyVideoTransform();
+        if (notify) showNotice(t('videoResetNotice'));
+      }
+
+      function stepVideoFrame(direction) {
+        const track = getCurrentTrack();
+        if (!track || track.kind !== 'video') return;
+        if (!Number.isFinite(el.media.duration) || el.media.duration <= 0) return;
+        if (!el.media.paused) el.media.pause();
+        const frameDuration = 1 / 30;
+        const nextTime = Math.max(0, Math.min(el.media.duration, (el.media.currentTime || 0) + direction * frameDuration));
+        el.media.currentTime = nextTime;
+        updateSeekUI();
+        if (state.activeSubtitleUrl && state.subtitlesEnabled) renderActiveSubtitleCues();
+      }
+
+      async function captureVideoSnapshot() {
+        const track = getCurrentTrack();
+        if (!track || track.kind !== 'video' || !el.media.videoWidth || !el.media.videoHeight) {
+          showNotice(t('snapshotNoVideo'), true);
+          return;
+        }
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = el.media.videoWidth;
+          canvas.height = el.media.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas unavailable');
+          ctx.drawImage(el.media, 0, 0, canvas.width, canvas.height);
+
+          const dataUrl = canvas.toDataURL('image/png');
+          const safeBase = (track.displayName || 'video').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60);
+          const timeStamp = formatTime(el.media.currentTime || 0).replace(/:/g, '-');
+          const fileName = `AAZ_${safeBase}_${timeStamp}.png`;
+
+          // Brief shutter flash feedback
+          el.videoSnapshotFlash.classList.remove('is-flashing');
+          void el.videoSnapshotFlash.offsetWidth;
+          el.videoSnapshotFlash.classList.add('is-flashing');
+
+          if (desktopBridge && typeof desktopBridge.saveSnapshot === 'function') {
+            const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+            const res = await desktopBridge.saveSnapshot(base64, fileName);
+            if (res && res.saved) {
+              const savedName = res.path ? res.path.split(/[\\/]/).pop() : fileName;
+              showNotice(t('snapshotSaved', { name: savedName || fileName }));
+            }
+          } else {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            showNotice(t('snapshotSaved', { name: fileName }));
+          }
+        } catch {
+          showNotice(t('snapshotFailed'), true);
+        }
+      }
+
+      if (typeof ResizeObserver === 'function') {
+        const videoResizeObserver = new ResizeObserver(() => {
+          if (!el.videoFrame.hidden) applyVideoTransform();
+        });
+        videoResizeObserver.observe(el.videoFrame);
+      }
+
       function applyEQPreset(presetName, persist = true) {
         const values = EQ_PRESETS[presetName];
         if (!values) return;
@@ -7766,6 +8159,18 @@
           applyEQPreset(actionBtn.dataset.eq, true);
           return;
         }
+        if (actionBtn.dataset.aspect) {
+          setVideoAspect(actionBtn.dataset.aspect, true);
+          return;
+        }
+        if (actionBtn.dataset.zoom) {
+          setVideoZoom(Number(actionBtn.dataset.zoom), true);
+          return;
+        }
+        if (actionBtn.dataset.crop) {
+          setVideoCrop(actionBtn.dataset.crop, true);
+          return;
+        }
 
         switch (cmd) {
           case 'open-folder': openFolderWithPersistence(false); break;
@@ -7782,6 +8187,8 @@
           case 'toggle-play': togglePlayPause(); break;
           case 'prev-track': playPreviousTrack(); break;
           case 'next-track': playNextTrack(true, false); break;
+          case 'prev-frame': stepVideoFrame(-1); break;
+          case 'next-frame': stepVideoFrame(1); break;
           case 'toggle-shuffle': state.shuffle = !state.shuffle; updateShuffleRepeatUI(); updateTransportAvailability(); persistPlaybackState(); break;
           case 'cycle-repeat': {
             const order = ['off', 'all', 'one'];
@@ -7801,6 +8208,8 @@
           case 'toggle-video-view':
             setVideoDisplayMode(state.videoDisplayMode === 'video' ? 'audio' : 'video', true);
             break;
+          case 'take-snapshot': captureVideoSnapshot(); break;
+          case 'reset-video-transform': resetVideoTransform(true); break;
           case 'load-subtitles':
             el.subtitleInput.value = '';
             el.subtitleInput.click();
@@ -8099,6 +8508,7 @@
         updateTransportAvailability();
         updateABLoopUI();
         renderBookmarks();
+        applyVideoTransform();
       });
 
       el.media.addEventListener('timeupdate', () => {
@@ -8360,10 +8770,15 @@
       });
 
       // Video Controls & Fullscreen HUD
+      el.prevFrameBtn.addEventListener('click', () => stepVideoFrame(-1));
+      el.nextFrameBtn.addEventListener('click', () => stepVideoFrame(1));
+      el.snapshotBtn.addEventListener('click', captureVideoSnapshot);
+      el.fsPrevFrameBtn.addEventListener('click', () => stepVideoFrame(-1));
+      el.fsNextFrameBtn.addEventListener('click', () => stepVideoFrame(1));
+      el.fsSnapshotBtn.addEventListener('click', captureVideoSnapshot);
       el.audioOnlyViewBtn.addEventListener('click', () => setVideoDisplayMode('audio', true));
       el.showVideoBtn.addEventListener('click', () => setVideoDisplayMode('video', true));
       el.pipBtn.addEventListener('click', togglePictureInPicture);
-      el.fullscreenBtn.addEventListener('click', toggleFullscreen);
       el.dockFullscreenBtn.addEventListener('click', toggleFullscreen);
       el.audioExitFsBtn.addEventListener('click', toggleFullscreen);
       el.fsExitBtn.addEventListener('click', toggleFullscreen);
@@ -8562,8 +8977,19 @@
           addBookmarkAtCurrentTime();
         } else if (e.key === 'l' || e.key === 'L') {
           cycleABLoop();
+        } else if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
+          e.preventDefault();
+          captureVideoSnapshot();
         } else if (e.key === 's' || e.key === 'S') {
           toggleStarKey(state.currentKey);
+        } else if (e.key === ',') {
+          e.preventDefault();
+          stepVideoFrame(-1);
+        } else if (e.key === '.') {
+          e.preventDefault();
+          stepVideoFrame(1);
+        } else if (e.key === '0') {
+          if (!el.videoFrame.hidden) resetVideoTransform(true);
         } else if (e.key === 'f' || e.key === 'F') {
           toggleFullscreen();
         } else if (e.key === 'p' || e.key === 'P') {
@@ -8770,6 +9196,7 @@
         updateEQUI();
         updatePlayButtonUI();
         updateStageVisibility();
+        applyVideoTransform();
         updateTransportAvailability();
         updateSidebarCounts();
         renderSavedPlaylists();

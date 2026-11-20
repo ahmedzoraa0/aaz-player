@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for AAZ Player main and secondary windows",
+  "windows": ["main", "win_*"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

@@ -1,4 +1,4 @@
-name: Build & Release AAZ Player (Windows)
+name: Build & Release AAZ Player (Windows — Rust / Tauri)
 
 on:
   push:
@@ -51,25 +51,78 @@ jobs:
             Write-Host "Release $tag already exists. Bump version in desktop/package.json to publish a new update."
             Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=false"
           } else {
-            Write-Host "New version $tag detected! Proceeding with Windows build & GitHub Release."
+            Write-Host "New version $tag detected! Proceeding with Rust/Tauri Windows build & GitHub Release."
             Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
           }
           exit 0
 
-      - name: Prepare app HTML & bind GitHub repo for auto-updater
+      - name: Setup Rust stable toolchain
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/src-tauri -> target"
+
+      - name: Prepare app HTML, version & GitHub repo for Rust auto-updater
         if: steps.version_check.outputs.should_release == 'true'
         run: node desktop/scripts/prepare-ci.cjs
 
-      - name: Install desktop dependencies
+      - name: Install Tauri CLI
         if: steps.version_check.outputs.should_release == 'true'
         working-directory: desktop
         run: npm install
 
-      - name: Build Windows Installer & Portable + Publish Release
+      - name: Generate Tauri icon bundle
         if: steps.version_check.outputs.should_release == 'true'
         working-directory: desktop
+        run: npx @tauri-apps/cli icon assets/icon.png -o src-tauri/icons
+
+      - name: Build lightweight Rust/Tauri Windows NSIS Installer & Portable EXE
+        if: steps.version_check.outputs.should_release == 'true'
+        working-directory: desktop
+        run: npx @tauri-apps/cli build --bundles nsis
+
+      - name: Collect artifacts & publish GitHub Release
+        if: steps.version_check.outputs.should_release == 'true'
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          WIN_CSC_LINK: ""
-        run: npx electron-builder --win --publish always
+        run: |
+          $ver = "${{ steps.version_check.outputs.version }}"
+          $tag = "${{ steps.version_check.outputs.tag }}"
+          New-Item -ItemType Directory -Force -Path "release-out" | Out-Null
+
+          $nsisInstaller = Get-ChildItem -Path "desktop/src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          if (-not $nsisInstaller) {
+            Write-Error "Could not locate built NSIS installer!"
+            exit 1
+          }
+          $setupDest = "release-out/AAZ-Player-Setup-$ver.exe"
+          Copy-Item $nsisInstaller.FullName -Destination $setupDest -Force
+
+          $portableBin = "desktop/src-tauri/target/release/aaz-player.exe"
+          if (-not (Test-Path $portableBin)) {
+            Write-Error "Could not locate built portable Rust binary!"
+            exit 1
+          }
+          $portableDest = "release-out/AAZ-Player-Portable-$ver.exe"
+          Copy-Item $portableBin -Destination $portableDest -Force
+
+          Write-Host "Built artifacts:"
+          Get-ChildItem "release-out" | ForEach-Object { Write-Host " - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)" }
+
+          $ErrorActionPreference = "Continue"
+          gh release view $tag *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+
+          $notes = "AAZ Player $tag — Powered by Rust + Tauri v2 (ultra-lightweight installer & low RAM), frame-by-frame stepping, HD video snapshots, aspect ratio/zoom/crop controls, and refined RTL/LTR menus."
+          if ($exists) {
+            gh release upload $tag $setupDest $portableDest --clobber
+          } else {
+            gh release create $tag $setupDest $portableDest --title "AAZ Player $tag" --notes $notes
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

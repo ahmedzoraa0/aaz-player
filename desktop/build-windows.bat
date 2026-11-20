@@ -1,51 +1,47 @@
 @echo off
-title AAZ Player — Windows Installer Builder
-echo ====================================================
-echo   Building AAZ Player (.exe) for Windows 11
-echo ====================================================
+title AAZ Player — Build Windows Rust/Tauri App
+echo ============================================================
+echo   AAZ Player — Building Lightweight Rust + Tauri Windows App
+echo ============================================================
 echo.
 
-set CSC_IDENTITY_AUTO_DISCOVERY=false
-set WIN_CSC_LINK=
+cd /d "%~dp0"
 
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-  echo [ERROR] Node.js is not installed. Download LTS from https://nodejs.org
+echo [1/4] Preparing frontend HTML, version & icons...
+node scripts\prepare-ci.cjs
+if errorlevel 1 (
+  echo [ERROR] prepare-ci failed! Make sure Node.js is installed.
   pause
   exit /b 1
 )
 
-if not exist "app" mkdir "app"
-copy /Y "..\index.html" "app\index.html" >nul
-if %errorlevel% neq 0 (
-  echo [ERROR] Could not copy ..\index.html into desktop\app\index.html
-  pause
-  exit /b 1
-)
-
-if exist "release" rmdir /S /Q "release"
-
-echo [1/2] Installing Electron, Auto-Updater, and rcedit...
+echo [2/4] Installing Tauri CLI...
 call npm install
-if %errorlevel% neq 0 (
-  echo [ERROR] npm install failed.
+if errorlevel 1 (
+  echo [ERROR] npm install failed!
+  pause
+  exit /b 1
+)
+
+echo [3/4] Generating multi-resolution app icons...
+call npx @tauri-apps/cli icon assets\icon.png -o src-tauri\icons
+if errorlevel 1 (
+  echo [ERROR] Icon generation failed!
+  pause
+  exit /b 1
+)
+
+echo [4/4] Compiling Rust backend & building Windows NSIS Installer + Portable EXE...
+call npx @tauri-apps/cli build --bundles nsis
+if errorlevel 1 (
+  echo [ERROR] Tauri build failed! Make sure Rust toolchain (rustup) is installed.
   pause
   exit /b 1
 )
 
 echo.
-echo [2/2] Building Windows Installer (AAZ-Player-Setup) and Portable...
-call npm run dist
-if %errorlevel% neq 0 (
-  echo [ERROR] Build failed. Check the message above for details.
-  pause
-  exit /b 1
-)
-
+echo [DONE] Lightweight Rust installers are ready inside:
+echo   desktop\src-tauri\target\release\bundle\nsis\
+echo   desktop\src-tauri\target\release\aaz-player.exe (Portable!)
 echo.
-echo ====================================================
-echo   SUCCESS! Both .exe files are ready in:
-echo   desktop\release\
-echo ====================================================
-explorer "release"
 pause
