@@ -1,7 +1,7 @@
 {
   "name": "aaz-player",
   "productName": "AAZ Player",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "AAZ Player — Local Audio & Video Playlist Player for Windows",
   "main": "main.cjs",
   "author": "AAZ",

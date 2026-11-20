@@ -450,6 +450,36 @@
       flex-shrink: 0;
     }
 
+    /* Slim unified header when hosted inside Multi-Tab Workspace Shell (no duplicate logo!) */
+    html.in-tab-frame .brand-lockup {
+      display: none;
+    }
+
+    html.in-tab-frame .topbar {
+      height: 35px;
+      padding: 0 10px;
+      background-color: var(--bg-surface);
+      gap: 10px;
+    }
+
+    html.in-tab-frame .menu-trigger {
+      height: 25px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+
+    html.in-tab-frame .topbar-right .btn,
+    html.in-tab-frame .topbar-right .lang-toggle-btn {
+      height: 26px;
+      padding: 0 10px;
+      font-size: 11.5px;
+    }
+
+    html.in-tab-frame .topbar-right .btn-icon {
+      width: 26px;
+      height: 26px;
+    }
+
     /* =========================================================================
        ZONE 2: Main Fluid Desktop Workspace (100% Stretchable!)
        ========================================================================= */
@@ -746,19 +776,30 @@
       transition: opacity 220ms var(--ease-out), visibility 220ms;
     }
 
+    .media-stage:fullscreen,
+    .media-stage:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      background-color: var(--bg-surface);
+    }
+
+    .media-stage:fullscreen .fs-bottom-hud,
+    .media-stage:-webkit-full-screen .fs-bottom-hud,
+    .media-stage.is-pseudo-fullscreen .fs-bottom-hud,
     .video-frame:fullscreen .fs-bottom-hud,
     .video-frame:-webkit-full-screen .fs-bottom-hud,
     .video-frame.is-pseudo-fullscreen .fs-bottom-hud {
       display: flex;
     }
 
+    .media-stage.is-pseudo-fullscreen,
     .video-frame.is-pseudo-fullscreen {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       z-index: 9999 !important;
-      background-color: #000 !important;
+      background-color: var(--bg-surface) !important;
     }
 
     /* Custom Styled Subtitle Overlay (Supports System Fonts, Borders, Outline, Opacity & RTL!) */
@@ -778,6 +819,9 @@
       display: none !important;
     }
 
+    .media-stage:fullscreen .subtitle-overlay,
+    .media-stage:-webkit-full-screen .subtitle-overlay,
+    .media-stage.is-pseudo-fullscreen .subtitle-overlay,
     .video-frame:fullscreen .subtitle-overlay,
     .video-frame:-webkit-full-screen .subtitle-overlay,
     .video-frame.is-pseudo-fullscreen .subtitle-overlay {
@@ -862,6 +906,7 @@
 
     /* Audio Studio Presentation Stage (Scales cleanly to full screen on Maximize!) */
     .audio-stage {
+      position: relative;
       flex: 1;
       width: 100%;
       height: 100%;
@@ -876,6 +921,43 @@
 
     .audio-stage[hidden] {
       display: none;
+    }
+
+    /* Floating Exit Fullscreen button visible ONLY while Audio Stage is in Fullscreen */
+    .audio-fs-exit-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 11px;
+      border-radius: var(--radius-control);
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 12;
+      transition: background-color 140ms var(--ease-out), border-color 140ms var(--ease-out), color 140ms var(--ease-out);
+    }
+
+    .audio-fs-exit-btn:hover {
+      background-color: var(--accent-soft);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+
+    html[dir="rtl"] .audio-fs-exit-btn {
+      right: auto;
+      left: 14px;
+    }
+
+    .media-stage:fullscreen .audio-fs-exit-btn,
+    .media-stage:-webkit-full-screen .audio-fs-exit-btn,
+    .media-stage.is-pseudo-fullscreen .audio-fs-exit-btn {
+      display: inline-flex;
     }
 
     .audio-hero-inner {
@@ -2233,12 +2315,12 @@
     }
 
     .tabstrip {
-      height: 38px;
+      height: 33px;
       flex-shrink: 0;
       display: flex;
       align-items: flex-end;
       gap: 4px;
-      padding: 5px 8px 0;
+      padding: 4px 8px 0;
       background-color: var(--bg-canvas);
       border-bottom: 1px solid var(--border-hairline);
       overflow: hidden;
@@ -2248,17 +2330,24 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      height: 32px;
-      padding: 0 8px 2px 4px;
+      height: 28px;
+      padding: 0 9px 1px 3px;
+      margin-inline-end: 2px;
+      border-inline-end: 1px solid var(--border-hairline);
       flex-shrink: 0;
       color: var(--text-primary);
       font-weight: 800;
-      font-size: 12px;
+      font-size: 12.5px;
       letter-spacing: 0.04em;
     }
 
+    .tabstrip-brand-accent {
+      color: var(--gold);
+      font-weight: 700;
+    }
+
     .tabstrip-tabs {
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
       display: flex;
       align-items: flex-end;
@@ -2274,20 +2363,20 @@
 
     .workspace-tab {
       position: relative;
-      height: 32px;
-      min-width: 118px;
-      max-width: 230px;
-      flex: 0 1 196px;
+      height: 28px;
+      min-width: 112px;
+      max-width: 220px;
+      flex: 0 1 186px;
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      padding: 0 8px 0 11px;
-      border-radius: 8px 8px 0 0;
+      padding: 0 7px 0 10px;
+      border-radius: 7px 7px 0 0;
       border: 1px solid transparent;
       border-bottom: none;
       background-color: var(--bg-inset);
       color: var(--text-secondary);
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 500;
       cursor: pointer;
       transition: background-color 140ms var(--ease-out), color 140ms var(--ease-out), border-color 140ms var(--ease-out);
@@ -2295,7 +2384,7 @@
     }
 
     html[dir="rtl"] .workspace-tab {
-      padding: 0 11px 0 8px;
+      padding: 0 10px 0 7px;
     }
 
     .workspace-tab:hover {
@@ -2309,7 +2398,7 @@
       color: var(--text-primary);
       font-weight: 600;
       margin-bottom: -1px;
-      height: 33px;
+      height: 29px;
       z-index: 2;
     }
 
@@ -2405,14 +2494,14 @@
     }
 
     .tab-add-btn {
-      width: 28px;
-      height: 28px;
-      margin-bottom: 3px;
+      width: 25px;
+      height: 25px;
+      margin-bottom: 2px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: 5px;
       background: transparent;
       color: var(--text-secondary);
-      font-size: 18px;
+      font-size: 17px;
       line-height: 1;
       display: inline-flex;
       align-items: center;
@@ -2834,7 +2923,7 @@
   <div class="workspace-shell" id="workspaceShell" hidden>
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="AAZ Player Tabs">
       <div class="tabstrip-brand" title="AAZ Player">
-        <svg width="20" height="20" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <svg width="19" height="19" viewBox="0 0 40 40" fill="none" aria-hidden="true">
           <defs>
             <linearGradient id="aazTabBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stop-color="#193e28"/>
@@ -2850,7 +2939,7 @@
           <rect x="10.5" y="23.5" width="19" height="1.8" rx="0.9" fill="#d6b267"/>
           <text x="20" y="34" text-anchor="middle" fill="#eef7f1" font-family="Plus Jakarta Sans, Segoe UI, sans-serif" font-size="9.5" font-weight="800" letter-spacing="0.8">AAZ</text>
         </svg>
-        <span>AAZ</span>
+        <span>AAZ <span class="tabstrip-brand-accent">Player</span></span>
       </div>
       <div class="tabstrip-tabs" id="tabStripTabs"></div>
       <button type="button" class="tab-add-btn" id="newTabBtn" title="New Tab (Ctrl+T)" aria-label="Open new tab">+</button>
@@ -3018,7 +3107,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.1</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.2</div>
             </div>
           </div>
         </nav>
@@ -3166,6 +3255,15 @@
 
           <!-- AUDIO STUDIO STAGE -->
           <div class="audio-stage" id="audioStage">
+            <button type="button" class="audio-fs-exit-btn" id="audioExitFsBtn" title="Exit Fullscreen (F)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 14h6v6"/>
+                <path d="M20 10h-6V4"/>
+                <path d="M14 20v-6h6"/>
+                <path d="M10 4v6H4"/>
+              </svg>
+              <span data-i18n="btnExitFull">Exit Full</span>
+            </button>
             <div class="audio-hero-inner">
               <div class="stage-kicker" id="nowPlayingKicker">AAZ Player</div>
               <h1 class="track-title is-empty" id="trackTitle" data-i18n="stageEmptyTitle">Open a folder or drop audio &amp; video files</h1>
@@ -3479,6 +3577,21 @@
             <input type="range" id="volumeSlider" class="range-input volume-slider" min="0" max="1" step="0.01" value="0.85" aria-label="Volume" />
             <span class="volume-readout" id="volumeReadout">85%</span>
           </div>
+
+          <button type="button" class="btn-icon" id="dockFullscreenBtn" title="Fullscreen (F)" aria-label="Toggle Fullscreen" aria-pressed="false">
+            <svg id="dockFsEnterIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+              <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+              <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+              <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </svg>
+            <svg id="dockFsExitIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+              <path d="M4 14h6v6"/>
+              <path d="M20 10h-6V4"/>
+              <path d="M14 20v-6h6"/>
+              <path d="M10 4v6H4"/>
+            </svg>
+          </button>
         </div>
       </div>
     </footer>
@@ -3995,6 +4108,9 @@
       /* =======================================================================
          1. Configuration, Extensions & Storage Keys (Tab Player Mode)
          ======================================================================= */
+      if (IS_TAB_FRAME) {
+        document.documentElement.classList.add('in-tab-frame');
+      }
       const STORAGE_KEY = 'aaz_media_player_state_v3';
       const SUBTITLE_STYLE_KEY = 'aaz_subtitle_style_v1';
       const LEGACY_KEYS = ['aaz_media_player_state_v2', 'aaz_media_player_state_v1'];
@@ -4110,6 +4226,7 @@
         statusNoticeText: document.getElementById('statusNoticeText'),
         closeNoticeBtn: document.getElementById('closeNoticeBtn'),
 
+        mediaStage: document.getElementById('mediaStage'),
         videoFrame: document.getElementById('videoFrame'),
         subtitleOverlay: document.getElementById('subtitleOverlay'),
         subtitleCueStack: document.getElementById('subtitleCueStack'),
@@ -4163,6 +4280,7 @@
         fsExitBtn: document.getElementById('fsExitBtn'),
 
         audioStage: document.getElementById('audioStage'),
+        audioExitFsBtn: document.getElementById('audioExitFsBtn'),
         nowPlayingKicker: document.getElementById('nowPlayingKicker'),
         trackTitle: document.getElementById('trackTitle'),
         trackSubpath: document.getElementById('trackSubpath'),
@@ -4250,6 +4368,9 @@
         volMuteIcon: document.getElementById('volMuteIcon'),
         volumeSlider: document.getElementById('volumeSlider'),
         volumeReadout: document.getElementById('volumeReadout'),
+        dockFullscreenBtn: document.getElementById('dockFullscreenBtn'),
+        dockFsEnterIcon: document.getElementById('dockFsEnterIcon'),
+        dockFsExitIcon: document.getElementById('dockFsExitIcon'),
 
         shortcutsModal: document.getElementById('shortcutsModal'),
         closeShortcutsBtn: document.getElementById('closeShortcutsBtn')
@@ -4320,7 +4441,7 @@
         theme: 'dark',                // 'dark' | 'light'
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
-        appVersion: '1.2.1',
+        appVersion: '1.2.2',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
@@ -5874,12 +5995,29 @@
       });
 
       const onFullscreenChange = () => {
-        if (isFullscreenActive()) {
-          wakeFullscreenHud();
+        const active = isFullscreenActive();
+        el.dockFullscreenBtn.classList.toggle('is-active', active);
+        el.dockFullscreenBtn.setAttribute('aria-pressed', String(active));
+        el.dockFsEnterIcon.style.display = active ? 'none' : 'block';
+        el.dockFsExitIcon.style.display = active ? 'block' : 'none';
+        el.dockFullscreenBtn.title = active ? `${t('btnExitFull')} (F)` : `${t('cmdFullscreen')} (F)`;
+
+        if (active) {
+          if (!el.videoFrame.hidden) {
+            wakeFullscreenHud();
+          } else {
+            clearFsIdleTimer();
+            el.videoFrame.classList.remove('is-fs-idle');
+            el.videoFrame.classList.remove('is-hud-visible');
+            requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+          }
         } else {
           clearFsIdleTimer();
           el.videoFrame.classList.remove('is-fs-idle');
           el.videoFrame.classList.remove('is-hud-visible');
+          if (!el.audioStage.hidden) {
+            requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+          }
         }
       };
       document.addEventListener('fullscreenchange', onFullscreenChange);
@@ -7153,15 +7291,19 @@
       function setVideoDisplayMode(mode, persist = true) {
         state.videoDisplayMode = mode === 'audio' ? 'audio' : 'video';
         updateStageVisibility();
-        if (state.videoDisplayMode === 'audio' && !el.media.paused) {
-          AudioStudio.startVisualizer();
+        if (state.videoDisplayMode === 'audio') {
+          clearFsIdleTimer();
+          el.videoFrame.classList.remove('is-fs-idle');
+          el.videoFrame.classList.remove('is-hud-visible');
+          if (!el.media.paused) AudioStudio.startVisualizer();
+          else requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+        } else if (isFullscreenActive()) {
+          wakeFullscreenHud();
         }
         if (persist) persistPlaybackState();
       }
 
       async function toggleFullscreen() {
-        const track = getCurrentTrack();
-        if (!track || track.kind !== 'video') return;
         try {
           if (isFullscreenActive()) {
             if (document.fullscreenElement && document.exitFullscreen) {
@@ -7171,6 +7313,7 @@
             }
             if (state.electronFsFallback) {
               state.electronFsFallback = false;
+              el.mediaStage.classList.remove('is-pseudo-fullscreen');
               el.videoFrame.classList.remove('is-pseudo-fullscreen');
               if (desktopBridge && desktopBridge.setWindowFullscreen) {
                 await desktopBridge.setWindowFullscreen(false);
@@ -7178,14 +7321,13 @@
               onFullscreenChange();
             }
           } else {
-            if (state.videoDisplayMode === 'audio') setVideoDisplayMode('video', true);
             let entered = false;
             try {
-              if (el.videoFrame.requestFullscreen) {
-                await el.videoFrame.requestFullscreen();
+              if (el.mediaStage.requestFullscreen) {
+                await el.mediaStage.requestFullscreen();
                 entered = Boolean(document.fullscreenElement);
-              } else if (el.videoFrame.webkitRequestFullscreen) {
-                el.videoFrame.webkitRequestFullscreen();
+              } else if (el.mediaStage.webkitRequestFullscreen) {
+                el.mediaStage.webkitRequestFullscreen();
                 entered = true;
               }
             } catch {
@@ -7195,9 +7337,9 @@
             if (!entered && desktopBridge && desktopBridge.setWindowFullscreen) {
               await desktopBridge.setWindowFullscreen(true);
               state.electronFsFallback = true;
-              el.videoFrame.classList.add('is-pseudo-fullscreen');
+              el.mediaStage.classList.add('is-pseudo-fullscreen');
               onFullscreenChange();
-            } else if (!entered && el.media.requestFullscreen) {
+            } else if (!entered && !el.videoFrame.hidden && el.media.requestFullscreen) {
               await el.media.requestFullscreen();
             }
           }
@@ -8222,6 +8364,8 @@
       el.showVideoBtn.addEventListener('click', () => setVideoDisplayMode('video', true));
       el.pipBtn.addEventListener('click', togglePictureInPicture);
       el.fullscreenBtn.addEventListener('click', toggleFullscreen);
+      el.dockFullscreenBtn.addEventListener('click', toggleFullscreen);
+      el.audioExitFsBtn.addEventListener('click', toggleFullscreen);
       el.fsExitBtn.addEventListener('click', toggleFullscreen);
       el.fsPlayBtn.addEventListener('click', togglePlayPause);
 
