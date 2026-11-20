@@ -2,6 +2,7 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 
 let autoUpdater = null;
@@ -282,20 +283,24 @@ if (!gotLock) {
       app.setAppUserModelId('com.aaz.player');
     }
 
-    // Allow audio output device enumeration & per-window speaker selection natively
+    // Allow fullscreen, audio output device selection, media & local fonts natively
+    const ALLOWED_PERMISSIONS = new Set([
+      'fullscreen',
+      'media',
+      'speaker-selection',
+      'audioCapture',
+      'pointerLock',
+      'window-management',
+      'local-fonts',
+      'clipboard-read',
+      'clipboard-sanitized-write'
+    ]);
     if (session && session.defaultSession) {
       session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
-        if (permission === 'media' || permission === 'speaker-selection' || permission === 'audioCapture') {
-          return true;
-        }
-        return false;
+        return ALLOWED_PERMISSIONS.has(permission);
       });
       session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-        if (permission === 'media' || permission === 'speaker-selection' || permission === 'audioCapture') {
-          callback(true);
-          return;
-        }
-        callback(false);
+        callback(ALLOWED_PERMISSIONS.has(permission));
       });
     }
 
@@ -462,4 +467,64 @@ ipcMain.handle('aaz:set-always-on-top', (event, enabled) => {
   if (!ownerWin) return false;
   ownerWin.setAlwaysOnTop(Boolean(enabled), 'floating');
   return ownerWin.isAlwaysOnTop();
+});
+
+ipcMain.handle('aaz:set-fullscreen', (event, enabled) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender) || getPrimaryWindow();
+  if (!ownerWin) return false;
+  ownerWin.setFullScreen(Boolean(enabled));
+  return ownerWin.isFullScreen();
+});
+
+ipcMain.handle('aaz:is-fullscreen', (event) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender) || getPrimaryWindow();
+  return ownerWin ? ownerWin.isFullScreen() : false;
+});
+
+let cachedSystemFonts = null;
+ipcMain.handle('aaz:list-system-fonts', async () => {
+  if (Array.isArray(cachedSystemFonts) && cachedSystemFonts.length > 0) {
+    return cachedSystemFonts;
+  }
+
+  const runExec = (cmd, args) => new Promise((resolve) => {
+    execFile(cmd, args, { windowsHide: true, timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+      if (err || !stdout) return resolve('');
+      resolve(stdout);
+    });
+  });
+
+  const fonts = new Set();
+  if (process.platform === 'win32') {
+    const psCmd = '[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Drawing; (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }';
+    const out = await runExec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd]);
+    if (out) {
+      out.split(/\r?\n/).forEach((line) => {
+        const name = line.trim();
+        if (name) fonts.add(name);
+      });
+    }
+    // Fallback to Windows Registry if .NET System.Drawing was unavailable
+    if (fonts.size === 0) {
+      const regOut = await runExec('reg.exe', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts']);
+      regOut.split(/\r?\n/).forEach((line) => {
+        const m = line.match(/^\s+(.+?)\s+(?:\(TrueType\)|\(OpenType\))?\s+REG_SZ/i);
+        if (m && m[1]) {
+          const clean = m[1].replace(/\s*\((TrueType|OpenType|All res)\)\s*/gi, '').trim();
+          if (clean) fonts.add(clean);
+        }
+      });
+    }
+  } else {
+    const out = await runExec('fc-list', [':', 'family']);
+    out.split(/\r?\n/).forEach((line) => {
+      line.split(',').forEach((part) => {
+        const name = part.trim();
+        if (name) fonts.add(name);
+      });
+    });
+  }
+
+  cachedSystemFonts = [...fonts].sort((a, b) => a.localeCompare(b));
+  return cachedSystemFonts;
 });

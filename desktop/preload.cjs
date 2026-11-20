@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('aazDesktop', {
   readTextFile: (filePath) => ipcRenderer.invoke('aaz:read-text-file', filePath),
   inspectPaths: (paths) => ipcRenderer.invoke('aaz:inspect-paths', paths),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('aaz:set-always-on-top', enabled),
+  setWindowFullscreen: (enabled) => ipcRenderer.invoke('aaz:set-fullscreen', enabled),
+  isWindowFullscreen: () => ipcRenderer.invoke('aaz:is-fullscreen'),
+  listSystemFonts: () => ipcRenderer.invoke('aaz:list-system-fonts'),
   onOpenExternal: (callback) => {
     ipcRenderer.on('aaz:open-external', (_event, paths) => callback(paths));
   }

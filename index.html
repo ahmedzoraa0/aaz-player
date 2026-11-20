@@ -747,8 +747,70 @@
     }
 
     .video-frame:fullscreen .fs-bottom-hud,
-    .video-frame:-webkit-full-screen .fs-bottom-hud {
+    .video-frame:-webkit-full-screen .fs-bottom-hud,
+    .video-frame.is-pseudo-fullscreen .fs-bottom-hud {
       display: flex;
+    }
+
+    .video-frame.is-pseudo-fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 9999 !important;
+      background-color: #000 !important;
+    }
+
+    /* Custom Styled Subtitle Overlay (Supports System Fonts, Borders, Outline, Opacity & RTL!) */
+    .subtitle-overlay {
+      position: absolute;
+      left: 3%;
+      right: 3%;
+      bottom: var(--sub-bottom, 8%);
+      z-index: 8;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+      transition: bottom 180ms var(--ease-out);
+    }
+
+    .subtitle-overlay[hidden] {
+      display: none !important;
+    }
+
+    .video-frame:fullscreen .subtitle-overlay,
+    .video-frame:-webkit-full-screen .subtitle-overlay,
+    .video-frame.is-pseudo-fullscreen .subtitle-overlay {
+      font-size: 1.24em;
+    }
+
+    .subtitle-cue-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      max-width: min(92%, 980px);
+      text-align: center;
+    }
+
+    .subtitle-cue-box {
+      display: inline-block;
+      padding: 0.22em 0.58em;
+      font-family: var(--sub-font, 'Cairo', 'Segoe UI', sans-serif);
+      font-size: var(--sub-size, 28px);
+      font-weight: var(--sub-weight, 700);
+      font-style: var(--sub-italic, normal);
+      line-height: 1.38;
+      color: var(--sub-color, #ffffff);
+      background-color: var(--sub-bg, rgba(4, 10, 6, 0.62));
+      border: var(--sub-border-w, 0px) solid var(--sub-border-color, #3dc479);
+      border-radius: var(--sub-radius, 8px);
+      -webkit-text-stroke: var(--sub-outline-w, 2px) var(--sub-outline-color, #000000);
+      paint-order: stroke fill;
+      text-shadow: var(--sub-shadow, 0 2px 6px rgba(0, 0, 0, 0.9));
+      white-space: pre-wrap;
+      word-break: break-word;
+      unicode-bidi: plaintext;
     }
 
     .fs-hud-row {
@@ -2150,6 +2212,467 @@
     }
 
     /* =========================================================================
+       Browser-Style Multi-Tab Workspace Shell
+       ========================================================================= */
+    html.is-tab-shell #appShell {
+      display: none !important;
+    }
+
+    .workspace-shell {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-canvas);
+      overflow: hidden;
+    }
+
+    .workspace-shell[hidden] {
+      display: none !important;
+    }
+
+    .tabstrip {
+      height: 38px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      padding: 5px 8px 0;
+      background-color: var(--bg-canvas);
+      border-bottom: 1px solid var(--border-hairline);
+      overflow: hidden;
+    }
+
+    .tabstrip-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 8px 2px 4px;
+      flex-shrink: 0;
+      color: var(--text-primary);
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    .tabstrip-tabs {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+    }
+
+    .tabstrip-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .workspace-tab {
+      position: relative;
+      height: 32px;
+      min-width: 118px;
+      max-width: 230px;
+      flex: 0 1 196px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px 0 11px;
+      border-radius: 8px 8px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background-color: var(--bg-inset);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 140ms var(--ease-out), color 140ms var(--ease-out), border-color 140ms var(--ease-out);
+      flex-shrink: 0;
+    }
+
+    html[dir="rtl"] .workspace-tab {
+      padding: 0 11px 0 8px;
+    }
+
+    .workspace-tab:hover {
+      background-color: var(--bg-surface-elevated);
+      color: var(--text-primary);
+    }
+
+    .workspace-tab.is-active {
+      background-color: var(--bg-surface);
+      border-color: var(--border-hairline);
+      color: var(--text-primary);
+      font-weight: 600;
+      margin-bottom: -1px;
+      height: 33px;
+      z-index: 2;
+    }
+
+    .workspace-tab.is-active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 10px;
+      right: 10px;
+      height: 2px;
+      border-radius: 0 0 2px 2px;
+      background-color: var(--accent);
+    }
+
+    .tab-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .workspace-tab.is-active .tab-status-dot {
+      background-color: var(--accent);
+    }
+
+    .tab-eq-anim {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 1.5px;
+      width: 11px;
+      height: 11px;
+      flex-shrink: 0;
+    }
+
+    .tab-eq-anim span {
+      width: 2.5px;
+      border-radius: 1px;
+      background-color: var(--accent);
+      animation: aazTabEq 0.78s ease-in-out infinite alternate;
+    }
+
+    .tab-eq-anim span:nth-child(1) { height: 45%; animation-delay: 0s; }
+    .tab-eq-anim span:nth-child(2) { height: 100%; animation-delay: 0.2s; }
+    .tab-eq-anim span:nth-child(3) { height: 65%; animation-delay: 0.4s; }
+
+    @keyframes aazTabEq {
+      0% { transform: scaleY(0.32); }
+      100% { transform: scaleY(1); }
+    }
+
+    .tab-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: start;
+    }
+
+    .tab-sink-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background-color: var(--accent-soft);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .tab-close-btn {
+      width: 19px;
+      height: 19px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 120ms, color 120ms;
+    }
+
+    .tab-close-btn:hover {
+      background-color: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .tab-add-btn {
+      width: 28px;
+      height: 28px;
+      margin-bottom: 3px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 140ms, color 140ms, border-color 140ms;
+    }
+
+    .tab-add-btn:hover {
+      background-color: var(--bg-surface-elevated);
+      border-color: var(--border-hairline);
+      color: var(--accent);
+    }
+
+    .tab-frames-host {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      background-color: var(--bg-surface);
+    }
+
+    .tab-frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background-color: var(--bg-surface);
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .tab-frame.is-active {
+      visibility: visible;
+      opacity: 1;
+      pointer-events: auto;
+      z-index: 2;
+    }
+
+    /* =========================================================================
+       Subtitle Styling Studio Modal
+       ========================================================================= */
+    .sub-modal-card {
+      width: min(680px, 94vw);
+      max-height: min(88vh, 760px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sub-modal-body {
+      padding: 14px 18px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .sub-preview-stage {
+      position: relative;
+      min-height: 118px;
+      border-radius: 10px;
+      border: 1px solid var(--border-hairline);
+      background:
+        radial-gradient(circle at 22% 28%, rgba(61, 196, 121, 0.22), transparent 52%),
+        radial-gradient(circle at 80% 74%, rgba(214, 178, 103, 0.16), transparent 55%),
+        linear-gradient(145deg, #06100b 0%, #0d1f15 48%, #07120c 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 14px 16px;
+      overflow: hidden;
+    }
+
+    .sub-preview-box {
+      display: inline-block;
+      max-width: 100%;
+      text-align: center;
+      padding: 0.22em 0.58em;
+      line-height: 1.38;
+      white-space: pre-wrap;
+      paint-order: stroke fill;
+    }
+
+    .sub-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px 13px;
+      border-radius: 9px;
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-inset);
+    }
+
+    .sub-section-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .sub-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+    }
+
+    @media (max-width: 560px) {
+      .sub-grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sub-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .sub-field-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .sub-field-val {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-primary);
+    }
+
+    .sub-font-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sub-input,
+    .sub-select {
+      height: 31px;
+      padding: 0 10px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 12.5px;
+      outline: none;
+    }
+
+    .sub-input:focus,
+    .sub-select:focus {
+      border-color: var(--accent);
+    }
+
+    .sub-font-list {
+      max-height: 132px;
+      overflow-y: auto;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+      padding: 4px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+      gap: 3px;
+    }
+
+    .sub-font-option {
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 5px 8px;
+      font-size: 13px;
+      text-align: start;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: background-color 120ms, color 120ms, border-color 120ms;
+    }
+
+    .sub-font-option:hover {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-primary);
+    }
+
+    .sub-font-option.is-active {
+      background-color: var(--accent-soft);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+
+    .sub-color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sub-color-input {
+      width: 34px;
+      height: 28px;
+      padding: 2px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background-color: var(--bg-surface);
+      cursor: pointer;
+    }
+
+    .sub-swatches {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .sub-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-strong);
+      cursor: pointer;
+      transition: transform 120ms, border-color 120ms;
+    }
+
+    .sub-swatch:hover {
+      transform: scale(1.12);
+      border-color: var(--accent);
+    }
+
+    .sub-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sub-modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 18px 14px;
+      border-top: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+    }
+
+    /* =========================================================================
        Narrow / Compact Window Responsive Mode
        ========================================================================= */
     @media (max-width: 860px) {
@@ -2193,6 +2716,34 @@
   </style>
 </head>
 <body>
+  <!-- Browser-Style Multi-Tab Workspace Shell (Active only in top-level frame!) -->
+  <div class="workspace-shell" id="workspaceShell" hidden>
+    <div class="tabstrip" id="tabStrip" role="tablist" aria-label="AAZ Player Tabs">
+      <div class="tabstrip-brand" title="AAZ Player">
+        <svg width="20" height="20" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="aazTabBg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#193e28"/>
+              <stop offset="100%" stop-color="#08160e"/>
+            </linearGradient>
+            <linearGradient id="aazTabPlay" x1="14" y1="7" x2="28" y2="22" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#6ae8a2"/>
+              <stop offset="100%" stop-color="#2ea865"/>
+            </linearGradient>
+          </defs>
+          <rect x="1" y="1" width="38" height="38" rx="9" fill="url(#aazTabBg)" stroke="#3a7d55" stroke-width="1.5"/>
+          <path d="M15 7.5L27.5 14.5L15 21.5V7.5Z" fill="url(#aazTabPlay)"/>
+          <rect x="10.5" y="23.5" width="19" height="1.8" rx="0.9" fill="#d6b267"/>
+          <text x="20" y="34" text-anchor="middle" fill="#eef7f1" font-family="Plus Jakarta Sans, Segoe UI, sans-serif" font-size="9.5" font-weight="800" letter-spacing="0.8">AAZ</text>
+        </svg>
+        <span>AAZ</span>
+      </div>
+      <div class="tabstrip-tabs" id="tabStripTabs"></div>
+      <button type="button" class="tab-add-btn" id="newTabBtn" title="New Tab (Ctrl+T)" aria-label="Open new tab">+</button>
+    </div>
+    <div class="tab-frames-host" id="tabFramesHost"></div>
+  </div>
+
   <div class="app-shell" id="appShell">
     <!-- Drag-and-drop overlay -->
     <div class="drop-overlay" aria-hidden="true">
@@ -2245,6 +2796,7 @@
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="open-folder"><span class="menu-action-label" data-i18n="cmdOpenFolder">Open Folder...</span><span class="menu-shortcut">Ctrl+O</span></button>
               <button type="button" class="menu-action" data-cmd="open-files"><span class="menu-action-label" data-i18n="cmdOpenFiles">Open Files...</span><span class="menu-shortcut">Ctrl+Shift+O</span></button>
+              <button type="button" class="menu-action" data-cmd="new-tab"><span class="menu-action-label" data-i18n="cmdNewTab">New Tab</span><span class="menu-shortcut">Ctrl+T</span></button>
               <button type="button" class="menu-action" data-cmd="new-window"><span class="menu-action-label" data-i18n="cmdNewWindow">New Window</span><span class="menu-shortcut">Ctrl+Shift+N</span></button>
               <button type="button" class="menu-action" data-cmd="resume-session"><span class="menu-action-label" data-i18n="cmdResume">Resume Last Session</span></button>
               <div class="menu-sep"></div>
@@ -2313,6 +2865,7 @@
               <button type="button" class="menu-action" data-cmd="toggle-video-view"><span class="menu-action-label" data-i18n="cmdToggleVideoView">Toggle Video / Audio-Only View</span></button>
               <button type="button" class="menu-action" data-cmd="load-subtitles"><span class="menu-action-label" data-i18n="cmdLoadSubs">Load Subtitles (.srt / .vtt)...</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-subtitles"><span class="menu-action-label" data-i18n="cmdToggleSubs">Show / Hide Subtitles</span></button>
+              <button type="button" class="menu-action" data-cmd="open-subtitle-style"><span class="menu-action-label" data-i18n="cmdSubStyle">Subtitle Style &amp; Font...</span></button>
               <div class="menu-sep"></div>
               <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
@@ -2339,7 +2892,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.1.1</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.0</div>
             </div>
           </div>
         </nav>
@@ -2446,12 +2999,20 @@
           <div class="video-frame" id="videoFrame" hidden>
             <video id="mediaEngine" preload="metadata" playsinline></video>
 
+            <!-- Custom Styled Subtitle Overlay (System Fonts, Colors, Borders, Background & RTL) -->
+            <div class="subtitle-overlay" id="subtitleOverlay" hidden aria-live="polite">
+              <div class="subtitle-cue-stack" id="subtitleCueStack"></div>
+            </div>
+
             <div class="video-toolbar" id="videoToolbar">
               <button type="button" class="video-tool-btn" id="audioOnlyViewBtn" title="Hide video and listen as audio">
                 <span data-i18n="btnAudioView">Audio View</span>
               </button>
               <button type="button" class="video-tool-btn" id="subtitleBtn" title="Load or toggle .SRT / .VTT subtitles">
                 <span>CC</span>
+              </button>
+              <button type="button" class="video-tool-btn" id="subtitleStyleBtn" title="Subtitle Font &amp; Style">
+                <span>Aa</span>
               </button>
               <button type="button" class="video-tool-btn" id="pipBtn" title="Picture-in-Picture (P)">
                 <span>PiP</span>
@@ -2819,7 +3380,154 @@
         <span class="shortcut-desc" data-i18n="scStar">Star / Favorite current track</span><span class="shortcut-key">S</span>
         <span class="shortcut-desc" data-i18n="scOpen">Open local folder</span><span class="shortcut-key">Ctrl + O</span>
         <span class="shortcut-desc" data-i18n="scSavePl">Save playlist to Library</span><span class="shortcut-key">Ctrl + S</span>
+        <span class="shortcut-desc" data-i18n="scNewTab">Open new tab</span><span class="shortcut-key">Ctrl + T</span>
+        <span class="shortcut-desc" data-i18n="scCloseTab">Close current tab</span><span class="shortcut-key">Ctrl + W</span>
+        <span class="shortcut-desc" data-i18n="scSwitchTab">Switch to next tab</span><span class="shortcut-key">Ctrl + Tab</span>
         <span class="shortcut-desc" data-i18n="cmdNewWindow">New Window</span><span class="shortcut-key">Ctrl + Shift + N</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subtitle Styling Studio Modal (System Fonts, Colors, Borders, Background & Live Preview) -->
+  <div class="modal-backdrop" id="subtitleModal" hidden role="dialog" aria-modal="true" aria-labelledby="subtitleModalTitle">
+    <div class="modal-card sub-modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="subtitleModalTitle" data-i18n="subModalTitle">Subtitle Style &amp; Font</div>
+        <button type="button" class="btn-icon" id="closeSubtitleModalBtn" style="width:30px;height:30px" aria-label="Close subtitle settings">×</button>
+      </div>
+
+      <div class="sub-modal-body">
+        <!-- Live Cinema Preview -->
+        <div class="sub-preview-stage">
+          <div class="sub-preview-box" id="subPreviewBox"></div>
+        </div>
+
+        <!-- Font Family & Installed System Fonts -->
+        <div class="sub-section">
+          <div class="sub-section-title">
+            <span data-i18n="subFontFamily">Font Family (Installed System Fonts)</span>
+            <button type="button" class="btn" id="subLoadSysFontsBtn" style="height:25px;font-size:11px" data-i18n="subLoadSysFonts">Load System Fonts</button>
+          </div>
+          <div class="sub-font-toolbar">
+            <input type="text" id="subFontSearchInput" class="sub-input" style="flex:1" placeholder="Search or type font name..." />
+            <span class="sub-field-val" id="subFontCountLabel"></span>
+          </div>
+          <div class="sub-font-list" id="subFontList" role="listbox" aria-label="Installed fonts"></div>
+        </div>
+
+        <!-- Typography: Size, Weight, Italic, Text Color -->
+        <div class="sub-section">
+          <div class="sub-section-title"><span data-i18n="subTypography">Typography &amp; Text Color</span></div>
+          <div class="sub-grid-2">
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subFontSize">Font Size</span>
+                <span class="sub-field-val" id="subFontSizeVal">28px</span>
+              </div>
+              <input type="range" id="subFontSizeRange" class="range-input" min="14" max="72" step="1" value="28" />
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subFontWeight">Weight &amp; Style</span>
+              </div>
+              <div class="sub-toggle-row">
+                <select id="subFontWeightSelect" class="sub-select" style="flex:1">
+                  <option value="400" data-i18n="subWeightNormal">Regular (400)</option>
+                  <option value="600" data-i18n="subWeightSemi">SemiBold (600)</option>
+                  <option value="700" data-i18n="subWeightBold" selected>Bold (700)</option>
+                  <option value="800" data-i18n="subWeightExtra">ExtraBold (800)</option>
+                </select>
+                <button type="button" class="btn" id="subItalicBtn" style="height:31px;min-width:44px;font-style:italic" aria-pressed="false" data-i18n="subItalic">Italic</button>
+              </div>
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subTextColor">Text Color</span>
+                <span class="sub-field-val" id="subTextColorVal">#ffffff</span>
+              </div>
+              <div class="sub-color-row">
+                <input type="color" id="subTextColorInput" class="sub-color-input" value="#ffffff" />
+                <div class="sub-swatches">
+                  <button type="button" class="sub-swatch" data-sub-swatch="#ffffff" style="background:#ffffff" title="#ffffff"></button>
+                  <button type="button" class="sub-swatch" data-sub-swatch="#ffd86b" style="background:#ffd86b" title="#ffd86b"></button>
+                  <button type="button" class="sub-swatch" data-sub-swatch="#7bf0a4" style="background:#7bf0a4" title="#7bf0a4"></button>
+                  <button type="button" class="sub-swatch" data-sub-swatch="#7cd4ff" style="background:#7cd4ff" title="#7cd4ff"></button>
+                  <button type="button" class="sub-swatch" data-sub-swatch="#fff2d6" style="background:#fff2d6" title="#fff2d6"></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subOutline">Text Outline (Stroke)</span>
+                <span class="sub-field-val" id="subOutlineVal">2px</span>
+              </div>
+              <div class="sub-color-row">
+                <input type="color" id="subOutlineColorInput" class="sub-color-input" value="#000000" />
+                <input type="range" id="subOutlineWidthRange" class="range-input" style="flex:1" min="0" max="6" step="0.5" value="2" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Background Box, Border, Shadow & Position -->
+        <div class="sub-section">
+          <div class="sub-section-title"><span data-i18n="subBgBox">Background, Border &amp; Position</span></div>
+          <div class="sub-grid-2">
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subBgColor">Background &amp; Opacity</span>
+                <span class="sub-field-val" id="subBgOpacityVal">62%</span>
+              </div>
+              <div class="sub-color-row">
+                <input type="color" id="subBgColorInput" class="sub-color-input" value="#040a06" />
+                <input type="range" id="subBgOpacityRange" class="range-input" style="flex:1" min="0" max="100" step="1" value="62" />
+              </div>
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subBorder">Box Border</span>
+                <span class="sub-field-val" id="subBorderVal">0px</span>
+              </div>
+              <div class="sub-color-row">
+                <input type="color" id="subBorderColorInput" class="sub-color-input" value="#3dc479" />
+                <input type="range" id="subBorderWidthRange" class="range-input" style="flex:1" min="0" max="5" step="0.5" value="0" />
+              </div>
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subRadius">Corner Radius</span>
+                <span class="sub-field-val" id="subRadiusVal">8px</span>
+              </div>
+              <input type="range" id="subRadiusRange" class="range-input" min="0" max="22" step="1" value="8" />
+            </div>
+
+            <div class="sub-field">
+              <div class="sub-field-head">
+                <span data-i18n="subShadow">Drop Shadow</span>
+                <span class="sub-field-val" id="subShadowVal">6px</span>
+              </div>
+              <input type="range" id="subShadowRange" class="range-input" min="0" max="16" step="1" value="6" />
+            </div>
+
+            <div class="sub-field" style="grid-column: 1 / -1">
+              <div class="sub-field-head">
+                <span data-i18n="subPosition">Bottom Position</span>
+                <span class="sub-field-val" id="subPositionVal">8%</span>
+              </div>
+              <input type="range" id="subPositionRange" class="range-input" min="2" max="40" step="1" value="8" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sub-modal-footer">
+        <button type="button" class="btn" id="subResetBtn" data-i18n="subReset">Reset Defaults</button>
+        <button type="button" class="btn btn-primary" id="subDoneBtn" data-i18n="subDone">Done</button>
       </div>
     </div>
   </div>
@@ -2829,9 +3537,318 @@
       'use strict';
 
       /* =======================================================================
-         1. Configuration, Extensions & Storage Keys
+         0. Dual-Mode Bootstrap: Multi-Tab Workspace Shell vs. Tab Player Instance
+         ======================================================================= */
+      const urlParams = new URLSearchParams(window.location.search);
+      const CURRENT_TAB_ID = urlParams.get('aaz_tab');
+      const IS_INITIAL_TAB = urlParams.get('aaz_init') === '1';
+      const IS_TAB_FRAME = Boolean(CURRENT_TAB_ID) && window.parent && window.parent !== window;
+
+      if (!CURRENT_TAB_ID) {
+        // TOP-LEVEL WORKSPACE SHELL (Browser-style tab strip hosting independent player tabs!)
+        document.documentElement.classList.add('is-tab-shell');
+        const workspaceShell = document.getElementById('workspaceShell');
+        const tabStripTabs = document.getElementById('tabStripTabs');
+        const newTabBtn = document.getElementById('newTabBtn');
+        const tabFramesHost = document.getElementById('tabFramesHost');
+        const shellDesktop = window.aazDesktop && window.aazDesktop.isElectron ? window.aazDesktop : null;
+
+        workspaceShell.hidden = false;
+
+        let shellTheme = 'dark';
+        let shellLang = 'en';
+        try {
+          shellTheme = localStorage.getItem('aaz_theme') || 'dark';
+          shellLang = localStorage.getItem('aaz_lang') || 'en';
+        } catch {}
+
+        function applyShellPrefs(theme, lang) {
+          shellTheme = theme === 'light' ? 'light' : 'dark';
+          shellLang = lang === 'ar' ? 'ar' : 'en';
+          if (shellTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+          else document.documentElement.removeAttribute('data-theme');
+          document.documentElement.lang = shellLang;
+          document.documentElement.dir = shellLang === 'ar' ? 'rtl' : 'ltr';
+          newTabBtn.title = shellLang === 'ar' ? 'تبويب جديد (Ctrl+T)' : 'New Tab (Ctrl+T)';
+          renderTabStrip();
+        }
+
+        const tabs = [];
+        let activeTabId = null;
+        let tabSeq = 0;
+
+        function getTabBaseUrl() {
+          return window.location.href.split('#')[0].split('?')[0];
+        }
+
+        function updateWindowTitle() {
+          const active = tabs.find((tb) => tb.id === activeTabId);
+          document.title = active && active.title ? `${active.title} — AAZ Player` : 'AAZ Player';
+        }
+
+        function renderTabStrip() {
+          tabStripTabs.innerHTML = '';
+          const defaultLabel = shellLang === 'ar' ? 'تبويب جديد' : 'New Tab';
+
+          tabs.forEach((tab, idx) => {
+            const isActive = tab.id === activeTabId;
+            const item = document.createElement('div');
+            item.className = `workspace-tab${isActive ? ' is-active' : ''}`;
+            item.setAttribute('role', 'tab');
+            item.setAttribute('aria-selected', String(isActive));
+            item.title = tab.sinkLabel
+              ? `${tab.title || defaultLabel} — ${tab.sinkLabel}`
+              : (tab.title || `${defaultLabel} ${idx + 1}`);
+
+            if (tab.isPlaying) {
+              const eq = document.createElement('span');
+              eq.className = 'tab-eq-anim';
+              eq.innerHTML = '<span></span><span></span><span></span>';
+              item.appendChild(eq);
+            } else {
+              const dot = document.createElement('span');
+              dot.className = 'tab-status-dot';
+              item.appendChild(dot);
+            }
+
+            const lbl = document.createElement('span');
+            lbl.className = 'tab-label';
+            lbl.textContent = tab.title || `${defaultLabel} ${idx + 1}`;
+            item.appendChild(lbl);
+
+            if (tab.sinkLabel) {
+              const badge = document.createElement('span');
+              badge.className = 'tab-sink-badge';
+              badge.title = tab.sinkLabel;
+              badge.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>';
+              item.appendChild(badge);
+            }
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'tab-close-btn';
+            closeBtn.textContent = '×';
+            closeBtn.title = shellLang === 'ar' ? 'إغلاق التبويب (Ctrl+W)' : 'Close Tab (Ctrl+W)';
+            closeBtn.setAttribute('aria-label', closeBtn.title);
+            closeBtn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              closeTab(tab.id);
+            });
+            item.appendChild(closeBtn);
+
+            item.addEventListener('click', () => activateTab(tab.id));
+            item.addEventListener('auxclick', (ev) => {
+              if (ev.button === 1) {
+                ev.preventDefault();
+                closeTab(tab.id);
+              }
+            });
+
+            tabStripTabs.appendChild(item);
+          });
+        }
+
+        function activateTab(tabId) {
+          const target = tabs.find((tb) => tb.id === tabId);
+          if (!target) return;
+          activeTabId = tabId;
+          tabs.forEach((tb) => {
+            tb.iframe.classList.toggle('is-active', tb.id === tabId);
+          });
+          renderTabStrip();
+          updateWindowTitle();
+          try { target.iframe.contentWindow?.focus(); } catch {}
+        }
+
+        function createTab(options = {}) {
+          const { externalPaths = null, initial = false } = options;
+          tabSeq += 1;
+          const id = `tab_${Date.now().toString(36)}_${tabSeq}`;
+
+          const iframe = document.createElement('iframe');
+          iframe.className = 'tab-frame';
+          iframe.setAttribute('allow', 'fullscreen *; autoplay *; speaker-selection *; picture-in-picture *; microphone *; local-fonts *');
+          iframe.setAttribute('allowfullscreen', 'true');
+          iframe.src = `${getTabBaseUrl()}?aaz_tab=${encodeURIComponent(id)}${initial ? '&aaz_init=1' : ''}`;
+          tabFramesHost.appendChild(iframe);
+
+          const tab = {
+            id,
+            iframe,
+            title: '',
+            isPlaying: false,
+            hasMedia: false,
+            kind: '',
+            sinkLabel: '',
+            ready: false,
+            pendingExternalPaths: externalPaths ? [...externalPaths] : null
+          };
+          tabs.push(tab);
+          activateTab(id);
+          return tab;
+        }
+
+        function closeTab(tabId) {
+          const idx = tabs.findIndex((tb) => tb.id === tabId);
+          if (idx === -1) return;
+          const [removed] = tabs.splice(idx, 1);
+          try { removed.iframe.src = 'about:blank'; } catch {}
+          removed.iframe.remove();
+
+          if (tabs.length === 0) {
+            createTab({ initial: false });
+            return;
+          }
+          if (activeTabId === tabId) {
+            const nextIdx = Math.min(idx, tabs.length - 1);
+            activateTab(tabs[nextIdx].id);
+          } else {
+            renderTabStrip();
+          }
+        }
+
+        function cycleTab(dir = 1) {
+          if (tabs.length < 2) return;
+          const idx = tabs.findIndex((tb) => tb.id === activeTabId);
+          const nextIdx = (idx + dir + tabs.length) % tabs.length;
+          activateTab(tabs[nextIdx].id);
+        }
+
+        function routeExternalFilesToTab(paths) {
+          if (!Array.isArray(paths) || paths.length === 0) return;
+          const active = tabs.find((tb) => tb.id === activeTabId);
+          // Cold start with a single empty tab -> reuse Tab 1 cleanly;
+          // otherwise ALWAYS open in a fresh new tab so active playback is never interrupted!
+          if (tabs.length === 1 && active && !active.hasMedia && !active.pendingExternalPaths) {
+            if (active.ready) {
+              active.iframe.contentWindow?.postMessage({ type: 'aaz-open-external', paths }, '*');
+            } else {
+              active.pendingExternalPaths = [...paths];
+            }
+          } else {
+            createTab({ externalPaths: paths, initial: false });
+          }
+        }
+
+        newTabBtn.addEventListener('click', () => createTab({ initial: false }));
+        document.getElementById('tabStrip').addEventListener('dblclick', (e) => {
+          if (e.target === tabStripTabs || e.target === document.getElementById('tabStrip')) {
+            createTab({ initial: false });
+          }
+        });
+
+        window.addEventListener('message', (e) => {
+          const msg = e.data;
+          if (!msg || typeof msg !== 'object' || !msg.type) return;
+
+          if (msg.type === 'aaz-tab-ready') {
+            const tab = tabs.find((tb) => tb.id === msg.tabId);
+            if (!tab) return;
+            tab.ready = true;
+            if (tab.pendingExternalPaths && tab.pendingExternalPaths.length > 0) {
+              const queued = tab.pendingExternalPaths;
+              tab.pendingExternalPaths = null;
+              tab.iframe.contentWindow?.postMessage({ type: 'aaz-open-external', paths: queued }, '*');
+            }
+            return;
+          }
+
+          if (msg.type === 'aaz-tab-state') {
+            const tab = tabs.find((tb) => tb.id === msg.tabId);
+            if (!tab) return;
+            tab.title = msg.title || '';
+            tab.isPlaying = Boolean(msg.isPlaying);
+            tab.hasMedia = Boolean(msg.hasMedia);
+            tab.kind = msg.kind || '';
+            tab.sinkLabel = msg.sinkLabel || '';
+            renderTabStrip();
+            if (tab.id === activeTabId) updateWindowTitle();
+            return;
+          }
+
+          if (msg.type === 'aaz-new-tab') {
+            createTab({ initial: false });
+            return;
+          }
+
+          if (msg.type === 'aaz-close-tab') {
+            closeTab(msg.tabId || activeTabId);
+            return;
+          }
+
+          if (msg.type === 'aaz-cycle-tab') {
+            cycleTab(msg.dir === -1 ? -1 : 1);
+            return;
+          }
+
+          if (msg.type === 'aaz-activate-index') {
+            const target = tabs[msg.index];
+            if (target) activateTab(target.id);
+            return;
+          }
+
+          if (msg.type === 'aaz-sync-prefs') {
+            if (msg.theme || msg.lang) {
+              applyShellPrefs(msg.theme || shellTheme, msg.lang || shellLang);
+            }
+            tabs.forEach((tb) => {
+              if (tb.id !== msg.tabId && tb.iframe.contentWindow) {
+                tb.iframe.contentWindow.postMessage({
+                  type: 'aaz-apply-prefs',
+                  theme: msg.theme,
+                  lang: msg.lang,
+                  subtitleStyle: msg.subtitleStyle
+                }, '*');
+              }
+            });
+          }
+        });
+
+        window.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 't') {
+            e.preventDefault();
+            createTab({ initial: false });
+          } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'w') {
+            e.preventDefault();
+            if (activeTabId) closeTab(activeTabId);
+          } else if (e.ctrlKey && e.key === 'Tab') {
+            e.preventDefault();
+            cycleTab(e.shiftKey ? -1 : 1);
+          } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            if (shellDesktop && shellDesktop.openNewWindow) shellDesktop.openNewWindow();
+          } else if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
+            const targetIdx = Number(e.key) - 1;
+            if (tabs[targetIdx]) {
+              e.preventDefault();
+              activateTab(tabs[targetIdx].id);
+            }
+          }
+        });
+
+        if (shellDesktop) {
+          if (shellDesktop.onOpenExternal) {
+            shellDesktop.onOpenExternal((paths) => routeExternalFilesToTab(paths));
+          }
+          if (shellDesktop.onUpdateStatus) {
+            shellDesktop.onUpdateStatus((payload) => {
+              tabs.forEach((tb) => {
+                try { tb.iframe.contentWindow?.postMessage({ type: 'aaz-update-status', payload }, '*'); } catch {}
+              });
+            });
+          }
+        }
+
+        applyShellPrefs(shellTheme, shellLang);
+        createTab({ initial: true });
+        return;
+      }
+
+      /* =======================================================================
+         1. Configuration, Extensions & Storage Keys (Tab Player Mode)
          ======================================================================= */
       const STORAGE_KEY = 'aaz_media_player_state_v3';
+      const SUBTITLE_STYLE_KEY = 'aaz_subtitle_style_v1';
       const LEGACY_KEYS = ['aaz_media_player_state_v2', 'aaz_media_player_state_v1'];
       const IDB_NAME = 'AAZMediaPlayerDB';
       const IDB_VERSION = 1;
@@ -2841,7 +3858,43 @@
       const SKIP_SECONDS = 5;
       const FULLSCREEN_IDLE_MS = 2000;
 
-      const desktopBridge = window.aazDesktop && window.aazDesktop.isElectron ? window.aazDesktop : null;
+      const desktopBridge =
+        (window.aazDesktop && window.aazDesktop.isElectron)
+          ? window.aazDesktop
+          : (IS_TAB_FRAME && window.parent.aazDesktop && window.parent.aazDesktop.isElectron
+            ? window.parent.aazDesktop
+            : null);
+
+      function postToShell(type, extra = {}) {
+        if (!IS_TAB_FRAME) return;
+        try {
+          window.parent.postMessage({ type, tabId: CURRENT_TAB_ID, ...extra }, '*');
+        } catch {}
+      }
+
+      const SUBTITLE_STYLE_DEFAULTS = {
+        fontFamily: 'Cairo',
+        fontSize: 28,
+        fontWeight: '700',
+        italic: false,
+        textColor: '#ffffff',
+        bgColor: '#040a06',
+        bgOpacity: 62,
+        borderColor: '#3dc479',
+        borderWidth: 0,
+        borderRadius: 8,
+        outlineColor: '#000000',
+        outlineWidth: 2,
+        shadowBlur: 6,
+        bottomOffset: 8
+      };
+
+      const FALLBACK_FONTS = [
+        'Cairo', 'Plus Jakarta Sans', 'Segoe UI', 'Tahoma', 'Arial',
+        'Traditional Arabic', 'Amiri', 'Noto Sans Arabic', 'Arabic Typesetting',
+        'Verdana', 'Calibri', 'Georgia', 'Times New Roman', 'Trebuchet MS',
+        'Consolas', 'JetBrains Mono', 'Impact', 'Comic Sans MS'
+      ];
 
       const AUDIO_EXTENSIONS = new Set([
         'mp3', 'wav', 'flac', 'ogg', 'oga', 'm4a', 'aac', 'opus',
@@ -2910,11 +3963,46 @@
         closeNoticeBtn: document.getElementById('closeNoticeBtn'),
 
         videoFrame: document.getElementById('videoFrame'),
+        subtitleOverlay: document.getElementById('subtitleOverlay'),
+        subtitleCueStack: document.getElementById('subtitleCueStack'),
         videoToolbar: document.getElementById('videoToolbar'),
         audioOnlyViewBtn: document.getElementById('audioOnlyViewBtn'),
         subtitleBtn: document.getElementById('subtitleBtn'),
+        subtitleStyleBtn: document.getElementById('subtitleStyleBtn'),
         pipBtn: document.getElementById('pipBtn'),
         fullscreenBtn: document.getElementById('fullscreenBtn'),
+
+        subtitleModal: document.getElementById('subtitleModal'),
+        closeSubtitleModalBtn: document.getElementById('closeSubtitleModalBtn'),
+        subPreviewBox: document.getElementById('subPreviewBox'),
+        subLoadSysFontsBtn: document.getElementById('subLoadSysFontsBtn'),
+        subFontSearchInput: document.getElementById('subFontSearchInput'),
+        subFontCountLabel: document.getElementById('subFontCountLabel'),
+        subFontList: document.getElementById('subFontList'),
+        subFontSizeRange: document.getElementById('subFontSizeRange'),
+        subFontSizeVal: document.getElementById('subFontSizeVal'),
+        subFontWeightSelect: document.getElementById('subFontWeightSelect'),
+        subItalicBtn: document.getElementById('subItalicBtn'),
+        subTextColorInput: document.getElementById('subTextColorInput'),
+        subTextColorVal: document.getElementById('subTextColorVal'),
+        subSwatches: Array.from(document.querySelectorAll('[data-sub-swatch]')),
+        subOutlineColorInput: document.getElementById('subOutlineColorInput'),
+        subOutlineWidthRange: document.getElementById('subOutlineWidthRange'),
+        subOutlineVal: document.getElementById('subOutlineVal'),
+        subBgColorInput: document.getElementById('subBgColorInput'),
+        subBgOpacityRange: document.getElementById('subBgOpacityRange'),
+        subBgOpacityVal: document.getElementById('subBgOpacityVal'),
+        subBorderColorInput: document.getElementById('subBorderColorInput'),
+        subBorderWidthRange: document.getElementById('subBorderWidthRange'),
+        subBorderVal: document.getElementById('subBorderVal'),
+        subRadiusRange: document.getElementById('subRadiusRange'),
+        subRadiusVal: document.getElementById('subRadiusVal'),
+        subShadowRange: document.getElementById('subShadowRange'),
+        subShadowVal: document.getElementById('subShadowVal'),
+        subPositionRange: document.getElementById('subPositionRange'),
+        subPositionVal: document.getElementById('subPositionVal'),
+        subResetBtn: document.getElementById('subResetBtn'),
+        subDoneBtn: document.getElementById('subDoneBtn'),
 
         fsSeekBar: document.getElementById('fsSeekBar'),
         fsPlayBtn: document.getElementById('fsPlayBtn'),
@@ -3070,14 +4158,20 @@
 
         // Fullscreen 2-Second Auto-Hide Timer
         fsIdleTimer: null,
+        electronFsFallback: false,
+
+        // Subtitle Style Studio State
+        subtitleStyle: { ...SUBTITLE_STYLE_DEFAULTS },
+        systemFonts: [...FALLBACK_FONTS],
+        systemFontsLoaded: false,
 
         // Theme, Language, Visualizer & Per-Window Audio Output Channel
         theme: 'dark',                // 'dark' | 'light'
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
-        appVersion: '1.1.1',
+        appVersion: '1.2.0',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
-        audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-window/tab via sessionStorage)
+        audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
         audioDevices: [],
 
@@ -3227,7 +4321,35 @@
           outputSwitched: 'Audio output for this window: {name}',
           outputFailed: 'Could not switch audio output device.',
           outputNoExtra: 'No extra output devices detected.',
-          newWindowBrowserHint: 'In browser mode, open another tab of AAZ Player to assign a separate audio output.'
+          newWindowBrowserHint: 'In browser mode, open another tab of AAZ Player to assign a separate audio output.',
+          cmdNewTab: 'New Tab',
+          scNewTab: 'Open new tab',
+          scCloseTab: 'Close current tab',
+          scSwitchTab: 'Switch to next tab',
+          cmdSubStyle: 'Subtitle Style & Font...',
+          subModalTitle: 'Subtitle Style & Font',
+          subFontFamily: 'Font Family (Installed System Fonts)',
+          subLoadSysFonts: 'Load System Fonts',
+          subFontSearchPlaceholder: 'Search or type any font name...',
+          subTypography: 'Typography & Text Color',
+          subFontSize: 'Font Size',
+          subFontWeight: 'Weight & Style',
+          subWeightNormal: 'Regular (400)',
+          subWeightSemi: 'SemiBold (600)',
+          subWeightBold: 'Bold (700)',
+          subWeightExtra: 'ExtraBold (800)',
+          subItalic: 'Italic',
+          subTextColor: 'Text Color',
+          subOutline: 'Text Outline (Stroke)',
+          subBgBox: 'Background, Border & Position',
+          subBgColor: 'Background & Opacity',
+          subBorder: 'Box Border',
+          subRadius: 'Corner Radius',
+          subShadow: 'Drop Shadow',
+          subPosition: 'Bottom Position',
+          subReset: 'Reset Defaults',
+          subDone: 'Done',
+          subPreviewSample: 'AAZ Player — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة'
         },
         ar: {
           dropTitle: 'أفلت ملفات الصوت أو الفيديو أو المجلد أو قائمة التشغيل هنا',
@@ -3366,7 +4488,35 @@
           outputSwitched: 'تم تحويل صوت هذه النافذة إلى: {name}',
           outputFailed: 'تعذر تحويل مخرج الصوت لهذا الجهاز.',
           outputNoExtra: 'لم يتم العثور على مخارج صوت إضافية.',
-          newWindowBrowserHint: 'في المتصفح افتح تبويبا جديدا من البرنامج واختر مخرج صوت مختلفا له.'
+          newWindowBrowserHint: 'في المتصفح افتح تبويبا جديدا من البرنامج واختر مخرج صوت مختلفا له.',
+          cmdNewTab: 'تبويب جديد',
+          scNewTab: 'فتح تبويب جديد',
+          scCloseTab: 'إغلاق التبويب الحالي',
+          scSwitchTab: 'التبديل إلى التبويب التالي',
+          cmdSubStyle: 'تنسيق وخط الترجمة...',
+          subModalTitle: 'إعدادات خط وشكل الترجمة',
+          subFontFamily: 'نوع الخط (الخطوط المثبتة على الجهاز)',
+          subLoadSysFonts: 'جلب خطوط الجهاز',
+          subFontSearchPlaceholder: 'ابحث أو اكتب اسم أي خط مثبت...',
+          subTypography: 'الخط واللون والحدود',
+          subFontSize: 'حجم الخط',
+          subFontWeight: 'سُمك وشكل الخط',
+          subWeightNormal: 'عادي (400)',
+          subWeightSemi: 'متوسط (600)',
+          subWeightBold: 'عريض (700)',
+          subWeightExtra: 'عريض جدا (800)',
+          subItalic: 'مائل',
+          subTextColor: 'لون النص',
+          subOutline: 'حدود النص الخارجية',
+          subBgBox: 'الخلفية والإطار والموضع',
+          subBgColor: 'لون وشفافية الخلفية',
+          subBorder: 'إطار خلفية الترجمة',
+          subRadius: 'استدارة الحواف',
+          subShadow: 'ظل النص',
+          subPosition: 'المسافة من أسفل الشاشة',
+          subReset: 'استعادة الافتراضي',
+          subDone: 'تم',
+          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAAZ Player — Subtitle Live Preview'
         }
       };
 
@@ -3379,7 +4529,7 @@
         return str;
       }
 
-      function applyTheme(theme, persist = true) {
+      function applyTheme(theme, persist = true, broadcast = true) {
         state.theme = theme === 'light' ? 'light' : 'dark';
         if (state.theme === 'light') {
           document.documentElement.setAttribute('data-theme', 'light');
@@ -3391,12 +4541,15 @@
         if (persist) {
           try { localStorage.setItem('aaz_theme', state.theme); } catch {}
         }
+        if (broadcast) {
+          postToShell('aaz-sync-prefs', { theme: state.theme });
+        }
         if (AudioStudio && el.audioStage && !el.audioStage.hidden) {
           if (el.media.paused) AudioStudio.renderIdleFrame();
         }
       }
 
-      function applyLanguage(lang, persist = true) {
+      function applyLanguage(lang, persist = true, broadcast = true) {
         state.lang = lang === 'ar' ? 'ar' : 'en';
         const isAr = state.lang === 'ar';
         document.documentElement.lang = isAr ? 'ar' : 'en';
@@ -3410,9 +4563,14 @@
         el.langToggleBtn.textContent = isAr ? 'EN' : 'عربي';
         el.searchInput.placeholder = t('searchPlaceholder');
         el.savePlNameInput.placeholder = t('playlistNamePlaceholder');
+        el.subFontSearchInput.placeholder = t('subFontSearchPlaceholder');
+        el.subPreviewBox.textContent = t('subPreviewSample');
 
         if (persist) {
           try { localStorage.setItem('aaz_lang', state.lang); } catch {}
+        }
+        if (broadcast) {
+          postToShell('aaz-sync-prefs', { lang: state.lang });
         }
 
         // Refresh dynamic strings immediately
@@ -4506,7 +5664,7 @@
          8. Fullscreen 2-Second Auto-Hide Engine (Hides Overlays + Cursor!)
          ======================================================================= */
       function isFullscreenActive() {
-        return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+        return Boolean(document.fullscreenElement || document.webkitFullscreenElement || state.electronFsFallback);
       }
 
       function clearFsIdleTimer() {
@@ -4781,7 +5939,12 @@
           }
         }
 
-        if (typeof window.showDirectoryPicker !== 'function') {
+        const pickerFn =
+          (IS_TAB_FRAME && typeof window.parent.showDirectoryPicker === 'function')
+            ? window.parent.showDirectoryPicker.bind(window.parent)
+            : (typeof window.showDirectoryPicker === 'function' ? window.showDirectoryPicker.bind(window) : null);
+
+        if (!pickerFn) {
           state.resumeAutoPlayPending = autoPlayOnLoad;
           el.dirInput.value = '';
           el.dirInput.click();
@@ -4789,7 +5952,7 @@
         }
 
         try {
-          const dirHandle = await window.showDirectoryPicker({ id: 'aaz-media-folder', mode: 'read' });
+          const dirHandle = await pickerFn({ id: 'aaz-media-folder', mode: 'read' });
           state.activeSavedPlaylistId = null;
           await loadFromDirectoryHandle(dirHandle, {
             saveHandle: true, restoreSavedPosition: true, autoPlay: autoPlayOnLoad
@@ -4934,12 +6097,222 @@
       /* =======================================================================
          11. Playback, Subtitles & Transport Logic
          ======================================================================= */
+      function hexToRgba(hex, opacityPct) {
+        const clean = String(hex || '#000000').replace('#', '');
+        const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6);
+        const r = parseInt(full.slice(0, 2), 16) || 0;
+        const g = parseInt(full.slice(2, 4), 16) || 0;
+        const b = parseInt(full.slice(4, 6), 16) || 0;
+        const a = Math.max(0, Math.min(1, Number(opacityPct) / 100));
+        return `rgba(${r}, ${g}, ${b}, ${a.toFixed(2)})`;
+      }
+
+      function applySubtitleStyleToDOM() {
+        const s = state.subtitleStyle;
+        const fontStack = s.fontFamily ? `"${s.fontFamily.replace(/"/g, '')}", 'Cairo', 'Segoe UI', sans-serif` : `'Cairo', 'Segoe UI', sans-serif`;
+        const bgRgba = hexToRgba(s.bgColor, s.bgOpacity);
+        const shadowCss = s.shadowBlur > 0 ? `0 2px ${s.shadowBlur}px rgba(0, 0, 0, 0.92)` : 'none';
+
+        el.subtitleOverlay.style.setProperty('--sub-font', fontStack);
+        el.subtitleOverlay.style.setProperty('--sub-size', `${s.fontSize}px`);
+        el.subtitleOverlay.style.setProperty('--sub-weight', String(s.fontWeight));
+        el.subtitleOverlay.style.setProperty('--sub-italic', s.italic ? 'italic' : 'normal');
+        el.subtitleOverlay.style.setProperty('--sub-color', s.textColor);
+        el.subtitleOverlay.style.setProperty('--sub-bg', bgRgba);
+        el.subtitleOverlay.style.setProperty('--sub-border-color', s.borderColor);
+        el.subtitleOverlay.style.setProperty('--sub-border-w', `${s.borderWidth}px`);
+        el.subtitleOverlay.style.setProperty('--sub-radius', `${s.borderRadius}px`);
+        el.subtitleOverlay.style.setProperty('--sub-outline-color', s.outlineColor);
+        el.subtitleOverlay.style.setProperty('--sub-outline-w', `${s.outlineWidth}px`);
+        el.subtitleOverlay.style.setProperty('--sub-shadow', shadowCss);
+        el.subtitleOverlay.style.setProperty('--sub-bottom', `${s.bottomOffset}%`);
+
+        // Mirror exact styling on the Live Preview box inside the modal
+        const p = el.subPreviewBox.style;
+        p.fontFamily = fontStack;
+        p.fontSize = `${Math.min(36, Math.max(15, s.fontSize * 0.78))}px`;
+        p.fontWeight = String(s.fontWeight);
+        p.fontStyle = s.italic ? 'italic' : 'normal';
+        p.color = s.textColor;
+        p.backgroundColor = bgRgba;
+        p.border = `${s.borderWidth}px solid ${s.borderColor}`;
+        p.borderRadius = `${s.borderRadius}px`;
+        p.webkitTextStroke = `${s.outlineWidth}px ${s.outlineColor}`;
+        p.textShadow = shadowCss;
+      }
+
+      function syncSubtitleControlsUI() {
+        const s = state.subtitleStyle;
+        el.subFontSizeRange.value = String(s.fontSize);
+        el.subFontSizeVal.textContent = `${s.fontSize}px`;
+        el.subFontWeightSelect.value = String(s.fontWeight);
+        el.subItalicBtn.classList.toggle('btn-primary', Boolean(s.italic));
+        el.subItalicBtn.setAttribute('aria-pressed', String(Boolean(s.italic)));
+        el.subTextColorInput.value = s.textColor;
+        el.subTextColorVal.textContent = s.textColor;
+        el.subOutlineColorInput.value = s.outlineColor;
+        el.subOutlineWidthRange.value = String(s.outlineWidth);
+        el.subOutlineVal.textContent = `${s.outlineWidth}px`;
+        el.subBgColorInput.value = s.bgColor;
+        el.subBgOpacityRange.value = String(s.bgOpacity);
+        el.subBgOpacityVal.textContent = `${s.bgOpacity}%`;
+        el.subBorderColorInput.value = s.borderColor;
+        el.subBorderWidthRange.value = String(s.borderWidth);
+        el.subBorderVal.textContent = `${s.borderWidth}px`;
+        el.subRadiusRange.value = String(s.borderRadius);
+        el.subRadiusVal.textContent = `${s.borderRadius}px`;
+        el.subShadowRange.value = String(s.shadowBlur);
+        el.subShadowVal.textContent = `${s.shadowBlur}px`;
+        el.subPositionRange.value = String(s.bottomOffset);
+        el.subPositionVal.textContent = `${s.bottomOffset}%`;
+        setRangeFill(el.subFontSizeRange, ((s.fontSize - 14) / (72 - 14)) * 100);
+        setRangeFill(el.subOutlineWidthRange, (s.outlineWidth / 6) * 100);
+        setRangeFill(el.subBgOpacityRange, s.bgOpacity);
+        setRangeFill(el.subBorderWidthRange, (s.borderWidth / 5) * 100);
+        setRangeFill(el.subRadiusRange, (s.borderRadius / 22) * 100);
+        setRangeFill(el.subShadowRange, (s.shadowBlur / 16) * 100);
+        setRangeFill(el.subPositionRange, ((s.bottomOffset - 2) / (40 - 2)) * 100);
+      }
+
+      function updateSubtitleStyle(patch, persist = true, broadcast = true) {
+        state.subtitleStyle = { ...state.subtitleStyle, ...patch };
+        applySubtitleStyleToDOM();
+        syncSubtitleControlsUI();
+        if (persist) {
+          try { localStorage.setItem(SUBTITLE_STYLE_KEY, JSON.stringify(state.subtitleStyle)); } catch {}
+        }
+        if (broadcast) {
+          postToShell('aaz-sync-prefs', { subtitleStyle: state.subtitleStyle });
+        }
+      }
+
+      function renderFontPickerList() {
+        const query = (el.subFontSearchInput.value || '').trim().toLowerCase();
+        const filtered = state.systemFonts.filter((f) => !query || f.toLowerCase().includes(query));
+        el.subFontCountLabel.textContent = `${filtered.length}`;
+        el.subFontList.innerHTML = '';
+
+        const frag = document.createDocumentFragment();
+        const visibleList = filtered.slice(0, 260);
+        visibleList.forEach((fontName) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `sub-font-option${state.subtitleStyle.fontFamily === fontName ? ' is-active' : ''}`;
+          btn.textContent = fontName;
+          btn.title = fontName;
+          btn.style.fontFamily = `"${fontName.replace(/"/g, '')}", sans-serif`;
+          btn.addEventListener('click', () => {
+            updateSubtitleStyle({ fontFamily: fontName }, true, true);
+            renderFontPickerList();
+          });
+          frag.appendChild(btn);
+        });
+
+        // Allow direct custom font name entry if user typed a font not shown
+        if (query && !filtered.some((f) => f.toLowerCase() === query)) {
+          const customName = el.subFontSearchInput.value.trim();
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'sub-font-option is-active';
+          btn.textContent = `"${customName}"`;
+          btn.addEventListener('click', () => {
+            updateSubtitleStyle({ fontFamily: customName }, true, true);
+            renderFontPickerList();
+          });
+          frag.appendChild(btn);
+        }
+
+        el.subFontList.appendChild(frag);
+      }
+
+      async function loadSystemFonts(userTriggered = false) {
+        const found = new Set(FALLBACK_FONTS);
+        try {
+          if (desktopBridge && typeof desktopBridge.listSystemFonts === 'function') {
+            const sysList = await desktopBridge.listSystemFonts();
+            if (Array.isArray(sysList)) {
+              sysList.forEach((name) => { if (name) found.add(name); });
+              state.systemFontsLoaded = true;
+            }
+          } else if (typeof window.queryLocalFonts === 'function') {
+            const localFonts = await window.queryLocalFonts();
+            if (Array.isArray(localFonts)) {
+              localFonts.forEach((f) => { if (f && f.family) found.add(f.family); });
+              state.systemFontsLoaded = true;
+            }
+          } else if (IS_TAB_FRAME && typeof window.parent.queryLocalFonts === 'function') {
+            const localFonts = await window.parent.queryLocalFonts();
+            if (Array.isArray(localFonts)) {
+              localFonts.forEach((f) => { if (f && f.family) found.add(f.family); });
+              state.systemFontsLoaded = true;
+            }
+          }
+        } catch {
+          if (userTriggered) {
+            showNotice(state.lang === 'ar' ? 'تم عرض الخطوط الأساسية المتاحة.' : 'Showing standard system fonts.');
+          }
+        }
+
+        state.systemFonts = [...found].sort((a, b) => a.localeCompare(b));
+        renderFontPickerList();
+      }
+
+      function openSubtitleStyleModal() {
+        el.subPreviewBox.textContent = t('subPreviewSample');
+        applySubtitleStyleToDOM();
+        syncSubtitleControlsUI();
+        el.subtitleModal.hidden = false;
+        if (!state.systemFontsLoaded) {
+          loadSystemFonts(false);
+        } else {
+          renderFontPickerList();
+        }
+      }
+
+      function renderActiveSubtitleCues() {
+        const tracks = el.media.textTracks;
+        if (!state.subtitlesEnabled || !state.activeSubtitleUrl || !tracks || tracks.length === 0) {
+          el.subtitleCueStack.innerHTML = '';
+          el.subtitleOverlay.hidden = true;
+          return;
+        }
+        const track = tracks[0];
+        if (track.mode !== 'hidden') track.mode = 'hidden';
+        const activeCues = track.activeCues;
+        if (!activeCues || activeCues.length === 0) {
+          el.subtitleCueStack.innerHTML = '';
+          el.subtitleOverlay.hidden = true;
+          return;
+        }
+
+        el.subtitleCueStack.innerHTML = '';
+        for (let i = 0; i < activeCues.length; i++) {
+          const cue = activeCues[i];
+          const rawText = String(cue.text || '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .trim();
+          if (!rawText) continue;
+          const box = document.createElement('div');
+          box.className = 'subtitle-cue-box';
+          box.setAttribute('dir', 'auto');
+          box.textContent = rawText;
+          el.subtitleCueStack.appendChild(box);
+        }
+        el.subtitleOverlay.hidden = el.subtitleCueStack.children.length === 0;
+      }
+
       function clearActiveSubtitles() {
         if (state.activeSubtitleUrl) {
           URL.revokeObjectURL(state.activeSubtitleUrl);
           state.activeSubtitleUrl = null;
         }
-        el.media.querySelectorAll('track').forEach((t) => t.remove());
+        el.media.querySelectorAll('track').forEach((tr) => tr.remove());
+        el.subtitleCueStack.innerHTML = '';
+        el.subtitleOverlay.hidden = true;
         el.subtitleBtn.classList.remove('is-active');
       }
 
@@ -4965,9 +6338,18 @@
         el.media.appendChild(trackEl);
 
         state.subtitlesEnabled = true;
-        if (el.media.textTracks && el.media.textTracks[0]) {
-          el.media.textTracks[0].mode = 'showing';
-        }
+        const bindTrack = () => {
+          const tt = trackEl.track || (el.media.textTracks && el.media.textTracks[0]);
+          if (tt) {
+            // Keep native cue rendering 'hidden' so our custom styled overlay renders with full fonts/borders/colors!
+            tt.mode = 'hidden';
+            tt.removeEventListener('cuechange', renderActiveSubtitleCues);
+            tt.addEventListener('cuechange', renderActiveSubtitleCues);
+            renderActiveSubtitleCues();
+          }
+        };
+        trackEl.addEventListener('load', bindTrack);
+        bindTrack();
         el.subtitleBtn.classList.add('is-active');
       }
 
@@ -5439,11 +6821,42 @@
         if (!track || track.kind !== 'video') return;
         try {
           if (isFullscreenActive()) {
-            await document.exitFullscreen();
+            if (document.fullscreenElement && document.exitFullscreen) {
+              await document.exitFullscreen();
+            } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            }
+            if (state.electronFsFallback) {
+              state.electronFsFallback = false;
+              el.videoFrame.classList.remove('is-pseudo-fullscreen');
+              if (desktopBridge && desktopBridge.setWindowFullscreen) {
+                await desktopBridge.setWindowFullscreen(false);
+              }
+              onFullscreenChange();
+            }
           } else {
             if (state.videoDisplayMode === 'audio') setVideoDisplayMode('video', true);
-            if (el.videoFrame.requestFullscreen) await el.videoFrame.requestFullscreen();
-            else if (el.media.requestFullscreen) await el.media.requestFullscreen();
+            let entered = false;
+            try {
+              if (el.videoFrame.requestFullscreen) {
+                await el.videoFrame.requestFullscreen();
+                entered = Boolean(document.fullscreenElement);
+              } else if (el.videoFrame.webkitRequestFullscreen) {
+                el.videoFrame.webkitRequestFullscreen();
+                entered = true;
+              }
+            } catch {
+              entered = false;
+            }
+            // Fallback to Electron native window fullscreen + full-bleed stage if DOM fullscreen was restricted
+            if (!entered && desktopBridge && desktopBridge.setWindowFullscreen) {
+              await desktopBridge.setWindowFullscreen(true);
+              state.electronFsFallback = true;
+              el.videoFrame.classList.add('is-pseudo-fullscreen');
+              onFullscreenChange();
+            } else if (!entered && el.media.requestFullscreen) {
+              await el.media.requestFullscreen();
+            }
           }
         } catch {}
       }
@@ -5527,6 +6940,7 @@
           setRangeFill(el.seekBar, 0);
           setRangeFill(el.fsSeekBar, 0);
           document.title = 'AAZ Player';
+          notifyShellTabState();
           return;
         }
 
@@ -5546,6 +6960,19 @@
         el.dockNowMeta.textContent = `${pos} · ${track.ext} · ${state.folderName}`;
         el.fsTitleLabel.textContent = track.displayName;
         document.title = `${track.displayName} — AAZ Player`;
+        notifyShellTabState();
+      }
+
+      function notifyShellTabState() {
+        const track = getCurrentTrack();
+        const isPlaying = !el.media.paused && !el.media.ended;
+        postToShell('aaz-tab-state', {
+          title: track ? track.displayName : '',
+          isPlaying,
+          hasMedia: state.allTracks.length > 0,
+          kind: track ? track.kind : '',
+          sinkLabel: state.audioSinkId ? (state.audioSinkLabel || '') : ''
+        });
       }
 
       function updatePlayButtonUI() {
@@ -5555,6 +6982,7 @@
         el.fsPlayIcon.style.display = playing ? 'none' : 'block';
         el.fsPauseIcon.style.display = playing ? 'block' : 'none';
         el.playPauseBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+        notifyShellTabState();
       }
 
       function updateTransportAvailability() {
@@ -5857,6 +7285,7 @@
         switch (cmd) {
           case 'open-folder': openFolderWithPersistence(false); break;
           case 'open-files': openFilesPicker(); break;
+          case 'new-tab': postToShell('aaz-new-tab'); break;
           case 'new-window': openNewPlayerWindow(); break;
           case 'resume-session': handleResumeLastSession(); break;
           case 'save-to-library': openSavePlaylistPrompt(); break;
@@ -5864,7 +7293,7 @@
           case 'export-xspf': exportPlaylistFile('xspf'); break;
           case 'export-m3u8': exportPlaylistFile('m3u8'); break;
           case 'export-pls': exportPlaylistFile('pls'); break;
-          case 'clear-queue': clearQueue(); break;
+          case 'clear-queue': clearQueue(); notifyShellTabState(); break;
           case 'toggle-play': togglePlayPause(); break;
           case 'prev-track': playPreviousTrack(); break;
           case 'next-track': playNextTrack(true, false); break;
@@ -5892,12 +7321,13 @@
             el.subtitleInput.click();
             break;
           case 'toggle-subtitles':
-            if (el.media.textTracks && el.media.textTracks.length > 0) {
+            if (state.activeSubtitleUrl) {
               state.subtitlesEnabled = !state.subtitlesEnabled;
-              el.media.textTracks[0].mode = state.subtitlesEnabled ? 'showing' : 'hidden';
               el.subtitleBtn.classList.toggle('is-active', state.subtitlesEnabled);
+              renderActiveSubtitleCues();
             }
             break;
+          case 'open-subtitle-style': openSubtitleStyleModal(); break;
           case 'toggle-pip': togglePictureInPicture(); break;
           case 'toggle-fullscreen': toggleFullscreen(); break;
           case 'toggle-theme': applyTheme(state.theme === 'dark' ? 'light' : 'dark', true); break;
@@ -5970,7 +7400,7 @@
       /* =======================================================================
          14C. Per-Window / Per-Tab Audio Output Routing (Speakers / Hands-Free)
          ======================================================================= */
-      const SESSION_SINK_KEY = 'aaz_window_audio_sink_v1';
+      const SESSION_SINK_KEY = `aaz_tab_audio_sink_${CURRENT_TAB_ID || 'main'}`;
 
       function openNewPlayerWindow() {
         if (desktopBridge && desktopBridge.openNewWindow) {
@@ -6002,24 +7432,38 @@
           return false;
         }
 
-        let applied = false;
-        try {
-          if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
+        let ctxApplied = false;
+        let mediaApplied = false;
+        let lastErr = null;
+
+        // 1. Primary path when Web Audio EQ/Visualizer is active: route AudioContext sink
+        if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
+          try {
             await AudioStudio.ctx.setSinkId(targetId);
-            applied = true;
+            ctxApplied = true;
+          } catch (err) {
+            lastErr = err;
           }
-          if (typeof el.media.setSinkId === 'function') {
-            await el.media.setSinkId(targetId);
-            applied = true;
-          }
-        } catch (err) {
-          if (!silent) showNotice(`${t('outputFailed')} (${err?.message || ''})`, true);
-          return false;
         }
 
-        if (!applied && !AudioStudio.initialized) {
-          // Will apply automatically when AudioStudio.ensureInit() initializes AudioContext
-          applied = true;
+        // 2. Media element sink: primary before AudioContext init; best-effort silent fallback afterwards
+        // (Once <video> is captured by AudioContext.createMediaElementSource, Chromium often throws AbortError
+        // on el.media.setSinkId even though AudioContext.setSinkId already switched the live audio channel!)
+        if (typeof el.media.setSinkId === 'function') {
+          try {
+            await el.media.setSinkId(targetId);
+            mediaApplied = true;
+          } catch (err) {
+            if (!ctxApplied && !AudioStudio.initialized) {
+              lastErr = err;
+            }
+          }
+        }
+
+        const applied = ctxApplied || mediaApplied || (!AudioStudio.initialized && window.AudioContext && typeof AudioContext.prototype.setSinkId === 'function');
+        if (!applied) {
+          if (!silent) showNotice(`${t('outputFailed')}${lastErr?.message ? ` (${lastErr.message})` : ''}`, true);
+          return false;
         }
 
         state.audioSinkId = targetId;
@@ -6033,6 +7477,7 @@
 
         updateAudioOutputButtonUI();
         renderAudioOutputList();
+        notifyShellTabState();
         if (!silent) {
           showNotice(t('outputSwitched', { name: state.audioSinkLabel || t('outputDefault') }));
         }
@@ -6173,6 +7618,7 @@
           el.media.currentTime = state.abPointA;
         }
         updateSeekUI();
+        if (state.activeSubtitleUrl && state.subtitlesEnabled) renderActiveSubtitleCues();
         if (el.media.currentTime > 3 && el.prevBtn.disabled) updateTransportAvailability();
       });
 
@@ -6191,6 +7637,7 @@
       });
 
       el.media.addEventListener('seeked', () => {
+        if (state.activeSubtitleUrl && state.subtitlesEnabled) renderActiveSubtitleCues();
         if (state.currentKey) persistPlaybackState();
       });
 
@@ -6216,8 +7663,28 @@
         showNotice(`Could not decode ${track ? `"${track.name}"` : 'this media file'}.`, true);
       });
 
-      el.media.addEventListener('click', togglePlayPause);
-      el.media.addEventListener('dblclick', toggleFullscreen);
+      // Single-click = Play/Pause (debounced so Double-Click cleanly toggles Fullscreen without pause/play flicker!)
+      let videoClickTimer = null;
+      const isVideoSurfaceClick = (e) => !e.target.closest('.video-toolbar, .fs-bottom-hud, button, input');
+
+      el.videoFrame.addEventListener('click', (e) => {
+        if (!isVideoSurfaceClick(e)) return;
+        if (videoClickTimer !== null) clearTimeout(videoClickTimer);
+        videoClickTimer = window.setTimeout(() => {
+          videoClickTimer = null;
+          togglePlayPause();
+        }, 210);
+      });
+
+      el.videoFrame.addEventListener('dblclick', (e) => {
+        if (!isVideoSurfaceClick(e)) return;
+        e.preventDefault();
+        if (videoClickTimer !== null) {
+          clearTimeout(videoClickTimer);
+          videoClickTimer = null;
+        }
+        toggleFullscreen();
+      });
 
       // Source buttons (Clean & Deduplicated)
       el.openFolderBtn.addEventListener('click', () => openFolderWithPersistence(false));
@@ -6311,15 +7778,53 @@
       });
 
       el.subtitleBtn.addEventListener('click', (e) => {
-        const activeTracks = el.media.textTracks;
-        if (!e.shiftKey && activeTracks && activeTracks.length > 0 && state.activeSubtitleUrl) {
+        if (!e.shiftKey && state.activeSubtitleUrl) {
           state.subtitlesEnabled = !state.subtitlesEnabled;
-          activeTracks[0].mode = state.subtitlesEnabled ? 'showing' : 'hidden';
           el.subtitleBtn.classList.toggle('is-active', state.subtitlesEnabled);
+          renderActiveSubtitleCues();
           return;
         }
         el.subtitleInput.value = '';
         el.subtitleInput.click();
+      });
+
+      el.subtitleStyleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSubtitleStyleModal();
+      });
+
+      el.closeSubtitleModalBtn.addEventListener('click', () => { el.subtitleModal.hidden = true; });
+      el.subDoneBtn.addEventListener('click', () => { el.subtitleModal.hidden = true; });
+      el.subtitleModal.addEventListener('click', (e) => {
+        if (e.target === el.subtitleModal) el.subtitleModal.hidden = true;
+      });
+      el.subLoadSysFontsBtn.addEventListener('click', () => loadSystemFonts(true));
+      el.subFontSearchInput.addEventListener('input', renderFontPickerList);
+      el.subFontSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && el.subFontSearchInput.value.trim()) {
+          updateSubtitleStyle({ fontFamily: el.subFontSearchInput.value.trim() }, true, true);
+          renderFontPickerList();
+        }
+      });
+      el.subFontSizeRange.addEventListener('input', () => updateSubtitleStyle({ fontSize: Number(el.subFontSizeRange.value) }));
+      el.subFontWeightSelect.addEventListener('change', () => updateSubtitleStyle({ fontWeight: el.subFontWeightSelect.value }));
+      el.subItalicBtn.addEventListener('click', () => updateSubtitleStyle({ italic: !state.subtitleStyle.italic }));
+      el.subTextColorInput.addEventListener('input', () => updateSubtitleStyle({ textColor: el.subTextColorInput.value }));
+      el.subSwatches.forEach((btn) => {
+        btn.addEventListener('click', () => updateSubtitleStyle({ textColor: btn.dataset.subSwatch }));
+      });
+      el.subOutlineColorInput.addEventListener('input', () => updateSubtitleStyle({ outlineColor: el.subOutlineColorInput.value }));
+      el.subOutlineWidthRange.addEventListener('input', () => updateSubtitleStyle({ outlineWidth: Number(el.subOutlineWidthRange.value) }));
+      el.subBgColorInput.addEventListener('input', () => updateSubtitleStyle({ bgColor: el.subBgColorInput.value }));
+      el.subBgOpacityRange.addEventListener('input', () => updateSubtitleStyle({ bgOpacity: Number(el.subBgOpacityRange.value) }));
+      el.subBorderColorInput.addEventListener('input', () => updateSubtitleStyle({ borderColor: el.subBorderColorInput.value }));
+      el.subBorderWidthRange.addEventListener('input', () => updateSubtitleStyle({ borderWidth: Number(el.subBorderWidthRange.value) }));
+      el.subRadiusRange.addEventListener('input', () => updateSubtitleStyle({ borderRadius: Number(el.subRadiusRange.value) }));
+      el.subShadowRange.addEventListener('input', () => updateSubtitleStyle({ shadowBlur: Number(el.subShadowRange.value) }));
+      el.subPositionRange.addEventListener('input', () => updateSubtitleStyle({ bottomOffset: Number(el.subPositionRange.value) }));
+      el.subResetBtn.addEventListener('click', () => {
+        updateSubtitleStyle({ ...SUBTITLE_STYLE_DEFAULTS }, true, true);
+        renderFontPickerList();
       });
 
       el.subtitleInput.addEventListener('change', async (e) => {
@@ -6486,13 +7991,40 @@
         if (isFullscreenActive()) wakeFullscreenHud();
 
         if (e.key === 'Escape') {
+          if (state.electronFsFallback) {
+            toggleFullscreen();
+            return;
+          }
           closeAllMenus();
           toggleAudioOutputPopover(false);
           el.shortcutsModal.hidden = true;
+          el.subtitleModal.hidden = true;
           el.savePlBar.hidden = true;
           return;
         }
 
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 't') {
+          e.preventDefault();
+          postToShell('aaz-new-tab');
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'w') {
+          if (IS_TAB_FRAME) {
+            e.preventDefault();
+            postToShell('aaz-close-tab');
+            return;
+          }
+        }
+        if (e.ctrlKey && e.key === 'Tab') {
+          e.preventDefault();
+          postToShell('aaz-cycle-tab', { dir: e.shiftKey ? -1 : 1 });
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && /^[1-9]$/.test(e.key) && IS_TAB_FRAME) {
+          e.preventDefault();
+          postToShell('aaz-activate-index', { index: Number(e.key) - 1 });
+          return;
+        }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
           e.preventDefault();
           openNewPlayerWindow();
@@ -6650,6 +8182,23 @@
           setPlaybackRate(1, false);
         }
 
+        async function handleExternalOpenPaths(paths) {
+          if (!desktopBridge || !paths || !paths.length) return;
+          const inspected = await desktopBridge.inspectPaths(paths);
+          if (!inspected) return;
+          if (inspected.playlists && inspected.playlists.length > 0) {
+            await handleImportedPlaylistContent(inspected.playlists[0].name, inspected.playlists[0].content);
+            return;
+          }
+          if (!inspected.entries?.length) return;
+          const { tracks, subMap } = buildTracksFromElectronEntries(inspected.entries);
+          if (tracks.length === 0) return;
+          if (inspected.isDirectory && inspected.folderPath) state.nativeFolderPath = inspected.folderPath;
+          await applyLoadedTracks(tracks, subMap, inspected.folderName || t('currentQueue'), 'electron', {
+            restoreSavedPosition: inspected.isDirectory, autoPlay: true
+          });
+        }
+
         if (desktopBridge) {
           el.pinWindowBtn.hidden = false;
           el.menuPinItem.hidden = false;
@@ -6662,27 +8211,29 @@
               }
             } catch {}
           }
-          if (desktopBridge.onUpdateStatus) {
-            desktopBridge.onUpdateStatus(handleUpdateStatus);
+          if (!IS_TAB_FRAME) {
+            if (desktopBridge.onUpdateStatus) desktopBridge.onUpdateStatus(handleUpdateStatus);
+            if (desktopBridge.onOpenExternal) desktopBridge.onOpenExternal(handleExternalOpenPaths);
           }
-          desktopBridge.onOpenExternal(async (paths) => {
-            const inspected = await desktopBridge.inspectPaths(paths);
-            if (!inspected) return;
-            if (inspected.playlists && inspected.playlists.length > 0) {
-              await handleImportedPlaylistContent(inspected.playlists[0].name, inspected.playlists[0].content);
-              return;
+        }
+
+        if (IS_TAB_FRAME) {
+          window.addEventListener('message', (e) => {
+            const msg = e.data;
+            if (!msg || typeof msg !== 'object') return;
+            if (msg.type === 'aaz-open-external') {
+              handleExternalOpenPaths(msg.paths);
+            } else if (msg.type === 'aaz-update-status') {
+              handleUpdateStatus(msg.payload);
+            } else if (msg.type === 'aaz-apply-prefs') {
+              if (msg.theme) applyTheme(msg.theme, false, false);
+              if (msg.lang) applyLanguage(msg.lang, false, false);
+              if (msg.subtitleStyle) updateSubtitleStyle(msg.subtitleStyle, false, false);
             }
-            if (!inspected.entries?.length) return;
-            const { tracks, subMap } = buildTracksFromElectronEntries(inspected.entries);
-            if (tracks.length === 0) return;
-            if (inspected.isDirectory && inspected.folderPath) state.nativeFolderPath = inspected.folderPath;
-            await applyLoadedTracks(tracks, subMap, inspected.folderName || t('currentQueue'), 'electron', {
-              restoreSavedPosition: inspected.isDirectory, autoPlay: true
-            });
           });
         }
 
-        // Apply saved Theme, Language (RTL/LTR), and Visualizer Style
+        // Apply saved Theme, Language (RTL/LTR), Visualizer Style & Subtitle Styling
         let savedTheme = 'dark';
         let savedLang = 'en';
         let savedViz = 'spectrum';
@@ -6690,13 +8241,22 @@
           savedTheme = localStorage.getItem('aaz_theme') || 'dark';
           savedLang = localStorage.getItem('aaz_lang') || 'en';
           savedViz = localStorage.getItem('aaz_viz_mode') || 'spectrum';
+          const savedSubRaw = localStorage.getItem(SUBTITLE_STYLE_KEY);
+          if (savedSubRaw) {
+            const parsedSub = JSON.parse(savedSubRaw);
+            if (parsedSub && typeof parsedSub === 'object') {
+              state.subtitleStyle = { ...SUBTITLE_STYLE_DEFAULTS, ...parsedSub };
+            }
+          }
         } catch {}
 
-        applyTheme(savedTheme, false);
+        applySubtitleStyleToDOM();
+        syncSubtitleControlsUI();
+        applyTheme(savedTheme, false, false);
         setVizMode(savedViz, false);
-        applyLanguage(savedLang, false);
+        applyLanguage(savedLang, false, false);
 
-        // Restore per-window / per-tab audio output channel if set for this session
+        // Restore per-tab audio output channel if set for this tab session
         try {
           const savedSinkRaw = sessionStorage.getItem(SESSION_SINK_KEY);
           if (savedSinkRaw) {
@@ -6722,7 +8282,11 @@
         renderSavedPlaylists();
 
         state.savedDirHandle = await HandleStore.getHandle(IDB_LAST_DIR_KEY);
-        refreshResumeBanner();
+        if (IS_INITIAL_TAB || !IS_TAB_FRAME) {
+          refreshResumeBanner();
+        }
+        notifyShellTabState();
+        postToShell('aaz-tab-ready');
         requestAnimationFrame(() => AudioStudio.renderIdleFrame());
       }
 
