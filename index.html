@@ -2456,27 +2456,42 @@
     }
 
     /* =========================================================================
-       Subtitle Styling Studio Modal
+       Subtitle Styling Studio Modal (Wide Landscape + Always-Pinned Live Preview)
        ========================================================================= */
-    .sub-modal-card {
-      width: min(680px, 94vw);
-      max-height: min(88vh, 760px);
+    .modal-card.sub-modal-card {
+      width: min(940px, 95vw);
+      max-width: 940px;
+      max-height: min(88vh, 700px);
+      padding: 0;
+      gap: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
 
-    .sub-modal-body {
-      padding: 14px 18px 18px;
-      overflow-y: auto;
+    .sub-modal-header {
+      flex-shrink: 0;
       display: flex;
-      flex-direction: column;
-      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface);
+    }
+
+    /* ALWAYS-PINNED LIVE PREVIEW (Never scrolls out of view!) */
+    .sub-preview-pinned {
+      flex-shrink: 0;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-hairline);
+      background-color: var(--bg-inset);
     }
 
     .sub-preview-stage {
       position: relative;
-      min-height: 118px;
+      min-height: 98px;
+      max-height: 138px;
       border-radius: 10px;
       border: 1px solid var(--border-hairline);
       background:
@@ -2486,8 +2501,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-end;
-      padding: 14px 16px;
+      justify-content: center;
+      padding: 12px 18px;
       overflow: hidden;
     }
 
@@ -2499,16 +2514,67 @@
       line-height: 1.38;
       white-space: pre-wrap;
       paint-order: stroke fill;
+      unicode-bidi: plaintext;
+    }
+
+    .sub-modal-body {
+      flex: 1;
+      min-height: 0;
+      padding: 16px 20px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: grid;
+      grid-template-columns: minmax(250px, 0.92fr) minmax(0, 1.4fr);
+      gap: 16px;
+      align-items: start;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scroll-thumb) transparent;
+    }
+
+    .sub-modal-body::-webkit-scrollbar,
+    .sub-font-list::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+
+    .sub-modal-body::-webkit-scrollbar-track,
+    .sub-font-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sub-modal-body::-webkit-scrollbar-thumb,
+    .sub-font-list::-webkit-scrollbar-thumb {
+      background-color: var(--scroll-thumb);
+      border-radius: 99px;
+    }
+
+    .sub-modal-body::-webkit-scrollbar-thumb:hover,
+    .sub-font-list::-webkit-scrollbar-thumb:hover {
+      background-color: var(--scroll-thumb-hover);
+    }
+
+    .sub-col-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    @media (max-width: 740px) {
+      .sub-modal-body {
+        grid-template-columns: 1fr;
+      }
     }
 
     .sub-section {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      padding: 12px 13px;
-      border-radius: 9px;
+      gap: 11px;
+      padding: 13px 14px;
+      border-radius: 10px;
       border: 1px solid var(--border-hairline);
       background-color: var(--bg-inset);
+      min-width: 0;
     }
 
     .sub-section-title {
@@ -2521,15 +2587,17 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .sub-grid-2 {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px 14px;
+      gap: 12px 14px;
+      min-width: 0;
     }
 
-    @media (max-width: 560px) {
+    @media (max-width: 520px) {
       .sub-grid-2 {
         grid-template-columns: 1fr;
       }
@@ -2538,7 +2606,8 @@
     .sub-field {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
+      min-width: 0;
     }
 
     .sub-field-head {
@@ -2555,17 +2624,20 @@
       font-family: var(--font-mono);
       font-size: 11px;
       color: var(--text-primary);
+      flex-shrink: 0;
     }
 
     .sub-font-toolbar {
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
     }
 
     .sub-input,
     .sub-select {
-      height: 31px;
+      height: 32px;
+      min-width: 0;
       padding: 0 10px;
       border-radius: var(--radius-control);
       border: 1px solid var(--border-hairline);
@@ -2582,29 +2654,40 @@
     }
 
     .sub-font-list {
-      max-height: 132px;
+      height: 318px;
       overflow-y: auto;
+      overflow-x: hidden;
       border-radius: var(--radius-control);
       border: 1px solid var(--border-hairline);
       background-color: var(--bg-surface);
-      padding: 4px;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
       gap: 3px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--scroll-thumb) transparent;
+    }
+
+    @media (max-width: 740px) {
+      .sub-font-list {
+        height: 170px;
+      }
     }
 
     .sub-font-option {
+      width: 100%;
       border: 1px solid transparent;
-      border-radius: 5px;
+      border-radius: 6px;
       background: transparent;
       color: var(--text-secondary);
-      padding: 5px 8px;
-      font-size: 13px;
+      padding: 6px 10px;
+      font-size: 13.5px;
       text-align: start;
       cursor: pointer;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      flex-shrink: 0;
       transition: background-color 120ms, color 120ms, border-color 120ms;
     }
 
@@ -2623,12 +2706,13 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap;
+      min-width: 0;
     }
 
     .sub-color-input {
       width: 34px;
       height: 28px;
+      flex-shrink: 0;
       padding: 2px;
       border: 1px solid var(--border-strong);
       border-radius: 6px;
@@ -2639,7 +2723,8 @@
     .sub-swatches {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
+      flex-wrap: wrap;
     }
 
     .sub-swatch {
@@ -2648,6 +2733,7 @@
       border-radius: 50%;
       border: 1.5px solid var(--border-strong);
       cursor: pointer;
+      flex-shrink: 0;
       transition: transform 120ms, border-color 120ms;
     }
 
@@ -2660,14 +2746,42 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
+    }
+
+    .sub-sync-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .sub-sync-badge {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--accent);
+      background-color: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      min-width: 72px;
+      text-align: center;
+      direction: ltr;
+    }
+
+    .sub-sync-hint {
+      font-size: 11.5px;
+      color: var(--text-muted);
     }
 
     .sub-modal-footer {
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 10px 18px 14px;
+      padding: 12px 20px;
       border-top: 1px solid var(--border-hairline);
       background-color: var(--bg-surface);
     }
@@ -2863,12 +2977,24 @@
             <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false" data-i18n="menuVideo">Video</button>
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="toggle-video-view"><span class="menu-action-label" data-i18n="cmdToggleVideoView">Toggle Video / Audio-Only View</span></button>
+              <div class="menu-sep"></div>
+              <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
+              <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
+            </div>
+          </div>
+
+          <!-- SUBTITLES -->
+          <div class="menu-item">
+            <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false" data-i18n="menuSubtitles">Subtitles</button>
+            <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="load-subtitles"><span class="menu-action-label" data-i18n="cmdLoadSubs">Load Subtitles (.srt / .vtt)...</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-subtitles"><span class="menu-action-label" data-i18n="cmdToggleSubs">Show / Hide Subtitles</span></button>
               <button type="button" class="menu-action" data-cmd="open-subtitle-style"><span class="menu-action-label" data-i18n="cmdSubStyle">Subtitle Style &amp; Font...</span></button>
               <div class="menu-sep"></div>
-              <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
-              <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
+              <div class="menu-heading" data-i18n="headingSubSync">Subtitle Timing Sync</div>
+              <button type="button" class="menu-action" data-cmd="sub-sync-earlier"><span class="menu-action-label" data-i18n="cmdSubEarlier">Earlier (-0.5s)</span><span class="menu-shortcut">G</span></button>
+              <button type="button" class="menu-action" data-cmd="sub-sync-later"><span class="menu-action-label" data-i18n="cmdSubLater">Later (+0.5s)</span><span class="menu-shortcut">H</span></button>
+              <button type="button" class="menu-action" data-cmd="sub-sync-reset"><span class="menu-action-label" data-i18n="cmdSubSyncReset">Reset Timing (0.0s)</span></button>
             </div>
           </div>
 
@@ -2892,7 +3018,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.0</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.2.1</div>
             </div>
           </div>
         </nav>
@@ -3010,9 +3136,6 @@
               </button>
               <button type="button" class="video-tool-btn" id="subtitleBtn" title="Load or toggle .SRT / .VTT subtitles">
                 <span>CC</span>
-              </button>
-              <button type="button" class="video-tool-btn" id="subtitleStyleBtn" title="Subtitle Font &amp; Style">
-                <span>Aa</span>
               </button>
               <button type="button" class="video-tool-btn" id="pipBtn" title="Picture-in-Picture (P)">
                 <span>PiP</span>
@@ -3383,30 +3506,34 @@
         <span class="shortcut-desc" data-i18n="scNewTab">Open new tab</span><span class="shortcut-key">Ctrl + T</span>
         <span class="shortcut-desc" data-i18n="scCloseTab">Close current tab</span><span class="shortcut-key">Ctrl + W</span>
         <span class="shortcut-desc" data-i18n="scSwitchTab">Switch to next tab</span><span class="shortcut-key">Ctrl + Tab</span>
+        <span class="shortcut-desc" data-i18n="scSubSync">Subtitle timing earlier / later</span><span class="shortcut-key">G / H</span>
         <span class="shortcut-desc" data-i18n="cmdNewWindow">New Window</span><span class="shortcut-key">Ctrl + Shift + N</span>
       </div>
     </div>
   </div>
 
-  <!-- Subtitle Styling Studio Modal (System Fonts, Colors, Borders, Background & Live Preview) -->
+  <!-- Subtitle Styling & Timing Studio Modal (Wide Horizontal Layout + Always-Pinned Live Preview!) -->
   <div class="modal-backdrop" id="subtitleModal" hidden role="dialog" aria-modal="true" aria-labelledby="subtitleModalTitle">
     <div class="modal-card sub-modal-card">
-      <div class="modal-header">
+      <div class="sub-modal-header">
         <div class="modal-title" id="subtitleModalTitle" data-i18n="subModalTitle">Subtitle Style &amp; Font</div>
         <button type="button" class="btn-icon" id="closeSubtitleModalBtn" style="width:30px;height:30px" aria-label="Close subtitle settings">×</button>
       </div>
 
-      <div class="sub-modal-body">
-        <!-- Live Cinema Preview -->
+      <!-- ALWAYS-PINNED LIVE PREVIEW (Remains fixed above the scroll area!) -->
+      <div class="sub-preview-pinned">
         <div class="sub-preview-stage">
           <div class="sub-preview-box" id="subPreviewBox"></div>
         </div>
+      </div>
 
-        <!-- Font Family & Installed System Fonts -->
+      <!-- Wide 2-Column Studio Body -->
+      <div class="sub-modal-body">
+        <!-- LEFT COLUMN: Installed System Fonts Browser -->
         <div class="sub-section">
           <div class="sub-section-title">
-            <span data-i18n="subFontFamily">Font Family (Installed System Fonts)</span>
-            <button type="button" class="btn" id="subLoadSysFontsBtn" style="height:25px;font-size:11px" data-i18n="subLoadSysFonts">Load System Fonts</button>
+            <span data-i18n="subFontFamily">Font Family (System Fonts)</span>
+            <button type="button" class="btn" id="subLoadSysFontsBtn" style="height:26px;font-size:11px;padding:0 9px" data-i18n="subLoadSysFonts">Load System Fonts</button>
           </div>
           <div class="sub-font-toolbar">
             <input type="text" id="subFontSearchInput" class="sub-input" style="flex:1" placeholder="Search or type font name..." />
@@ -3415,111 +3542,132 @@
           <div class="sub-font-list" id="subFontList" role="listbox" aria-label="Installed fonts"></div>
         </div>
 
-        <!-- Typography: Size, Weight, Italic, Text Color -->
-        <div class="sub-section">
-          <div class="sub-section-title"><span data-i18n="subTypography">Typography &amp; Text Color</span></div>
-          <div class="sub-grid-2">
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subFontSize">Font Size</span>
-                <span class="sub-field-val" id="subFontSizeVal">28px</span>
+        <!-- RIGHT COLUMN: Typography + Background/Border + Timing Sync -->
+        <div class="sub-col-stack">
+          <!-- Typography: Size, Weight, Italic, Text Color & Outline -->
+          <div class="sub-section">
+            <div class="sub-section-title"><span data-i18n="subTypography">Typography &amp; Text Color</span></div>
+            <div class="sub-grid-2">
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subFontSize">Font Size</span>
+                  <span class="sub-field-val" id="subFontSizeVal">28px</span>
+                </div>
+                <input type="range" id="subFontSizeRange" class="range-input" min="14" max="72" step="1" value="28" />
               </div>
-              <input type="range" id="subFontSizeRange" class="range-input" min="14" max="72" step="1" value="28" />
-            </div>
 
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subFontWeight">Weight &amp; Style</span>
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subFontWeight">Weight &amp; Style</span>
+                </div>
+                <div class="sub-toggle-row">
+                  <select id="subFontWeightSelect" class="sub-select" style="flex:1">
+                    <option value="400" data-i18n="subWeightNormal">Regular (400)</option>
+                    <option value="600" data-i18n="subWeightSemi">SemiBold (600)</option>
+                    <option value="700" data-i18n="subWeightBold" selected>Bold (700)</option>
+                    <option value="800" data-i18n="subWeightExtra">ExtraBold (800)</option>
+                  </select>
+                  <button type="button" class="btn" id="subItalicBtn" style="height:32px;padding:0 11px;flex-shrink:0;font-style:italic" aria-pressed="false" data-i18n="subItalic">Italic</button>
+                </div>
               </div>
-              <div class="sub-toggle-row">
-                <select id="subFontWeightSelect" class="sub-select" style="flex:1">
-                  <option value="400" data-i18n="subWeightNormal">Regular (400)</option>
-                  <option value="600" data-i18n="subWeightSemi">SemiBold (600)</option>
-                  <option value="700" data-i18n="subWeightBold" selected>Bold (700)</option>
-                  <option value="800" data-i18n="subWeightExtra">ExtraBold (800)</option>
-                </select>
-                <button type="button" class="btn" id="subItalicBtn" style="height:31px;min-width:44px;font-style:italic" aria-pressed="false" data-i18n="subItalic">Italic</button>
-              </div>
-            </div>
 
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subTextColor">Text Color</span>
-                <span class="sub-field-val" id="subTextColorVal">#ffffff</span>
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subTextColor">Text Color</span>
+                  <span class="sub-field-val" id="subTextColorVal">#ffffff</span>
+                </div>
+                <div class="sub-color-row">
+                  <input type="color" id="subTextColorInput" class="sub-color-input" value="#ffffff" />
+                  <div class="sub-swatches">
+                    <button type="button" class="sub-swatch" data-sub-swatch="#ffffff" style="background:#ffffff" title="#ffffff"></button>
+                    <button type="button" class="sub-swatch" data-sub-swatch="#ffd86b" style="background:#ffd86b" title="#ffd86b"></button>
+                    <button type="button" class="sub-swatch" data-sub-swatch="#7bf0a4" style="background:#7bf0a4" title="#7bf0a4"></button>
+                    <button type="button" class="sub-swatch" data-sub-swatch="#7cd4ff" style="background:#7cd4ff" title="#7cd4ff"></button>
+                    <button type="button" class="sub-swatch" data-sub-swatch="#fff2d6" style="background:#fff2d6" title="#fff2d6"></button>
+                  </div>
+                </div>
               </div>
-              <div class="sub-color-row">
-                <input type="color" id="subTextColorInput" class="sub-color-input" value="#ffffff" />
-                <div class="sub-swatches">
-                  <button type="button" class="sub-swatch" data-sub-swatch="#ffffff" style="background:#ffffff" title="#ffffff"></button>
-                  <button type="button" class="sub-swatch" data-sub-swatch="#ffd86b" style="background:#ffd86b" title="#ffd86b"></button>
-                  <button type="button" class="sub-swatch" data-sub-swatch="#7bf0a4" style="background:#7bf0a4" title="#7bf0a4"></button>
-                  <button type="button" class="sub-swatch" data-sub-swatch="#7cd4ff" style="background:#7cd4ff" title="#7cd4ff"></button>
-                  <button type="button" class="sub-swatch" data-sub-swatch="#fff2d6" style="background:#fff2d6" title="#fff2d6"></button>
+
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subOutline">Text Outline (Stroke)</span>
+                  <span class="sub-field-val" id="subOutlineVal">2px</span>
+                </div>
+                <div class="sub-color-row">
+                  <input type="color" id="subOutlineColorInput" class="sub-color-input" value="#000000" />
+                  <input type="range" id="subOutlineWidthRange" class="range-input" style="flex:1" min="0" max="6" step="0.5" value="2" />
                 </div>
               </div>
             </div>
+          </div>
 
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subOutline">Text Outline (Stroke)</span>
-                <span class="sub-field-val" id="subOutlineVal">2px</span>
+          <!-- Background Box, Border, Shadow & Position -->
+          <div class="sub-section">
+            <div class="sub-section-title"><span data-i18n="subBgBox">Background, Border &amp; Position</span></div>
+            <div class="sub-grid-2">
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subBgColor">Background &amp; Opacity</span>
+                  <span class="sub-field-val" id="subBgOpacityVal">62%</span>
+                </div>
+                <div class="sub-color-row">
+                  <input type="color" id="subBgColorInput" class="sub-color-input" value="#040a06" />
+                  <input type="range" id="subBgOpacityRange" class="range-input" style="flex:1" min="0" max="100" step="1" value="62" />
+                </div>
               </div>
-              <div class="sub-color-row">
-                <input type="color" id="subOutlineColorInput" class="sub-color-input" value="#000000" />
-                <input type="range" id="subOutlineWidthRange" class="range-input" style="flex:1" min="0" max="6" step="0.5" value="2" />
+
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subBorder">Box Border</span>
+                  <span class="sub-field-val" id="subBorderVal">0px</span>
+                </div>
+                <div class="sub-color-row">
+                  <input type="color" id="subBorderColorInput" class="sub-color-input" value="#3dc479" />
+                  <input type="range" id="subBorderWidthRange" class="range-input" style="flex:1" min="0" max="5" step="0.5" value="0" />
+                </div>
+              </div>
+
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subRadius">Corner Radius</span>
+                  <span class="sub-field-val" id="subRadiusVal">8px</span>
+                </div>
+                <input type="range" id="subRadiusRange" class="range-input" min="0" max="22" step="1" value="8" />
+              </div>
+
+              <div class="sub-field">
+                <div class="sub-field-head">
+                  <span data-i18n="subShadow">Drop Shadow</span>
+                  <span class="sub-field-val" id="subShadowVal">6px</span>
+                </div>
+                <input type="range" id="subShadowRange" class="range-input" min="0" max="16" step="1" value="6" />
+              </div>
+
+              <div class="sub-field" style="grid-column: 1 / -1">
+                <div class="sub-field-head">
+                  <span data-i18n="subPosition">Bottom Position</span>
+                  <span class="sub-field-val" id="subPositionVal">8%</span>
+                </div>
+                <input type="range" id="subPositionRange" class="range-input" min="2" max="40" step="1" value="8" />
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Background Box, Border, Shadow & Position -->
-        <div class="sub-section">
-          <div class="sub-section-title"><span data-i18n="subBgBox">Background, Border &amp; Position</span></div>
-          <div class="sub-grid-2">
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subBgColor">Background &amp; Opacity</span>
-                <span class="sub-field-val" id="subBgOpacityVal">62%</span>
-              </div>
-              <div class="sub-color-row">
-                <input type="color" id="subBgColorInput" class="sub-color-input" value="#040a06" />
-                <input type="range" id="subBgOpacityRange" class="range-input" style="flex:1" min="0" max="100" step="1" value="62" />
-              </div>
+          <!-- Subtitle Timing Sync (Delay / Advance) -->
+          <div class="sub-section">
+            <div class="sub-section-title">
+              <span data-i18n="headingSubSync">Subtitle Timing Sync</span>
+              <span class="sub-sync-hint" data-i18n="subSyncHint">Shortcuts: G (Earlier) / H (Later)</span>
             </div>
-
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subBorder">Box Border</span>
-                <span class="sub-field-val" id="subBorderVal">0px</span>
-              </div>
-              <div class="sub-color-row">
-                <input type="color" id="subBorderColorInput" class="sub-color-input" value="#3dc479" />
-                <input type="range" id="subBorderWidthRange" class="range-input" style="flex:1" min="0" max="5" step="0.5" value="0" />
-              </div>
-            </div>
-
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subRadius">Corner Radius</span>
-                <span class="sub-field-val" id="subRadiusVal">8px</span>
-              </div>
-              <input type="range" id="subRadiusRange" class="range-input" min="0" max="22" step="1" value="8" />
-            </div>
-
-            <div class="sub-field">
-              <div class="sub-field-head">
-                <span data-i18n="subShadow">Drop Shadow</span>
-                <span class="sub-field-val" id="subShadowVal">6px</span>
-              </div>
-              <input type="range" id="subShadowRange" class="range-input" min="0" max="16" step="1" value="6" />
-            </div>
-
-            <div class="sub-field" style="grid-column: 1 / -1">
-              <div class="sub-field-head">
-                <span data-i18n="subPosition">Bottom Position</span>
-                <span class="sub-field-val" id="subPositionVal">8%</span>
-              </div>
-              <input type="range" id="subPositionRange" class="range-input" min="2" max="40" step="1" value="8" />
+            <div class="sub-sync-row">
+              <button type="button" class="btn" data-sub-offset="-1" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">-1.0s</button>
+              <button type="button" class="btn" data-sub-offset="-0.5" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">-0.5s</button>
+              <button type="button" class="btn" data-sub-offset="-0.1" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">-0.1s</button>
+              <span class="sub-sync-badge" id="subOffsetReadout">0.0s</span>
+              <button type="button" class="btn" data-sub-offset="0.1" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">+0.1s</button>
+              <button type="button" class="btn" data-sub-offset="0.5" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">+0.5s</button>
+              <button type="button" class="btn" data-sub-offset="1" style="height:28px;padding:0 9px;font-size:11.5px;direction:ltr">+1.0s</button>
+              <button type="button" class="btn" id="subOffsetResetBtn" style="height:28px;padding:0 10px;font-size:11.5px" data-i18n="btnReset">Reset</button>
             </div>
           </div>
         </div>
@@ -3968,7 +4116,6 @@
         videoToolbar: document.getElementById('videoToolbar'),
         audioOnlyViewBtn: document.getElementById('audioOnlyViewBtn'),
         subtitleBtn: document.getElementById('subtitleBtn'),
-        subtitleStyleBtn: document.getElementById('subtitleStyleBtn'),
         pipBtn: document.getElementById('pipBtn'),
         fullscreenBtn: document.getElementById('fullscreenBtn'),
 
@@ -4001,6 +4148,9 @@
         subShadowVal: document.getElementById('subShadowVal'),
         subPositionRange: document.getElementById('subPositionRange'),
         subPositionVal: document.getElementById('subPositionVal'),
+        subOffsetBtns: Array.from(document.querySelectorAll('[data-sub-offset]')),
+        subOffsetReadout: document.getElementById('subOffsetReadout'),
+        subOffsetResetBtn: document.getElementById('subOffsetResetBtn'),
         subResetBtn: document.getElementById('subResetBtn'),
         subDoneBtn: document.getElementById('subDoneBtn'),
 
@@ -4160,8 +4310,9 @@
         fsIdleTimer: null,
         electronFsFallback: false,
 
-        // Subtitle Style Studio State
+        // Subtitle Style Studio & Timing Sync State
         subtitleStyle: { ...SUBTITLE_STYLE_DEFAULTS },
+        subtitleOffsetSec: 0,
         systemFonts: [...FALLBACK_FONTS],
         systemFontsLoaded: false,
 
@@ -4169,7 +4320,7 @@
         theme: 'dark',                // 'dark' | 'light'
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
-        appVersion: '1.2.0',
+        appVersion: '1.2.1',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
@@ -4349,7 +4500,16 @@
           subPosition: 'Bottom Position',
           subReset: 'Reset Defaults',
           subDone: 'Done',
-          subPreviewSample: 'AAZ Player — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة'
+          subPreviewSample: 'AAZ Player — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
+          menuSubtitles: 'Subtitles',
+          headingSubSync: 'Subtitle Timing Sync',
+          cmdSubEarlier: 'Earlier (-0.5s)',
+          cmdSubLater: 'Later (+0.5s)',
+          cmdSubSyncReset: 'Reset Timing (0.0s)',
+          scSubSync: 'Subtitle timing earlier / later',
+          subSyncHint: 'Shortcuts: G (Earlier) / H (Later)',
+          subSyncNotice: 'Subtitle timing: {offset}',
+          subAutoLoaded: 'Auto-loaded subtitle: {name}'
         },
         ar: {
           dropTitle: 'أفلت ملفات الصوت أو الفيديو أو المجلد أو قائمة التشغيل هنا',
@@ -4516,7 +4676,16 @@
           subPosition: 'المسافة من أسفل الشاشة',
           subReset: 'استعادة الافتراضي',
           subDone: 'تم',
-          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAAZ Player — Subtitle Live Preview'
+          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAAZ Player — Subtitle Live Preview',
+          menuSubtitles: 'الترجمة',
+          headingSubSync: 'تقديم وتأخير الترجمة',
+          cmdSubEarlier: 'تقديم الترجمة (-0.5 ثانية)',
+          cmdSubLater: 'تأخير الترجمة (+0.5 ثانية)',
+          cmdSubSyncReset: 'إعادة ضبط التوقيت (0.0 ثانية)',
+          scSubSync: 'تقديم أو تأخير الترجمة',
+          subSyncHint: 'اختصار سريع: G للتقديم / H للتأخير',
+          subSyncNotice: 'توقيت الترجمة: {offset}',
+          subAutoLoaded: 'تم ربط الترجمة تلقائيا: {name}'
         }
       };
 
@@ -6269,6 +6438,58 @@
         }
       }
 
+      function formatSubtitleOffset(sec) {
+        const clean = Math.round((Number(sec) || 0) * 100) / 100;
+        const sign = clean > 0 ? '+' : '';
+        return `${sign}${clean.toFixed(1)}s`;
+      }
+
+      function updateSubtitleOffsetUI() {
+        el.subOffsetReadout.textContent = formatSubtitleOffset(state.subtitleOffsetSec);
+      }
+
+      function adjustSubtitleOffset(deltaSec, showToast = true) {
+        state.subtitleOffsetSec = Math.max(-60, Math.min(60, Math.round((state.subtitleOffsetSec + deltaSec) * 100) / 100));
+        updateSubtitleOffsetUI();
+        renderActiveSubtitleCues();
+        if (showToast) {
+          showNotice(t('subSyncNotice', { offset: formatSubtitleOffset(state.subtitleOffsetSec) }));
+        }
+      }
+
+      function resetSubtitleOffset(showToast = true) {
+        state.subtitleOffsetSec = 0;
+        updateSubtitleOffsetUI();
+        renderActiveSubtitleCues();
+        if (showToast) {
+          showNotice(t('subSyncNotice', { offset: formatSubtitleOffset(0) }));
+        }
+      }
+
+      async function readSubtitleFileSmart(file) {
+        if (!file) return '';
+        try {
+          const buf = new Uint8Array(await file.arrayBuffer());
+          if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+            return new TextDecoder('utf-16le').decode(buf);
+          }
+          if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+            return new TextDecoder('utf-16be').decode(buf);
+          }
+          try {
+            return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+          } catch {
+            try {
+              return new TextDecoder('windows-1256').decode(buf);
+            } catch {
+              return await file.text();
+            }
+          }
+        } catch {
+          return await file.text();
+        }
+      }
+
       function renderActiveSubtitleCues() {
         const tracks = el.media.textTracks;
         if (!state.subtitlesEnabled || !state.activeSubtitleUrl || !tracks || tracks.length === 0) {
@@ -6278,16 +6499,30 @@
         }
         const track = tracks[0];
         if (track.mode !== 'hidden') track.mode = 'hidden';
-        const activeCues = track.activeCues;
-        if (!activeCues || activeCues.length === 0) {
+
+        let matchedCues = [];
+        if (Math.abs(state.subtitleOffsetSec) > 0.001 && track.cues && track.cues.length > 0) {
+          // Positive offset = delay subtitles (show later); Negative offset = advance subtitles (show earlier)
+          const effectiveTime = el.media.currentTime - state.subtitleOffsetSec;
+          for (let i = 0; i < track.cues.length; i++) {
+            const c = track.cues[i];
+            if (effectiveTime >= c.startTime && effectiveTime <= c.endTime) {
+              matchedCues.push(c);
+            }
+          }
+        } else if (track.activeCues && track.activeCues.length > 0) {
+          matchedCues = Array.from(track.activeCues);
+        }
+
+        if (matchedCues.length === 0) {
           el.subtitleCueStack.innerHTML = '';
           el.subtitleOverlay.hidden = true;
           return;
         }
 
         el.subtitleCueStack.innerHTML = '';
-        for (let i = 0; i < activeCues.length; i++) {
-          const cue = activeCues[i];
+        for (let i = 0; i < matchedCues.length; i++) {
+          const cue = matchedCues[i];
           const rawText = String(cue.text || '')
             .replace(/<[^>]+>/g, '')
             .replace(/&nbsp;/gi, ' ')
@@ -6310,6 +6545,8 @@
           URL.revokeObjectURL(state.activeSubtitleUrl);
           state.activeSubtitleUrl = null;
         }
+        state.subtitleOffsetSec = 0;
+        updateSubtitleOffsetUI();
         el.media.querySelectorAll('track').forEach((tr) => tr.remove());
         el.subtitleCueStack.innerHTML = '';
         el.subtitleOverlay.hidden = true;
@@ -6341,7 +6578,7 @@
         const bindTrack = () => {
           const tt = trackEl.track || (el.media.textTracks && el.media.textTracks[0]);
           if (tt) {
-            // Keep native cue rendering 'hidden' so our custom styled overlay renders with full fonts/borders/colors!
+            // Keep native cue rendering 'hidden' so our custom styled overlay renders with full fonts/borders/colors & timing sync!
             tt.mode = 'hidden';
             tt.removeEventListener('cuechange', renderActiveSubtitleCues);
             tt.addEventListener('cuechange', renderActiveSubtitleCues);
@@ -6353,22 +6590,128 @@
         el.subtitleBtn.classList.add('is-active');
       }
 
+      const CLIENT_SUB_NOISE = new Set([
+        '1080p', '720p', '480p', '2160p', '4k', 'uhd', 'hd', 'sd', 'hdr', 'hdr10',
+        'bluray', 'bdrip', 'brrip', 'webrip', 'webdl', 'web', 'dl', 'hdtv', 'dvdrip',
+        'x264', 'x265', 'h264', 'h265', 'hevc', 'avc', '10bit', 'aac', 'ac3', 'dts',
+        'yts', 'yify', 'rarbg', 'nf', 'amzn', 'ar', 'ara', 'arabic', 'en', 'eng', 'english', 'sub', 'subs', 'sdh', 'hi', 'forced', 'cc'
+      ]);
+      const CLIENT_SUB_LANG_SUFFIX = /(?:[._\-\s\[(]+(?:ar|ara|arabic|en|eng|english|sdh|hi|forced|cc|sub|subs|default)[\])]*)+\s*$/i;
+      const CLIENT_SUB_ARABIC_RE = /(?:^|[._\-\s\[(])(ar|ara|arabic|عربي|عربية|ترجمة)(?:$|[._\-\s\])])/i;
+      const CLIENT_SUB_EP_RE = /\b(s\d{1,2}\s*e\d{1,3}|\d{1,2}x\d{1,3}|ep?\s*\d{1,3})\b/i;
+
+      function normalizeClientMediaName(name) {
+        const noExt = stripExtension(String(name || ''));
+        const stripped = noExt.replace(CLIENT_SUB_LANG_SUFFIX, '').trim();
+        return (stripped || noExt).toLowerCase().replace(/[._\-\[\](){}+]+/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+
+      function findFuzzySubtitleInLoadedMap(track) {
+        if (!track || state.subtitlesByBaseKey.size === 0) return null;
+        const exact = state.subtitlesByBaseKey.get(stripExtension(track.key).toLowerCase());
+        if (exact) return exact;
+
+        const vNorm = normalizeClientMediaName(track.name);
+        const vEpM = vNorm.match(CLIENT_SUB_EP_RE);
+        const vEp = vEpM ? vEpM[1].replace(/\s+/g, '').replace(/^ep(\d)/, 'e$1') : '';
+        const vTokens = new Set(vNorm.split(' ').filter((w) => w.length > 1 && !CLIENT_SUB_NOISE.has(w)));
+        const trackDir = (track.folderPath || '').toLowerCase();
+        const videosInSameDir = state.allTracks.filter((tr) => tr.kind === 'video' && (tr.folderPath || '').toLowerCase() === trackDir).length;
+
+        let bestEntry = null;
+        let bestScore = 0;
+
+        for (const [baseKey, subEntry] of state.subtitlesByBaseKey.entries()) {
+          const subName = subEntry.name || baseKey.split('/').pop() || baseKey;
+          const subDir = (baseKey.includes('/') ? baseKey.slice(0, baseKey.lastIndexOf('/')) : '').toLowerCase();
+
+          let dirPenalty = 0;
+          if (subDir === trackDir) {
+            dirPenalty = 0;
+          } else if (trackDir && subDir.startsWith(`${trackDir}/`)) {
+            dirPenalty = 20;
+          } else if (!trackDir && /^(subs?|subtitles?|arabic|ar|en|cc)(\/|$)/i.test(subDir)) {
+            dirPenalty = 20;
+          } else if (trackDir && trackDir.startsWith(`${subDir}/`)) {
+            dirPenalty = 50;
+          } else {
+            dirPenalty = 85;
+          }
+
+          const sNorm = normalizeClientMediaName(subName);
+          let score = 0;
+          if (vNorm && sNorm && vNorm === sNorm) {
+            score = 940;
+          } else if (vNorm && sNorm && (sNorm.startsWith(vNorm) || vNorm.startsWith(sNorm)) && Math.min(vNorm.length, sNorm.length) >= 4) {
+            score = 840;
+          } else if (vNorm && sNorm && (vNorm.includes(sNorm) || sNorm.includes(vNorm)) && Math.min(vNorm.length, sNorm.length) >= 5) {
+            score = 780;
+          } else {
+            const sEpM = sNorm.match(CLIENT_SUB_EP_RE);
+            const sEp = sEpM ? sEpM[1].replace(/\s+/g, '').replace(/^ep(\d)/, 'e$1') : '';
+            const sTokens = new Set(sNorm.split(' ').filter((w) => w.length > 1 && !CLIENT_SUB_NOISE.has(w)));
+            let overlap = 0;
+            for (const tok of sTokens) if (vTokens.has(tok)) overlap += 1;
+
+            if (vEp && sEp && vEp === sEp) {
+              score = overlap > 0 ? 790 + Math.min(60, overlap * 15) : 700;
+            } else if (vEp && sEp && vEp !== sEp) {
+              continue;
+            } else if (vTokens.size > 0 && sTokens.size > 0 && overlap > 0) {
+              const ratio = (2 * overlap) / (vTokens.size + sTokens.size);
+              if (ratio >= 0.48 || (overlap >= 2 && overlap / Math.min(vTokens.size, sTokens.size) >= 0.65)) {
+                score = Math.round(520 + ratio * 240);
+              }
+            }
+          }
+
+          if (score === 0 && videosInSameDir <= 1 && dirPenalty <= 25 && state.subtitlesByBaseKey.size <= 4) {
+            score = 420;
+          }
+          if (score === 0) continue;
+          if (CLIENT_SUB_ARABIC_RE.test(subName)) score += 28;
+          const finalScore = score - dirPenalty;
+          if (finalScore >= 380 && finalScore > bestScore) {
+            bestScore = finalScore;
+            bestEntry = subEntry;
+          }
+        }
+        return bestEntry;
+      }
+
       async function autoLoadMatchingSubtitle(track) {
         if (!track || track.kind !== 'video') return;
-        const subEntry = state.subtitlesByBaseKey.get(stripExtension(track.key).toLowerCase());
-        if (!subEntry) return;
-        try {
-          let text = null;
-          if (subEntry.file) text = await subEntry.file.text();
-          else if (subEntry.fileHandle) {
-            const f = await subEntry.fileHandle.getFile();
-            subEntry.file = f;
-            text = await f.text();
-          } else if (subEntry.fullPath && desktopBridge) {
-            text = await desktopBridge.readTextFile(subEntry.fullPath);
-          }
-          if (text) attachSubtitleVttText(text, subEntry.name);
-        } catch {}
+
+        // 1. Check loaded folder/queue subtitle map (exact + fuzzy + nearby subfolder match)
+        const subEntry = findFuzzySubtitleInLoadedMap(track);
+        if (subEntry) {
+          try {
+            let text = null;
+            if (subEntry.file) text = await readSubtitleFileSmart(subEntry.file);
+            else if (subEntry.fileHandle) {
+              const f = await subEntry.fileHandle.getFile();
+              subEntry.file = f;
+              text = await readSubtitleFileSmart(f);
+            } else if (subEntry.fullPath && desktopBridge) {
+              text = await desktopBridge.readTextFile(subEntry.fullPath);
+            }
+            if (text) {
+              attachSubtitleVttText(text, subEntry.name);
+              return;
+            }
+          } catch {}
+        }
+
+        // 2. Desktop native nearby folder / fuzzy subtitle scan (works even when double-clicking a single video from Explorer!)
+        if (track.fullPath && desktopBridge && typeof desktopBridge.findNearbySubtitle === 'function') {
+          try {
+            const found = await desktopBridge.findNearbySubtitle(track.fullPath);
+            if (found && found.text) {
+              attachSubtitleVttText(found.text, found.name || 'Subtitles');
+              showNotice(t('subAutoLoaded', { name: found.name || '' }));
+            }
+          } catch {}
+        }
       }
 
       async function loadTrackByKey(trackKey, options = {}) {
@@ -7328,6 +7671,9 @@
             }
             break;
           case 'open-subtitle-style': openSubtitleStyleModal(); break;
+          case 'sub-sync-earlier': adjustSubtitleOffset(-0.5, true); break;
+          case 'sub-sync-later': adjustSubtitleOffset(0.5, true); break;
+          case 'sub-sync-reset': resetSubtitleOffset(true); break;
           case 'toggle-pip': togglePictureInPicture(); break;
           case 'toggle-fullscreen': toggleFullscreen(); break;
           case 'toggle-theme': applyTheme(state.theme === 'dark' ? 'light' : 'dark', true); break;
@@ -7788,11 +8134,6 @@
         el.subtitleInput.click();
       });
 
-      el.subtitleStyleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openSubtitleStyleModal();
-      });
-
       el.closeSubtitleModalBtn.addEventListener('click', () => { el.subtitleModal.hidden = true; });
       el.subDoneBtn.addEventListener('click', () => { el.subtitleModal.hidden = true; });
       el.subtitleModal.addEventListener('click', (e) => {
@@ -7822,6 +8163,10 @@
       el.subRadiusRange.addEventListener('input', () => updateSubtitleStyle({ borderRadius: Number(el.subRadiusRange.value) }));
       el.subShadowRange.addEventListener('input', () => updateSubtitleStyle({ shadowBlur: Number(el.subShadowRange.value) }));
       el.subPositionRange.addEventListener('input', () => updateSubtitleStyle({ bottomOffset: Number(el.subPositionRange.value) }));
+      el.subOffsetBtns.forEach((btn) => {
+        btn.addEventListener('click', () => adjustSubtitleOffset(Number(btn.dataset.subOffset), false));
+      });
+      el.subOffsetResetBtn.addEventListener('click', () => resetSubtitleOffset(false));
       el.subResetBtn.addEventListener('click', () => {
         updateSubtitleStyle({ ...SUBTITLE_STYLE_DEFAULTS }, true, true);
         renderFontPickerList();
@@ -7831,7 +8176,7 @@
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-          attachSubtitleVttText(await file.text(), file.name);
+          attachSubtitleVttText(await readSubtitleFileSmart(file), file.name);
         } catch {
           showNotice('Could not read subtitle file.', true);
         }
@@ -8079,6 +8424,10 @@
           toggleFullscreen();
         } else if (e.key === 'p' || e.key === 'P') {
           togglePictureInPicture();
+        } else if (e.key === 'g' || e.key === 'G') {
+          adjustSubtitleOffset(-0.25, true);
+        } else if (e.key === 'h' || e.key === 'H') {
+          adjustSubtitleOffset(0.25, true);
         } else if (e.key === '?') {
           el.shortcutsModal.hidden = !el.shortcutsModal.hidden;
         }
@@ -8123,7 +8472,7 @@
         if (droppedFiles.length === 1) {
           const ext = getExtension(droppedFiles[0].name);
           if (SUBTITLE_EXTENSIONS.has(ext)) {
-            attachSubtitleVttText(await droppedFiles[0].text(), droppedFiles[0].name);
+            attachSubtitleVttText(await readSubtitleFileSmart(droppedFiles[0]), droppedFiles[0].name);
             showNotice(`Loaded subtitles: ${droppedFiles[0].name}`);
             return;
           }

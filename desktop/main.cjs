@@ -398,9 +398,200 @@ ipcMain.handle('aaz:read-folder', async (_event, folderPath) => {
   };
 });
 
+function decodeTextBufferSmart(buf) {
+  if (!buf || !buf.length) return '';
+  // UTF-16 LE / BE BOM support
+  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+    try { return new TextDecoder('utf-16le').decode(buf); } catch {}
+  }
+  if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+    try { return new TextDecoder('utf-16be').decode(buf); } catch {}
+  }
+  // Strict UTF-8 check; if invalid bytes (e.g. Arabic ANSI Windows-1256 .srt), fallback cleanly!
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    try {
+      return new TextDecoder('windows-1256').decode(buf);
+    } catch {
+      return buf.toString('utf8');
+    }
+  }
+}
+
 ipcMain.handle('aaz:read-text-file', async (_event, filePath) => {
   try {
-    return fs.readFileSync(filePath, 'utf8');
+    const buf = fs.readFileSync(filePath);
+    return decodeTextBufferSmart(buf);
+  } catch {
+    return null;
+  }
+});
+
+const SUB_NOISE_TOKENS = new Set([
+  '1080p', '720p', '480p', '2160p', '4k', 'uhd', 'hd', 'sd', 'hdr', 'hdr10',
+  'bluray', 'bdrip', 'brrip', 'webrip', 'webdl', 'web', 'dl', 'hdtv', 'dvdrip', 'cam', 'ts',
+  'x264', 'x265', 'h264', 'h265', 'hevc', 'avc', 'xvid', '10bit', '8bit',
+  'aac', 'ac3', 'dts', 'ddp5', 'dd5', 'atmos', 'mp3', 'flac',
+  'yts', 'yify', 'rarbg', 'etrg', 'evo', 'nf', 'amzn', 'dsnp', 'hmax', 'extended', 'unrated', 'repack', 'proper',
+  'ar', 'ara', 'arabic', 'en', 'eng', 'english', 'sub', 'subs', 'subtitle', 'subtitles', 'sdh', 'hi', 'forced', 'cc'
+]);
+
+const SUB_LANG_SUFFIX_RE = /(?:[._\-\s\[(]+(?:ar|ara|arabic|en|eng|english|sdh|hi|forced|cc|sub|subs|default)[\])]*)+\s*$/i;
+const SUB_ARABIC_HINT_RE = /(?:^|[._\-\s\[(])(ar|ara|arabic|عربي|عربية|ترجمة)(?:$|[._\-\s\])])/i;
+const SUB_EPISODE_RE = /\b(s\d{1,2}\s*e\d{1,3}|\d{1,2}x\d{1,3}|ep?\s*\d{1,3})\b/i;
+
+function normalizeMediaName(rawName) {
+  const noExt = String(rawName || '').replace(/\.[^.]+$/, '');
+  const stripped = noExt.replace(SUB_LANG_SUFFIX_RE, '').trim();
+  return (stripped || noExt)
+    .toLowerCase()
+    .replace(/[._\-\[\](){}+]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractCoreTokens(normName) {
+  return normName
+    .split(' ')
+    .filter((tok) => tok.length > 1 && !SUB_NOISE_TOKENS.has(tok));
+}
+
+function extractEpisodeTag(normName) {
+  const m = normName.match(SUB_EPISODE_RE);
+  if (!m) return '';
+  return m[1].replace(/\s+/g, '').replace(/^ep(\d)/, 'e$1');
+}
+
+function scoreSubtitleCandidate(videoBaseName, subFileName, distancePenalty, isOnlyVideoInDir, subCountInSameDir) {
+  const vRawNoExt = videoBaseName.replace(/\.[^.]+$/, '').toLowerCase();
+  const sRawNoExt = subFileName.replace(/\.[^.]+$/, '').toLowerCase();
+
+  let score = 0;
+  const vNorm = normalizeMediaName(videoBaseName);
+  const sNorm = normalizeMediaName(subFileName);
+
+  if (vRawNoExt === sRawNoExt) {
+    score = 1000;
+  } else if (vNorm && sNorm && vNorm === sNorm) {
+    score = 940;
+  } else if (vNorm && sNorm && (sNorm.startsWith(vNorm) || vNorm.startsWith(sNorm)) && Math.min(vNorm.length, sNorm.length) >= 4) {
+    score = 840;
+  } else if (vNorm && sNorm && (vNorm.includes(sNorm) || sNorm.includes(vNorm)) && Math.min(vNorm.length, sNorm.length) >= 5) {
+    score = 780;
+  } else {
+    const vEp = extractEpisodeTag(vNorm);
+    const sEp = extractEpisodeTag(sNorm);
+    const vTokens = extractCoreTokens(vNorm);
+    const sTokens = extractCoreTokens(sNorm);
+    const vSet = new Set(vTokens);
+    const sSet = new Set(sTokens);
+    let overlap = 0;
+    for (const tok of sSet) {
+      if (vSet.has(tok)) overlap += 1;
+    }
+
+    if (vEp && sEp && vEp === sEp) {
+      score = overlap > 0 ? 790 + Math.min(60, overlap * 15) : 700;
+    } else if (vEp && sEp && vEp !== sEp) {
+      // Different episode numbers should NEVER falsely match!
+      return 0;
+    } else if (vSet.size > 0 && sSet.size > 0 && overlap > 0) {
+      const ratio = (2 * overlap) / (vSet.size + sSet.size);
+      if (ratio >= 0.48 || (overlap >= 2 && overlap / Math.min(vSet.size, sSet.size) >= 0.65)) {
+        score = Math.round(520 + ratio * 240);
+      }
+    }
+  }
+
+  // Single-video folder fallback (e.g. a movie folder containing 1 video + "Arabic.srt" / "sub.srt")
+  if (score === 0 && isOnlyVideoInDir && distancePenalty <= 40 && subCountInSameDir <= 4) {
+    score = 420;
+  }
+
+  if (score === 0) return 0;
+
+  // Prefer Arabic subtitle if multiple language subtitles match equally well
+  if (SUB_ARABIC_HINT_RE.test(subFileName)) {
+    score += 28;
+  }
+  return Math.max(1, score - distancePenalty);
+}
+
+ipcMain.handle('aaz:find-nearby-subtitle', async (_event, videoFullPath) => {
+  try {
+    if (!videoFullPath || !fs.existsSync(videoFullPath)) return null;
+    const videoDir = path.dirname(videoFullPath);
+    const videoName = path.basename(videoFullPath);
+    const vNorm = normalizeMediaName(videoName);
+
+    const searchDirs = [{ dir: videoDir, penalty: 0 }];
+    const SUB_FOLDER_NAMES = new Set(['subs', 'subtitles', 'subtitle', 'sub', 'arabic', 'ar', 'en', 'cc', 'captions']);
+
+    let videoCountInSameDir = 0;
+    try {
+      const sameEntries = fs.readdirSync(videoDir, { withFileTypes: true });
+      for (const ent of sameEntries) {
+        if (ent.isFile()) {
+          const ext = path.extname(ent.name).slice(1).toLowerCase();
+          if (VIDEO_EXTS.has(ext)) videoCountInSameDir += 1;
+        } else if (ent.isDirectory()) {
+          const lower = ent.name.toLowerCase();
+          const subDirPath = path.join(videoDir, ent.name);
+          if (SUB_FOLDER_NAMES.has(lower) || lower.includes('sub') || (vNorm.length >= 4 && normalizeMediaName(ent.name).includes(vNorm.slice(0, Math.min(vNorm.length, 10))))) {
+            searchDirs.push({ dir: subDirPath, penalty: 20 });
+            // Also check one level inside Subs/<VideoName>/ (common YTS / scene structure)
+            try {
+              const nested = fs.readdirSync(subDirPath, { withFileTypes: true });
+              for (const nEnt of nested) {
+                if (nEnt.isDirectory()) {
+                  searchDirs.push({ dir: path.join(subDirPath, nEnt.name), penalty: 30 });
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    // Check parent directory & sibling Subs folder (penalty 55)
+    const parentDir = path.dirname(videoDir);
+    if (parentDir && parentDir !== videoDir) {
+      searchDirs.push({ dir: parentDir, penalty: 55 });
+      for (const subFolder of ['Subs', 'Subtitles', 'Subtitle', 'Arabic']) {
+        const siblingSub = path.join(parentDir, subFolder);
+        if (fs.existsSync(siblingSub)) {
+          searchDirs.push({ dir: siblingSub, penalty: 65 });
+        }
+      }
+    }
+
+    const candidates = [];
+    const seenPaths = new Set();
+    for (const { dir, penalty } of searchDirs) {
+      let entries = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const subFilesHere = entries.filter((ent) => ent.isFile() && SUBTITLE_EXTS.has(path.extname(ent.name).slice(1).toLowerCase()));
+      for (const ent of subFilesHere) {
+        const fullPath = path.join(dir, ent.name);
+        if (seenPaths.has(fullPath)) continue;
+        seenPaths.add(fullPath);
+        const score = scoreSubtitleCandidate(videoName, ent.name, penalty, videoCountInSameDir <= 1, subFilesHere.length);
+        if (score >= 380) {
+          candidates.push({ name: ent.name, fullPath, score });
+        }
+      }
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+    const text = decodeTextBufferSmart(fs.readFileSync(best.fullPath));
+    return { name: best.name, fullPath: best.fullPath, text, score: best.score };
   } catch {
     return null;
   }

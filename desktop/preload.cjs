@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('aazDesktop', {
   selectFiles: () => ipcRenderer.invoke('aaz:select-files'),
   readFolder: (folderPath) => ipcRenderer.invoke('aaz:read-folder', folderPath),
   readTextFile: (filePath) => ipcRenderer.invoke('aaz:read-text-file', filePath),
+  findNearbySubtitle: (videoFullPath) => ipcRenderer.invoke('aaz:find-nearby-subtitle', videoFullPath),
   inspectPaths: (paths) => ipcRenderer.invoke('aaz:inspect-paths', paths),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('aaz:set-always-on-top', enabled),
   setWindowFullscreen: (enabled) => ipcRenderer.invoke('aaz:set-fullscreen', enabled),
