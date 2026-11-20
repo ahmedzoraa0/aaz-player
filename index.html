@@ -2224,6 +2224,7 @@
 
     /* Saved Playlist Item Row */
     .saved-pl-card {
+      position: relative;
       padding: 10px 11px;
       border-radius: var(--radius-control);
       border: 1px solid var(--border-hairline);
@@ -2232,7 +2233,9 @@
       flex-direction: column;
       gap: 7px;
       cursor: pointer;
-      transition: border-color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
+      user-select: none;
+      touch-action: pan-y;
+      transition: border-color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out), opacity var(--t-fast) var(--ease-out);
     }
 
     .saved-pl-card + .saved-pl-card {
@@ -2249,11 +2252,109 @@
       border-color: var(--accent-border);
     }
 
+    .saved-pl-card.is-dragging {
+      opacity: 0.35;
+      border-style: dashed;
+      border-color: var(--accent);
+    }
+
+    .saved-pl-card.is-drop-before::before,
+    .saved-pl-card.is-drop-after::after {
+      content: '';
+      position: absolute;
+      inset-inline: 6px;
+      height: 2px;
+      background-color: var(--accent);
+      box-shadow: 0 0 8px rgba(61, 196, 121, 0.7);
+      border-radius: 2px;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .saved-pl-card.is-drop-before::before {
+      top: -5px;
+    }
+
+    .saved-pl-card.is-drop-after::after {
+      bottom: -5px;
+    }
+
     .saved-pl-top {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 8px;
+    }
+
+    .saved-pl-drag-handle {
+      flex-shrink: 0;
+      width: 16px;
+      height: 24px;
+      margin-top: 1px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-tertiary);
+      opacity: 0.65;
+      cursor: grab;
+      border-radius: 4px;
+      transition: opacity var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+    }
+
+    .saved-pl-card:hover .saved-pl-drag-handle {
+      opacity: 1;
+      color: var(--text-secondary);
+    }
+
+    .saved-pl-drag-handle:active {
+      cursor: grabbing;
+      color: var(--accent);
+    }
+
+    .saved-pl-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .saved-pl-icon-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-tertiary);
+      background-color: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+    }
+
+    .saved-pl-icon-btn:hover {
+      color: var(--text-primary);
+      background-color: rgba(255, 255, 255, 0.06);
+      border-color: var(--border-hairline);
+    }
+
+    .saved-pl-icon-btn.is-danger:hover {
+      color: var(--danger);
+      background-color: rgba(232, 93, 93, 0.14);
+      border-color: rgba(232, 93, 93, 0.35);
+    }
+
+    .saved-pl-rename-input {
+      width: 100%;
+      height: 26px;
+      padding: 0 7px;
+      border-radius: 5px;
+      border: 1px solid var(--accent-border);
+      background-color: var(--bg-inset);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
     }
 
     .saved-pl-name {
@@ -3860,7 +3961,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.4.1</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.4.2</div>
             </div>
           </div>
         </nav>
@@ -4719,6 +4820,23 @@
     <button type="button" class="menu-action is-danger" data-plcmd="remove"><span class="menu-action-label" data-i18n="plCtxRemove">Remove from Playlist</span><span class="menu-shortcut">Del</span></button>
   </div>
 
+  <!-- Custom Right-Click Context Menu for Saved Playlists -->
+  <div class="context-menu" id="savedPlContextMenu" hidden role="menu" aria-label="Saved Playlist Menu">
+    <button type="button" class="menu-action" data-splcmd="open"><span class="menu-action-label" data-i18n="savedCtxOpen">Open / Play Playlist</span></button>
+    <button type="button" class="menu-action" data-splcmd="rename"><span class="menu-action-label" data-i18n="savedCtxRename">Rename Playlist</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action" data-splcmd="move-top"><span class="menu-action-label" data-i18n="plCtxMoveTop">Move to Top</span></button>
+    <button type="button" class="menu-action" data-splcmd="move-up"><span class="menu-action-label" data-i18n="plCtxMoveUp">Move Up</span><span class="menu-shortcut">Alt+↑</span></button>
+    <button type="button" class="menu-action" data-splcmd="move-down"><span class="menu-action-label" data-i18n="plCtxMoveDown">Move Down</span><span class="menu-shortcut">Alt+↓</span></button>
+    <button type="button" class="menu-action" data-splcmd="move-bottom"><span class="menu-action-label" data-i18n="plCtxMoveBottom">Move to Bottom</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action" data-splcmd="export-xspf"><span class="menu-action-label" data-i18n="cmdExportXspf">Export as .XSPF (VLC)</span></button>
+    <button type="button" class="menu-action" data-splcmd="export-m3u8"><span class="menu-action-label" data-i18n="cmdExportM3u8">Export as .M3U8</span></button>
+    <button type="button" class="menu-action" data-splcmd="export-pls"><span class="menu-action-label" data-i18n="cmdExportPls">Export as .PLS</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action is-danger" data-splcmd="delete"><span class="menu-action-label" data-i18n="savedCtxDelete">Delete Saved Playlist</span><span class="menu-shortcut">Del</span></button>
+  </div>
+
   <!-- Cast to TV / Smart Screen Modal (DLNA/UPnP + Wi-Fi LAN Receiver + Miracast + RemotePlayback) -->
   <div class="modal-backdrop" id="castModal" hidden role="dialog" aria-modal="true" aria-labelledby="castModalTitle">
     <div class="modal-card cast-modal-card">
@@ -4835,7 +4953,8 @@
           castToDlna: (controlUrl, mediaUrl, title, mimeType) => invoke('aaz_cast_to_dlna', { controlUrl, mediaUrl, title, mimeType }),
           castDlnaControl: (controlUrl, action, seekTarget = null) => invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget }),
           castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
-          onOpenExternal: (callback) => listen('aaz:open-external', callback)
+          onOpenExternal: (callback) => listen('aaz:open-external', callback),
+          onFileDrop: (callback) => listen('tauri://drag-drop', callback)
         };
       })();
 
@@ -5266,6 +5385,18 @@
           if (shellDesktop.onOpenExternal) {
             shellDesktop.onOpenExternal((paths) => routeExternalFilesToTab(paths));
           }
+          if (shellDesktop.onFileDrop) {
+            shellDesktop.onFileDrop((payload) => {
+              const paths = Array.isArray(payload) ? payload : (Array.isArray(payload?.paths) ? payload.paths : []);
+              if (paths.length === 0) return;
+              const active = tabs.find((tb) => tb.id === activeTabId);
+              if (active && active.ready && active.iframe.contentWindow) {
+                active.iframe.contentWindow.postMessage({ type: 'aaz-open-external', paths }, '*');
+              } else {
+                routeExternalFilesToTab(paths);
+              }
+            });
+          }
           if (shellDesktop.onUpdateStatus) {
             shellDesktop.onUpdateStatus((payload) => {
               tabs.forEach((tb) => {
@@ -5513,6 +5644,7 @@
         confirmSavePlBtn: document.getElementById('confirmSavePlBtn'),
         cancelSavePlBtn: document.getElementById('cancelSavePlBtn'),
         playlistContextMenu: document.getElementById('playlistContextMenu'),
+        savedPlContextMenu: document.getElementById('savedPlContextMenu'),
         plCtxPlayNextLbl: document.getElementById('plCtxPlayNextLbl'),
         plCtxStopAfterLbl: document.getElementById('plCtxStopAfterLbl'),
         plCtxStarLbl: document.getElementById('plCtxStarLbl'),
@@ -5639,7 +5771,9 @@
         watchedKeys: new Set(),
         progressByKey: {},
         lastRemovedUndo: null,
+        lastDeletedSavedPlUndo: null,
         activeContextTrackKey: '',
+        activeContextSavedPlId: '',
         dragTrackKey: '',
         lastProgressSaveTs: 0,
         appendModePending: null,
@@ -5680,11 +5814,13 @@
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
-        appVersion: '1.4.1',
+        appVersion: '1.4.2',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
-        audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
+        audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId
         audioSinkLabel: '',
         audioDevices: [],
+        defaultAudioDevice: null,     // Concrete Windows hardware device backing 'default'
+        audioDevicesLoaded: false,
 
         // Sleep Timer
         sleepEndAt: null,
@@ -5936,6 +6072,15 @@
           plStoppedAfterNotice: 'Playback stopped after "{name}".',
           plUpNextAdded: 'Queued "{name}" to play next.',
           plCopiedName: 'Copied "{name}".',
+          savedCtxOpen: 'Open / Play Playlist',
+          savedCtxRename: 'Rename Playlist',
+          savedCtxDelete: 'Delete Saved Playlist',
+          savedDeletedNotice: 'Deleted saved playlist "{name}".',
+          savedRestoredNotice: 'Restored saved playlist "{name}".',
+          savedRenamedNotice: 'Renamed playlist to "{name}".',
+          savedFilesMissing: 'Could not find the files for "{name}" on disk (they may have been moved or deleted).',
+          savedUpdatedNotice: 'Saved "{name}" ({n} items).',
+          savedDragHint: 'Drag to reorder',
           cmdCast: 'Cast to TV / Screen...',
           scCast: 'Cast to TV / Smart Screen',
           scReorder: 'Move focused playlist track up / down',
@@ -6207,6 +6352,15 @@
           plStoppedAfterNotice: 'توقف التشغيل تلقائياً بعد انتهاء "{name}".',
           plUpNextAdded: 'تمت جدولة "{name}" ليعمل تالياً.',
           plCopiedName: 'تم نسخ الاسم "{name}".',
+          savedCtxOpen: 'فتح وتشغيل القائمة',
+          savedCtxRename: 'إعادة تسمية القائمة',
+          savedCtxDelete: 'حذف القائمة المحفوظة',
+          savedDeletedNotice: 'تم حذف القائمة المحفوظة "{name}".',
+          savedRestoredNotice: 'تمت استعادة القائمة المحفوظة "{name}".',
+          savedRenamedNotice: 'تم تغيير اسم القائمة إلى "{name}".',
+          savedFilesMissing: 'تعذر العثور على ملفات القائمة "{name}" على الجهاز (ربما تم نقلها أو حذفها).',
+          savedUpdatedNotice: 'تم حفظ "{name}" ({n} عنصر).',
+          savedDragHint: 'اسحب لإعادة الترتيب',
           cmdCast: 'بث إلى الشاشة / التلفاز...',
           scCast: 'البث إلى الشاشة أو التلفاز الذكي',
           scReorder: 'تحريك العنصر المحدد لأعلى أو لأسفل',
@@ -6387,8 +6541,17 @@
               this.failed = true;
               return false;
             }
+            const effectiveSink = resolveEffectiveSinkId(state.audioSinkId);
             if (!this.ctx) {
-              this.ctx = new AudioCtx();
+              if (effectiveSink) {
+                try {
+                  this.ctx = new AudioCtx({ sinkId: effectiveSink });
+                } catch {
+                  this.ctx = new AudioCtx();
+                }
+              } else {
+                this.ctx = new AudioCtx();
+              }
             }
 
             const finalizeGraph = () => {
@@ -6426,9 +6589,10 @@
                 this.initialized = true;
                 this.connecting = false;
 
-                // Explicitly bind default ('') or selected audio output sink on WebView2 so sound never starts silent
-                if (typeof this.ctx.setSinkId === 'function') {
-                  this.ctx.setSinkId(state.audioSinkId || '').catch(() => {});
+                // Bind concrete hardware audio sink if resolved (never call setSinkId('') redundantly on fresh AudioContext)
+                const targetSink = resolveEffectiveSinkId(state.audioSinkId);
+                if (targetSink && typeof this.ctx.setSinkId === 'function' && this.ctx.sinkId !== targetSink) {
+                  this.ctx.setSinkId(targetSink).catch(() => {});
                 }
                 return true;
               } catch {
@@ -6968,6 +7132,18 @@
           delete current.currentTime;
           delete current.activeSavedPlaylistId;
           this.save(current);
+        },
+
+        loadSavedPlaylists() {
+          const current = this.load();
+          return Array.isArray(current?.savedPlaylists) ? current.savedPlaylists : [];
+        },
+
+        saveSavedPlaylists(list) {
+          const current = this.load() || {};
+          current.savedPlaylists = Array.isArray(list) ? list : [];
+          current.updatedAt = Date.now();
+          return this.save(current);
         }
       };
 
@@ -7222,8 +7398,53 @@
       }
 
       /* =======================================================================
-         7. Built-In Saved Playlists Library (Per-Playlist Auto-Resume!)
+         7. Built-In Saved Playlists Library (Exact Snapshots, Reorder & Delete)
          ======================================================================= */
+      function normalizeFsPath(p) {
+        return String(p || '').trim().replace(/\//g, '\\').toLowerCase();
+      }
+
+      function buildSavedTrackMeta(tr) {
+        return {
+          key: tr.key,
+          name: tr.name,
+          displayName: tr.displayName,
+          folderPath: tr.folderPath || '',
+          kind: tr.kind || 'video',
+          ext: tr.ext || '',
+          fullPath: tr.fullPath || '',
+          fileUrl: tr.fileUrl || '',
+          duration: tr.duration || 0,
+          size: tr.size || 0
+        };
+      }
+
+      function syncSavedPlaylistsFromStorage() {
+        const latest = StateStore.loadSavedPlaylists();
+        state.savedPlaylists = latest;
+        if (state.activeSavedPlaylistId && !latest.some((p) => p.id === state.activeSavedPlaylistId)) {
+          state.activeSavedPlaylistId = null;
+        }
+        updateSidebarCounts();
+        if (state.sidebarTab === 'saved') renderSavedPlaylists();
+      }
+
+      function applyTracksSnapshotToSavedEntry(pl, tracks) {
+        if (!pl || !Array.isArray(tracks)) return;
+        const paths = tracks.map((tr) => tr.fullPath).filter(Boolean);
+        pl.trackKeys = tracks.map((tr) => tr.key);
+        pl.trackMeta = tracks.map(buildSavedTrackMeta);
+        pl.nativeFilePaths = paths;
+        pl.trackCount = tracks.length;
+        pl.audioCount = tracks.filter((tr) => tr.kind === 'audio').length;
+        pl.videoCount = tracks.filter((tr) => tr.kind === 'video').length;
+        if (paths.length > 0 && pl.nativeFolderPath) {
+          const normFolder = normalizeFsPath(pl.nativeFolderPath).replace(/\\+$/, '') + '\\';
+          const allInside = paths.every((fp) => normalizeFsPath(fp).startsWith(normFolder));
+          if (!allInside) pl.nativeFolderPath = '';
+        }
+      }
+
       async function saveCurrentQueueToLibrary(customName) {
         if (state.allTracks.length === 0) {
           showNotice('Load a folder or files first before saving a playlist.', true);
@@ -7240,27 +7461,26 @@
           hasIdbHandle = await HandleStore.putHandle(id, state.currentDirHandle);
         }
 
+        const nativeFilePaths = tracks.map((tr) => tr.fullPath).filter(Boolean);
+        let verifiedFolderPath = '';
+        if (state.nativeFolderPath) {
+          const normFolder = normalizeFsPath(state.nativeFolderPath).replace(/\\+$/, '') + '\\';
+          const allFromFolder = nativeFilePaths.length > 0 && nativeFilePaths.every((fp) => normalizeFsPath(fp).startsWith(normFolder));
+          if (allFromFolder) verifiedFolderPath = state.nativeFolderPath;
+        }
+
         const entry = {
           id,
           name,
           folderName: state.folderName,
-          nativeFolderPath: state.nativeFolderPath || '',
-          nativeFilePaths: desktopBridge && !state.nativeFolderPath
-            ? tracks.map((t) => t.fullPath).filter(Boolean)
-            : [],
+          nativeFolderPath: verifiedFolderPath,
+          nativeFilePaths,
           hasIdbHandle,
-          trackKeys: tracks.map((t) => t.key),
-          trackMeta: tracks.map((t) => ({
-            key: t.key,
-            name: t.name,
-            displayName: t.displayName,
-            fullPath: t.fullPath || '',
-            fileUrl: t.fileUrl || '',
-            duration: t.duration || 0
-          })),
+          trackKeys: tracks.map((tr) => tr.key),
+          trackMeta: tracks.map(buildSavedTrackMeta),
           trackCount: tracks.length,
-          audioCount: tracks.filter((t) => t.kind === 'audio').length,
-          videoCount: tracks.filter((t) => t.kind === 'video').length,
+          audioCount: tracks.filter((tr) => tr.kind === 'audio').length,
+          videoCount: tracks.filter((tr) => tr.kind === 'video').length,
           playlistMode: state.playlistMode,
           lastTrackKey: curTrack ? curTrack.key : (tracks[0]?.key || ''),
           lastTrackName: curTrack ? curTrack.name : (tracks[0]?.name || ''),
@@ -7268,18 +7488,20 @@
           updatedAt: Date.now()
         };
 
-        state.savedPlaylists.unshift(entry);
+        const latestList = StateStore.loadSavedPlaylists();
+        state.savedPlaylists = [entry, ...latestList];
         state.activeSavedPlaylistId = id;
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
         persistPlaybackState();
         renderSavedPlaylists();
         updateSidebarCounts();
 
         el.savePlBar.hidden = true;
         el.savePlNameInput.value = '';
-        showNotice(`Saved "${name}" to your Library (${tracks.length} items).`);
+        showNotice(t('savedUpdatedNotice', { name, n: tracks.length }));
       }
 
-      function applySavedPlaylistOrder(tracks, savedKeys) {
+      function applySavedPlaylistOrder(tracks, savedKeys, strictFilter = false) {
         if (!Array.isArray(savedKeys) || savedKeys.length === 0) return tracks;
         const byKey = new Map(tracks.map((tr) => [tr.key, tr]));
         const ordered = [];
@@ -7290,38 +7512,117 @@
             byKey.delete(k);
           }
         }
+        if (strictFilter && ordered.length > 0) return ordered;
         for (const rem of byKey.values()) ordered.push(rem);
         return ordered;
       }
 
+      let savedPlaylistOpenSeq = 0;
+
       async function openSavedPlaylist(playlistId) {
+        const latestList = StateStore.loadSavedPlaylists();
+        if (latestList.length > 0) state.savedPlaylists = latestList;
         const pl = state.savedPlaylists.find((p) => p.id === playlistId);
         if (!pl) return;
         hideNotice();
 
+        const seq = ++savedPlaylistOpenSeq;
         const targetTrackKey = pl.lastTrackKey;
         const targetTrackName = pl.lastTrackName;
         const targetTime = Number.isFinite(pl.lastTime) ? pl.lastTime : 0;
 
-        // 1. Electron/Tauri .exe: Native folder path (instant, zero prompts!)
+        // 1. PRIORITY 1 (Desktop): Load the EXACT saved file paths (from nativeFilePaths OR trackMeta.fullPath).
+        // This guarantees playlists NEVER mix up with another folder AND automatically heals legacy saved playlists!
+        const exactFilePaths = (Array.isArray(pl.nativeFilePaths) && pl.nativeFilePaths.length > 0)
+          ? pl.nativeFilePaths.filter(Boolean)
+          : (Array.isArray(pl.trackMeta) ? pl.trackMeta.map((m) => m && m.fullPath).filter(Boolean) : []);
+
+        if (desktopBridge && exactFilePaths.length > 0) {
+          const res = await desktopBridge.inspectPaths(exactFilePaths);
+          if (seq !== savedPlaylistOpenSeq) return;
+          if (res && res.entries?.length) {
+            const { tracks: rawTracks, subMap } = buildTracksFromElectronEntries(res.entries);
+            const byNormPath = new Map();
+            for (const tr of rawTracks) {
+              if (tr.fullPath) byNormPath.set(normalizeFsPath(tr.fullPath), tr);
+            }
+            const metaByNormPath = new Map();
+            if (Array.isArray(pl.trackMeta)) {
+              for (const m of pl.trackMeta) {
+                if (m && m.fullPath) metaByNormPath.set(normalizeFsPath(m.fullPath), m);
+              }
+            }
+
+            const orderedTracks = [];
+            const usedKeys = new Set();
+            const seenPaths = new Set();
+            for (const fp of exactFilePaths) {
+              const norm = normalizeFsPath(fp);
+              if (!norm || seenPaths.has(norm)) continue;
+              const found = byNormPath.get(norm);
+              if (!found) continue;
+              seenPaths.add(norm);
+              const meta = metaByNormPath.get(norm);
+              let finalKey = (meta && meta.key) ? meta.key : found.key;
+              if (usedKeys.has(finalKey)) {
+                let suffix = 2;
+                while (usedKeys.has(`${finalKey} (${suffix})`)) suffix++;
+                finalKey = `${finalKey} (${suffix})`;
+              }
+              usedKeys.add(finalKey);
+              orderedTracks.push({
+                ...found,
+                key: finalKey,
+                displayName: (meta && meta.displayName) ? meta.displayName : found.displayName,
+                folderPath: (meta && meta.folderPath) ? meta.folderPath : found.folderPath,
+                duration: found.duration || (meta && meta.duration) || null
+              });
+            }
+
+            if (orderedTracks.length > 0) {
+              state.sortMode = 'custom';
+              updateSortButtonUI();
+              state.activeSavedPlaylistId = pl.id;
+              state.playlistMode = pl.playlistMode || 'all';
+              updateModeTabsUI();
+              await applyLoadedTracks(orderedTracks, subMap, pl.name, 'electron', {
+                restoreSavedPosition: false,
+                autoPlay: false,
+                keepActiveSavedPlaylist: true,
+                nativeFolderPath: ''
+              });
+              if (seq !== savedPlaylistOpenSeq) return;
+              const match = orderedTracks.find((tr) => tr.key === targetTrackKey || tr.name === targetTrackName) || orderedTracks[0];
+              if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
+              switchSidebarTab('queue');
+              renderSavedPlaylists();
+              return;
+            }
+          }
+        }
+
+        // 2. PRIORITY 2 (Desktop): Fallback to saved nativeFolderPath ONLY if no exact file paths existed
         if (desktopBridge && pl.nativeFolderPath) {
           const res = await desktopBridge.readFolder(pl.nativeFolderPath);
+          if (seq !== savedPlaylistOpenSeq) return;
           if (res && res.entries?.length) {
             let { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
             if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
-              tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
+              tracks = applySavedPlaylistOrder(tracks, pl.trackKeys, true);
               state.sortMode = 'custom';
               updateSortButtonUI();
             }
-            state.nativeFolderPath = res.folderPath;
             state.activeSavedPlaylistId = pl.id;
             state.playlistMode = pl.playlistMode || 'all';
             updateModeTabsUI();
             await applyLoadedTracks(tracks, subMap, pl.name, 'electron', {
               restoreSavedPosition: false,
-              autoPlay: false
+              autoPlay: false,
+              keepActiveSavedPlaylist: true,
+              nativeFolderPath: res.folderPath
             });
-            const match = tracks.find((t) => t.key === targetTrackKey || t.name === targetTrackName) || tracks[0];
+            if (seq !== savedPlaylistOpenSeq) return;
+            const match = tracks.find((tr) => tr.key === targetTrackKey || tr.name === targetTrackName) || tracks[0];
             if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
             switchSidebarTab('queue');
             renderSavedPlaylists();
@@ -7329,33 +7630,16 @@
           }
         }
 
-        // 2. Electron/Tauri .exe: Saved individual file paths
-        if (desktopBridge && Array.isArray(pl.nativeFilePaths) && pl.nativeFilePaths.length > 0) {
-          const res = await desktopBridge.inspectPaths(pl.nativeFilePaths);
-          if (res && res.entries?.length) {
-            let { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
-            if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
-              tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
-              state.sortMode = 'custom';
-              updateSortButtonUI();
-            }
-            state.nativeFolderPath = '';
-            state.activeSavedPlaylistId = pl.id;
-            await applyLoadedTracks(tracks, subMap, pl.name, 'electron', {
-              restoreSavedPosition: false,
-              autoPlay: false
-            });
-            const match = tracks.find((t) => t.key === targetTrackKey || t.name === targetTrackName) || tracks[0];
-            if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
-            switchSidebarTab('queue');
-            renderSavedPlaylists();
-            return;
-          }
+        // 3. Desktop missing-files guard: never silently open a wrong folder!
+        if (desktopBridge) {
+          showNotice(t('savedFilesMissing', { name: pl.name }), true);
+          return;
         }
 
-        // 3. Browser: Stored IndexedDB FileSystemDirectoryHandle for this specific playlist!
+        // 4. Browser: Stored IndexedDB FileSystemDirectoryHandle for this specific playlist
         if (pl.hasIdbHandle) {
           const handle = await HandleStore.getHandle(pl.id);
+          if (seq !== savedPlaylistOpenSeq) return;
           if (handle) {
             try {
               let perm = await handle.queryPermission({ mode: 'read' });
@@ -7363,10 +7647,11 @@
               if (perm === 'granted') {
                 const subMap = new Map();
                 let tracks = await scanDirectoryHandle(handle, '', subMap);
+                if (seq !== savedPlaylistOpenSeq) return;
                 tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
                 if (tracks.length > 0) {
                   if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
-                    tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
+                    tracks = applySavedPlaylistOrder(tracks, pl.trackKeys, true);
                     state.sortMode = 'custom';
                     updateSortButtonUI();
                   }
@@ -7376,9 +7661,12 @@
                   updateModeTabsUI();
                   await applyLoadedTracks(tracks, subMap, pl.name, 'fsa', {
                     restoreSavedPosition: false,
-                    autoPlay: false
+                    autoPlay: false,
+                    keepActiveSavedPlaylist: true,
+                    nativeFolderPath: ''
                   });
-                  const match = tracks.find((t) => t.key === targetTrackKey || t.name === targetTrackName) || tracks[0];
+                  if (seq !== savedPlaylistOpenSeq) return;
+                  const match = tracks.find((tr) => tr.key === targetTrackKey || tr.name === targetTrackName) || tracks[0];
                   if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
                   switchSidebarTab('queue');
                   renderSavedPlaylists();
@@ -7391,7 +7679,7 @@
           }
         }
 
-        // 4. Browser fallback: prompt user to select the folder and jump straight to saved track + second
+        // 5. Browser fallback: prompt user to select the folder and jump straight to saved track + second
         state.activeSavedPlaylistId = pl.id;
         state.savedSession = {
           ...(state.savedSession || {}),
@@ -7405,14 +7693,338 @@
       }
 
       async function deleteSavedPlaylist(playlistId) {
-        state.savedPlaylists = state.savedPlaylists.filter((p) => p.id !== playlistId);
+        const latestList = StateStore.loadSavedPlaylists();
+        const source = latestList.length > 0 ? latestList : state.savedPlaylists;
+        const idx = source.findIndex((p) => p.id === playlistId);
+        if (idx === -1) return;
+        const [removed] = source.splice(idx, 1);
+
+        state.savedPlaylists = source;
         if (state.activeSavedPlaylistId === playlistId) {
           state.activeSavedPlaylistId = null;
         }
+        state.lastDeletedSavedPlUndo = { entry: removed, index: idx };
+
         await HandleStore.deleteHandle(playlistId);
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
         persistPlaybackState();
         renderSavedPlaylists();
         updateSidebarCounts();
+        showNotice(t('savedDeletedNotice', { name: removed.name }), false, undoLastSavedPlaylistDelete);
+      }
+
+      function undoLastSavedPlaylistDelete() {
+        const undo = state.lastDeletedSavedPlUndo;
+        if (!undo || !undo.entry) return;
+        state.lastDeletedSavedPlUndo = null;
+        const latestList = StateStore.loadSavedPlaylists();
+        const list = latestList.length > 0 ? latestList : [...state.savedPlaylists];
+        if (!list.some((p) => p.id === undo.entry.id)) {
+          const insertAt = Math.min(Math.max(0, undo.index), list.length);
+          list.splice(insertAt, 0, undo.entry);
+        }
+        state.savedPlaylists = list;
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
+        renderSavedPlaylists();
+        updateSidebarCounts();
+        showNotice(t('savedRestoredNotice', { name: undo.entry.name }));
+      }
+
+      function renameSavedPlaylist(playlistId, rawNewName) {
+        const cleanName = String(rawNewName || '').trim();
+        if (!cleanName) return;
+        const latestList = StateStore.loadSavedPlaylists();
+        const list = latestList.length > 0 ? latestList : [...state.savedPlaylists];
+        const pl = list.find((p) => p.id === playlistId);
+        if (!pl) return;
+        pl.name = cleanName;
+        pl.updatedAt = Date.now();
+        state.savedPlaylists = list;
+        if (state.activeSavedPlaylistId === playlistId) {
+          state.folderName = cleanName;
+          updatePlaylistHeader();
+          notifyShellTabState();
+        }
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
+        renderSavedPlaylists();
+        showNotice(t('savedRenamedNotice', { name: cleanName }));
+      }
+
+      function startInlineRenameSavedPlaylist(playlistId) {
+        const card = el.savedPlaylistsContainer.querySelector(`.saved-pl-card[data-pl-id="${CSS.escape(playlistId)}"]`);
+        const pl = state.savedPlaylists.find((p) => p.id === playlistId);
+        if (!card || !pl) return;
+        const nameEl = card.querySelector('.saved-pl-name');
+        if (!nameEl) return;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'saved-pl-rename-input';
+        input.value = pl.name;
+        input.setAttribute('aria-label', t('savedCtxRename'));
+
+        let finished = false;
+        const commit = (save) => {
+          if (finished) return;
+          finished = true;
+          const nextVal = input.value.trim();
+          if (save && nextVal && nextVal !== pl.name) {
+            renameSavedPlaylist(playlistId, nextVal);
+          } else {
+            renderSavedPlaylists();
+          }
+        };
+
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('pointerdown', (e) => e.stopPropagation());
+        input.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit(true);
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            commit(false);
+          }
+        });
+        input.addEventListener('blur', () => commit(true));
+
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+      }
+
+      function reorderSavedPlaylists(dragId, targetId, insertAfter = false) {
+        if (!dragId || !targetId || dragId === targetId) return;
+        const latestList = StateStore.loadSavedPlaylists();
+        const list = latestList.length > 0 ? latestList : [...state.savedPlaylists];
+        const fromIdx = list.findIndex((p) => p.id === dragId);
+        if (fromIdx === -1) return;
+        const [moved] = list.splice(fromIdx, 1);
+        let toIdx = list.findIndex((p) => p.id === targetId);
+        if (toIdx === -1) {
+          list.push(moved);
+        } else {
+          if (insertAfter) toIdx += 1;
+          list.splice(toIdx, 0, moved);
+        }
+        state.savedPlaylists = list;
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
+        renderSavedPlaylists();
+      }
+
+      function moveSavedPlaylistRelative(playlistId, direction, focusAfter = false) {
+        const latestList = StateStore.loadSavedPlaylists();
+        const list = latestList.length > 0 ? latestList : [...state.savedPlaylists];
+        const idx = list.findIndex((p) => p.id === playlistId);
+        if (idx === -1) return;
+        let targetIdx = idx;
+        if (direction === 'top') targetIdx = 0;
+        else if (direction === 'bottom') targetIdx = list.length - 1;
+        else if (direction === 'up') targetIdx = Math.max(0, idx - 1);
+        else if (direction === 'down') targetIdx = Math.min(list.length - 1, idx + 1);
+        if (targetIdx === idx) return;
+
+        const [moved] = list.splice(idx, 1);
+        list.splice(targetIdx, 0, moved);
+        state.savedPlaylists = list;
+        StateStore.saveSavedPlaylists(state.savedPlaylists);
+        renderSavedPlaylists();
+        if (focusAfter) {
+          const movedCard = el.savedPlaylistsContainer.querySelector(`.saved-pl-card[data-pl-id="${CSS.escape(playlistId)}"]`);
+          if (movedCard) movedCard.focus();
+        }
+      }
+
+      let savedPlDragSuppressClickUntil = 0;
+
+      function startPointerSavedPlReorder(downEvent, sourceCard, pl) {
+        const startX = downEvent.clientX;
+        const startY = downEvent.clientY;
+        const startedOnGrip = Boolean(downEvent.target.closest('.saved-pl-drag-handle'));
+        let active = false;
+        let ghost = null;
+        let dropTargetId = '';
+        let dropAfter = false;
+        let scrollRaf = null;
+        let lastClientY = startY;
+
+        const clearDropHints = () => {
+          el.savedPlaylistsContainer.querySelectorAll('.is-drop-before, .is-drop-after').forEach((n) => {
+            n.classList.remove('is-drop-before', 'is-drop-after');
+          });
+        };
+
+        const updateDropTarget = (clientY) => {
+          clearDropHints();
+          dropTargetId = '';
+          const cards = Array.from(el.savedPlaylistsContainer.querySelectorAll('.saved-pl-card'));
+          if (cards.length < 2) return;
+
+          let bestCard = null;
+          let bestDist = Infinity;
+          let after = false;
+
+          for (const c of cards) {
+            const rect = c.getBoundingClientRect();
+            const mid = rect.top + rect.height / 2;
+            const dist = Math.abs(clientY - mid);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestCard = c;
+              after = clientY > mid;
+            }
+          }
+
+          if (bestCard && bestCard.dataset.plId !== pl.id) {
+            dropTargetId = bestCard.dataset.plId;
+            dropAfter = after;
+            bestCard.classList.add(after ? 'is-drop-after' : 'is-drop-before');
+          }
+        };
+
+        const autoScrollLoop = () => {
+          if (!active) return;
+          const listRect = el.savedPlaylistsContainer.getBoundingClientRect();
+          const edge = 36;
+          if (lastClientY < listRect.top + edge) {
+            el.savedPlaylistsContainer.scrollTop -= Math.max(4, Math.round((listRect.top + edge - lastClientY) * 0.35));
+            updateDropTarget(lastClientY);
+          } else if (lastClientY > listRect.bottom - edge) {
+            el.savedPlaylistsContainer.scrollTop += Math.max(4, Math.round((lastClientY - (listRect.bottom - edge)) * 0.35));
+            updateDropTarget(lastClientY);
+          }
+          scrollRaf = requestAnimationFrame(autoScrollLoop);
+        };
+
+        const cleanup = (commitDrop) => {
+          window.removeEventListener('pointermove', onMove, true);
+          window.removeEventListener('pointerup', onUp, true);
+          window.removeEventListener('pointercancel', onCancel, true);
+          window.removeEventListener('keydown', onKeyDown, true);
+          if (scrollRaf !== null) {
+            cancelAnimationFrame(scrollRaf);
+            scrollRaf = null;
+          }
+          clearDropHints();
+          sourceCard.classList.remove('is-dragging');
+          document.body.classList.remove('is-reordering-tracks');
+          if (ghost) {
+            ghost.remove();
+            ghost = null;
+          }
+          const finalTarget = dropTargetId;
+          const finalAfter = dropAfter;
+          if (active) {
+            savedPlDragSuppressClickUntil = Date.now();
+            if (commitDrop && finalTarget && finalTarget !== pl.id) {
+              reorderSavedPlaylists(pl.id, finalTarget, finalAfter);
+            }
+          }
+        };
+
+        const onMove = (ev) => {
+          lastClientY = ev.clientY;
+          if (!active) {
+            const dist = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+            if (dist < (startedOnGrip ? 4 : 7)) return;
+            active = true;
+            closePlaylistMenus();
+            sourceCard.classList.add('is-dragging');
+            document.body.classList.add('is-reordering-tracks');
+
+            const cardRect = sourceCard.getBoundingClientRect();
+            ghost = document.createElement('div');
+            ghost.className = 'track-drag-ghost';
+            ghost.style.width = `${Math.min(340, Math.max(180, Math.round(cardRect.width)))}px`;
+            ghost.innerHTML = `<span class="track-drag-ghost-icon">⋮⋮</span><span class="track-drag-ghost-name"></span>`;
+            ghost.querySelector('.track-drag-ghost-name').textContent = pl.name;
+            document.body.appendChild(ghost);
+            scrollRaf = requestAnimationFrame(autoScrollLoop);
+          }
+
+          ev.preventDefault();
+          if (ghost) {
+            const ghostW = ghost.offsetWidth || 240;
+            const left = Math.max(8, Math.min(window.innerWidth - ghostW - 8, ev.clientX - ghostW * 0.35));
+            const top = Math.max(8, Math.min(window.innerHeight - 44, ev.clientY - 18));
+            ghost.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+          }
+          updateDropTarget(ev.clientY);
+        };
+
+        const onUp = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+        const onKeyDown = (ev) => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            cleanup(false);
+          }
+        };
+
+        window.addEventListener('pointermove', onMove, true);
+        window.addEventListener('pointerup', onUp, true);
+        window.addEventListener('pointercancel', onCancel, true);
+        window.addEventListener('keydown', onKeyDown, true);
+      }
+
+      function openSavedPlContextMenu(playlistId, clientX, clientY) {
+        if (!el.savedPlContextMenu) return;
+        const pl = state.savedPlaylists.find((p) => p.id === playlistId);
+        if (!pl) return;
+        closeAllMenus();
+        state.activeContextSavedPlId = playlistId;
+
+        el.savedPlContextMenu.hidden = false;
+        el.savedPlContextMenu.style.left = '0px';
+        el.savedPlContextMenu.style.top = '0px';
+        const rect = el.savedPlContextMenu.getBoundingClientRect();
+        const pad = 8;
+        const x = Math.min(Math.max(clientX, pad), Math.max(pad, window.innerWidth - rect.width - pad));
+        const y = Math.min(Math.max(clientY, pad), Math.max(pad, window.innerHeight - rect.height - pad));
+        el.savedPlContextMenu.style.left = `${x}px`;
+        el.savedPlContextMenu.style.top = `${y}px`;
+      }
+
+      function executeSavedPlContextCommand(cmd) {
+        const plId = state.activeContextSavedPlId;
+        closePlaylistMenus();
+        if (!plId) return;
+        const pl = state.savedPlaylists.find((p) => p.id === plId);
+        if (!pl) return;
+
+        switch (cmd) {
+          case 'open':
+            openSavedPlaylist(plId);
+            break;
+          case 'rename':
+            startInlineRenameSavedPlaylist(plId);
+            break;
+          case 'move-top':
+            moveSavedPlaylistRelative(plId, 'top');
+            break;
+          case 'move-up':
+            moveSavedPlaylistRelative(plId, 'up');
+            break;
+          case 'move-down':
+            moveSavedPlaylistRelative(plId, 'down');
+            break;
+          case 'move-bottom':
+            moveSavedPlaylistRelative(plId, 'bottom');
+            break;
+          case 'export-xspf':
+            exportPlaylistFile('xspf', pl.trackMeta || [], pl.name);
+            break;
+          case 'export-m3u8':
+            exportPlaylistFile('m3u8', pl.trackMeta || [], pl.name);
+            break;
+          case 'export-pls':
+            exportPlaylistFile('pls', pl.trackMeta || [], pl.name);
+            break;
+          case 'delete':
+            deleteSavedPlaylist(plId);
+            break;
+        }
       }
 
       function renderSavedPlaylists() {
@@ -7432,9 +8044,17 @@
           const isActive = pl.id === state.activeSavedPlaylistId;
           const card = document.createElement('div');
           card.className = `saved-pl-card${isActive ? ' is-active' : ''}`;
+          card.dataset.plId = pl.id;
+          card.setAttribute('tabindex', '0');
 
           const top = document.createElement('div');
           top.className = 'saved-pl-top';
+
+          const dragGrip = document.createElement('span');
+          dragGrip.className = 'saved-pl-drag-handle';
+          dragGrip.title = t('savedDragHint');
+          dragGrip.setAttribute('aria-hidden', 'true');
+          dragGrip.innerHTML = '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg>';
 
           const titleWrap = document.createElement('div');
           titleWrap.style.minWidth = '0';
@@ -7449,7 +8069,23 @@
           metaEl.textContent = `${pl.trackCount} ${t('itemsWord')} · ${pl.audioCount} ${t('audioWord')} · ${pl.videoCount} ${t('videoWord')}`;
 
           titleWrap.append(nameEl, metaEl);
-          top.appendChild(titleWrap);
+
+          const headActions = document.createElement('div');
+          headActions.className = 'saved-pl-head-actions';
+
+          const quickDelBtn = document.createElement('button');
+          quickDelBtn.type = 'button';
+          quickDelBtn.className = 'saved-pl-icon-btn is-danger';
+          quickDelBtn.title = t('savedCtxDelete');
+          quickDelBtn.setAttribute('aria-label', t('savedCtxDelete'));
+          quickDelBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+          quickDelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteSavedPlaylist(pl.id);
+          });
+
+          headActions.appendChild(quickDelBtn);
+          top.append(dragGrip, titleWrap, headActions);
 
           const resumeEl = document.createElement('div');
           resumeEl.className = 'saved-pl-resume';
@@ -7488,7 +8124,43 @@
           actions.append(exportsGroup, delBtn);
           card.append(top, resumeEl, actions);
 
-          card.addEventListener('click', () => openSavedPlaylist(pl.id));
+          card.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('button, input')) return;
+            startPointerSavedPlReorder(e, card, pl);
+          });
+
+          card.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openSavedPlContextMenu(pl.id, e.clientX, e.clientY);
+          });
+
+          card.addEventListener('click', (e) => {
+            if (e.target.closest('button, input')) return;
+            if (Date.now() - savedPlDragSuppressClickUntil < 260) return;
+            openSavedPlaylist(pl.id);
+          });
+
+          card.addEventListener('keydown', (e) => {
+            if (e.target.closest('input')) return;
+            if (e.key === 'Enter') {
+              openSavedPlaylist(pl.id);
+            } else if (e.key === 'Delete') {
+              e.preventDefault();
+              e.stopPropagation();
+              deleteSavedPlaylist(pl.id);
+            } else if (e.altKey && e.key === 'ArrowUp') {
+              e.preventDefault();
+              e.stopPropagation();
+              moveSavedPlaylistRelative(pl.id, 'up', true);
+            } else if (e.altKey && e.key === 'ArrowDown') {
+              e.preventDefault();
+              e.stopPropagation();
+              moveSavedPlaylistRelative(pl.id, 'down', true);
+            }
+          });
+
           frag.appendChild(card);
         }
 
@@ -7623,19 +8295,29 @@
               : 0;
         const cleanTime = Math.floor(currentTime * 10) / 10;
 
-        // Also update the active Saved Playlist's own per-playlist resume state & manual order!
-        if (state.activeSavedPlaylistId && track) {
+        // Merge latest savedPlaylists from storage so multi-tab edits never overwrite each other!
+        const storedPlaylists = StateStore.loadSavedPlaylists();
+        if (Array.isArray(storedPlaylists) && storedPlaylists.length > 0) {
+          state.savedPlaylists = storedPlaylists;
+        }
+
+        // Update ONLY the active Saved Playlist's own per-playlist resume state & manual order
+        if (state.activeSavedPlaylistId && state.allTracks.length > 0) {
           const pl = state.savedPlaylists.find((p) => p.id === state.activeSavedPlaylistId);
           if (pl) {
-            pl.lastTrackKey = track.key;
-            pl.lastTrackName = track.name;
-            pl.lastTime = cleanTime;
+            if (track) {
+              pl.lastTrackKey = track.key;
+              pl.lastTrackName = track.name;
+              pl.lastTime = cleanTime;
+            }
             pl.playlistMode = state.playlistMode;
             if (state.sortMode === 'custom') {
-              pl.trackKeys = state.allTracks.map((tr) => tr.key);
+              applyTracksSnapshotToSavedEntry(pl, state.allTracks);
             }
             pl.updatedAt = Date.now();
             if (state.sidebarTab === 'saved') renderSavedPlaylists();
+          } else {
+            state.activeSavedPlaylistId = null;
           }
         }
 
@@ -7787,11 +8469,11 @@
               showNotice(`No supported audio or video files were found in "${res.folderName}".`, true);
               return;
             }
-            state.nativeFolderPath = res.folderPath;
             state.currentDirHandle = null;
-            state.activeSavedPlaylistId = null;
             await applyLoadedTracks(tracks, subMap, res.folderName, 'electron', {
-              restoreSavedPosition: true, autoPlay: autoPlayOnLoad
+              restoreSavedPosition: true,
+              autoPlay: autoPlayOnLoad,
+              nativeFolderPath: res.folderPath
             });
             return;
           } catch (err) {
@@ -7814,7 +8496,6 @@
 
         try {
           const dirHandle = await pickerFn({ id: 'aaz-media-folder', mode: 'read' });
-          state.activeSavedPlaylistId = null;
           await loadFromDirectoryHandle(dirHandle, {
             saveHandle: true, restoreSavedPosition: true, autoPlay: autoPlayOnLoad
           });
@@ -7842,10 +8523,8 @@
           if (!res.entries?.length) return;
           const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
           if (tracks.length === 0) return;
-          state.nativeFolderPath = '';
-          state.activeSavedPlaylistId = null;
           await applyLoadedTracks(tracks, subMap, t('currentQueue'), 'electron', {
-            restoreSavedPosition: true, autoPlay: false
+            restoreSavedPosition: true, autoPlay: false, nativeFolderPath: ''
           });
           return;
         }
@@ -7867,7 +8546,7 @@
           await HandleStore.putHandle(IDB_LAST_DIR_KEY, dirHandle);
           state.savedDirHandle = dirHandle;
         }
-        await applyLoadedTracks(tracks, subMap, dirHandle.name, 'fsa', { restoreSavedPosition, autoPlay });
+        await applyLoadedTracks(tracks, subMap, dirHandle.name, 'fsa', { restoreSavedPosition, autoPlay, nativeFolderPath: '' });
         return true;
       }
 
@@ -7884,9 +8563,8 @@
           const res = await desktopBridge.readFolder(saved.nativeFolderPath);
           if (res && res.entries?.length) {
             const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
-            state.nativeFolderPath = res.folderPath;
             await applyLoadedTracks(tracks, subMap, res.folderName, 'electron', {
-              restoreSavedPosition: true, autoPlay: true
+              restoreSavedPosition: true, autoPlay: true, nativeFolderPath: res.folderPath
             });
             return;
           }
@@ -7916,12 +8594,21 @@
       }
 
       async function applyLoadedTracks(tracks, subMap, folderName, sourceMode, options = {}) {
-        const { restoreSavedPosition = true, autoPlay = false } = options;
+        const {
+          restoreSavedPosition = true,
+          autoPlay = false,
+          keepActiveSavedPlaylist = false,
+          nativeFolderPath = ''
+        } = options;
         stopAutosaveTimer();
         el.media.pause();
         revokeMediaUrls();
         clearABLoop();
 
+        if (!keepActiveSavedPlaylist) {
+          state.activeSavedPlaylistId = null;
+        }
+        state.nativeFolderPath = typeof nativeFolderPath === 'string' ? nativeFolderPath : '';
         state.allTracks = tracks;
         state.subtitlesByBaseKey = subMap || new Map();
         state.folderName = folderName;
@@ -8487,6 +9174,7 @@
 
           if (autoPlay) {
             try {
+              await ensureAudioOutputBound();
               if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
               await el.media.play();
             } catch (playErr) {
@@ -8507,6 +9195,7 @@
         }
         if (el.media.paused) {
           try {
+            await ensureAudioOutputBound();
             if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
             await el.media.play();
           } catch (err) {
@@ -9139,6 +9828,8 @@
         state.subtitlesByBaseKey.clear();
         state.currentKey = '';
         state.folderName = '';
+        state.nativeFolderPath = '';
+        state.currentDirHandle = null;
         state.activeSavedPlaylistId = null;
         state.sourceMode = 'none';
         state.pendingSeekTime = null;
@@ -9613,6 +10304,11 @@
             state.subtitlesByBaseKey.set(k, v);
           }
         }
+        if (added > 0 && state.nativeFolderPath) {
+          const normFolder = normalizeFsPath(state.nativeFolderPath).replace(/\\+$/, '') + '\\';
+          const stillPureFolder = state.allTracks.every((tr) => tr.fullPath && normalizeFsPath(tr.fullPath).startsWith(normFolder));
+          if (!stillPureFolder) state.nativeFolderPath = '';
+        }
         if (!state.folderName) state.folderName = t('currentQueue');
         el.resumeBanner.hidden = true;
         updateModeCounts();
@@ -9673,8 +10369,10 @@
 
       function closePlaylistMenus() {
         if (el.playlistContextMenu) el.playlistContextMenu.hidden = true;
+        if (el.savedPlContextMenu) el.savedPlContextMenu.hidden = true;
         if (el.playlistToolsMenu) el.playlistToolsMenu.hidden = true;
         state.activeContextTrackKey = '';
+        state.activeContextSavedPlId = '';
       }
 
       function openPlaylistContextMenu(trackKey, clientX, clientY) {
@@ -10232,7 +10930,7 @@
           return;
         }
         e.preventDefault();
-        if (e.target.closest('#aazContextMenu, #playlistContextMenu, .track-row')) return;
+        if (e.target.closest('#aazContextMenu, #playlistContextMenu, #savedPlContextMenu, .track-row, .saved-pl-card')) return;
         if (e.target.closest('#mediaStage')) {
           openStageContextMenu(e.clientX, e.clientY);
         } else {
@@ -10716,6 +11414,7 @@
          14C. Per-Window / Per-Tab Audio Output Routing (Speakers / Hands-Free)
          ======================================================================= */
       const SESSION_SINK_KEY = `aaz_tab_audio_sink_${CURRENT_TAB_ID || 'main'}`;
+      const LOCAL_SINK_KEY = 'aaz_audio_output_pref_v1';
 
       function openNewPlayerWindow() {
         if (desktopBridge && desktopBridge.openNewWindow) {
@@ -10732,20 +11431,75 @@
         );
       }
 
+      function stripDefaultPrefix(label) {
+        return String(label || '').replace(/^(?:default|communications)\s*[-–—:]\s*/i, '').trim().toLowerCase();
+      }
+
+      // Resolve logical sink ID ('' = System Default) to the concrete Windows hardware deviceId!
+      // Fixes WebView2/Chromium silent virtual '' default sink on Windows multi-output setups.
+      function resolveEffectiveSinkId(preferredId = state.audioSinkId) {
+        const logical = !preferredId || preferredId === 'default' ? '' : preferredId;
+        if (logical) {
+          const exact = state.audioDevices.find((d) => d.deviceId === logical);
+          if (exact) return exact.deviceId;
+          if (state.audioSinkLabel) {
+            const byLabel = state.audioDevices.find((d) => d.label && d.label === state.audioSinkLabel);
+            if (byLabel) return byLabel.deviceId;
+          }
+          return logical;
+        }
+        if (state.defaultAudioDevice && state.defaultAudioDevice.deviceId) {
+          return state.defaultAudioDevice.deviceId;
+        }
+        return '';
+      }
+
+      async function ensureAudioOutputBound() {
+        if (!canSwitchAudioOutput()) return;
+        if (!state.audioDevicesLoaded) {
+          await refreshAudioOutputDevices();
+        }
+        const effectiveId = resolveEffectiveSinkId(state.audioSinkId);
+        if (effectiveId) {
+          if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
+            if (AudioStudio.ctx.sinkId !== effectiveId) {
+              try { await AudioStudio.ctx.setSinkId(effectiveId); } catch {}
+            }
+          } else if (typeof el.media.setSinkId === 'function') {
+            if (el.media.sinkId !== effectiveId) {
+              try { await el.media.setSinkId(effectiveId); } catch {}
+            }
+          }
+        }
+        if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
+          try { await AudioStudio.ctx.resume(); } catch {}
+        }
+      }
+
       function updateAudioOutputButtonUI() {
         const isCustom = Boolean(state.audioSinkId && state.audioSinkId !== 'default');
         el.audioOutputBtn.classList.toggle('is-active', isCustom);
+        const defaultName = state.defaultAudioDevice?.label
+          ? `${t('outputDefault')} (${state.defaultAudioDevice.label})`
+          : t('outputDefault');
         el.audioOutputBtn.title = isCustom && state.audioSinkLabel
           ? `${t('outputTitle')}: ${state.audioSinkLabel}`
-          : `${t('outputTitle')}: ${t('outputDefault')}`;
+          : `${t('outputTitle')}: ${defaultName}`;
       }
 
-      async function applyAudioOutputDevice(deviceId, label = '', silent = false) {
-        const targetId = !deviceId || deviceId === 'default' ? '' : deviceId;
+      async function applyAudioOutputDevice(deviceId, label = '', silent = false, persistGlobal = true) {
+        const logicalId = !deviceId || deviceId === 'default' ? '' : deviceId;
         if (!canSwitchAudioOutput()) {
           if (!silent) showNotice(t('outputUnsupported'), true);
           return false;
         }
+
+        if (!state.audioDevicesLoaded) {
+          await refreshAudioOutputDevices();
+        }
+
+        const effectiveId = resolveEffectiveSinkId(logicalId);
+        const applyTarget = effectiveId || logicalId;
 
         let ctxApplied = false;
         let mediaApplied = false;
@@ -10754,22 +11508,36 @@
         // 1. Primary path when Web Audio EQ/Visualizer is active: route AudioContext sink
         if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
           try {
-            await AudioStudio.ctx.setSinkId(targetId);
+            await AudioStudio.ctx.setSinkId(applyTarget);
             ctxApplied = true;
           } catch (err) {
-            lastErr = err;
+            if (applyTarget !== logicalId) {
+              try {
+                await AudioStudio.ctx.setSinkId(logicalId);
+                ctxApplied = true;
+              } catch (err2) {
+                lastErr = err2;
+              }
+            } else {
+              lastErr = err;
+            }
           }
         }
 
-        // 2. Media element sink: primary before AudioContext init; best-effort silent fallback afterwards
-        // (Once <video> is captured by AudioContext.createMediaElementSource, Chromium often throws AbortError
-        // on el.media.setSinkId even though AudioContext.setSinkId already switched the live audio channel!)
+        // 2. Media element sink: primary before AudioContext init; best-effort fallback afterwards
         if (typeof el.media.setSinkId === 'function') {
           try {
-            await el.media.setSinkId(targetId);
+            await el.media.setSinkId(applyTarget);
             mediaApplied = true;
           } catch (err) {
-            if (!ctxApplied && !AudioStudio.initialized) {
+            if (applyTarget !== logicalId) {
+              try {
+                await el.media.setSinkId(logicalId);
+                mediaApplied = true;
+              } catch (err2) {
+                if (!ctxApplied && !AudioStudio.initialized) lastErr = err2;
+              }
+            } else if (!ctxApplied && !AudioStudio.initialized) {
               lastErr = err;
             }
           }
@@ -10781,20 +11549,23 @@
           return false;
         }
 
-        state.audioSinkId = targetId;
-        state.audioSinkLabel = label || (targetId ? targetId : t('outputDefault'));
-        try {
-          sessionStorage.setItem(SESSION_SINK_KEY, JSON.stringify({
-            id: state.audioSinkId,
-            label: state.audioSinkLabel
-          }));
-        } catch {}
+        state.audioSinkId = logicalId;
+        state.audioSinkLabel = logicalId ? (label || logicalId) : '';
+        const savedPayload = JSON.stringify({
+          id: state.audioSinkId,
+          label: state.audioSinkLabel
+        });
+        try { sessionStorage.setItem(SESSION_SINK_KEY, savedPayload); } catch {}
+        if (persistGlobal) {
+          try { localStorage.setItem(LOCAL_SINK_KEY, savedPayload); } catch {}
+        }
 
         updateAudioOutputButtonUI();
         renderAudioOutputList();
         notifyShellTabState();
         if (!silent) {
-          showNotice(t('outputSwitched', { name: state.audioSinkLabel || t('outputDefault') }));
+          const shownName = state.audioSinkLabel || state.defaultAudioDevice?.label || t('outputDefault');
+          showNotice(t('outputSwitched', { name: shownName }));
         }
         return true;
       }
@@ -10802,25 +11573,53 @@
       async function refreshAudioOutputDevices() {
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
           state.audioDevices = [];
+          state.defaultAudioDevice = null;
+          state.audioDevicesLoaded = true;
           renderAudioOutputList();
           return;
         }
         try {
           const all = await navigator.mediaDevices.enumerateDevices();
           const outputs = all.filter((d) => d.kind === 'audiooutput');
+          const defaultEntry = outputs.find((d) => d.deviceId === 'default') || null;
           const seen = new Set();
-          state.audioDevices = outputs.filter((d) => {
+          const concrete = outputs.filter((d) => {
             if (!d.deviceId || d.deviceId === 'default' || d.deviceId === 'communications') {
-              if (d.deviceId === 'communications' && d.label) return true;
               return false;
             }
             if (seen.has(d.deviceId)) return false;
             seen.add(d.deviceId);
             return true;
           });
+
+          // Resolve the REAL concrete hardware device backing Windows 'default'
+          let matchedDefault = null;
+          if (defaultEntry) {
+            if (defaultEntry.groupId) {
+              matchedDefault = concrete.find((d) => d.groupId && d.groupId === defaultEntry.groupId) || null;
+            }
+            if (!matchedDefault && defaultEntry.label) {
+              const targetLbl = stripDefaultPrefix(defaultEntry.label);
+              if (targetLbl) {
+                matchedDefault = concrete.find((d) => d.label && d.label.trim().toLowerCase() === targetLbl) ||
+                  concrete.find((d) => d.label && d.label.trim().toLowerCase().includes(targetLbl)) ||
+                  null;
+              }
+            }
+          }
+          if (!matchedDefault && concrete.length > 0) {
+            matchedDefault = concrete[0];
+          }
+          state.defaultAudioDevice = matchedDefault;
+
+          const comms = outputs.find((d) => d.deviceId === 'communications' && d.label);
+          state.audioDevices = comms ? [...concrete, comms] : concrete;
         } catch {
           state.audioDevices = [];
+          state.defaultAudioDevice = null;
         }
+        state.audioDevicesLoaded = true;
+        updateAudioOutputButtonUI();
         renderAudioOutputList();
       }
 
@@ -10846,13 +11645,16 @@
 
           btn.append(nameSpan, checkSpan);
           btn.addEventListener('click', async () => {
-            await applyAudioOutputDevice(id, label, false);
+            await applyAudioOutputDevice(id, id ? label : '', false, true);
             toggleAudioOutputPopover(false);
           });
           return btn;
         };
 
-        el.audioOutputList.appendChild(makeRow('', t('outputDefault')));
+        const defaultRowLabel = state.defaultAudioDevice?.label
+          ? `${t('outputDefault')} — ${state.defaultAudioDevice.label}`
+          : t('outputDefault');
+        el.audioOutputList.appendChild(makeRow('', defaultRowLabel));
 
         let hasMaskedLabels = false;
         state.audioDevices.forEach((dev, idx) => {
@@ -11087,8 +11889,11 @@
         if (!el.audioOutputPopover.hidden) toggleAudioOutputPopover(false);
       });
       if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
-        navigator.mediaDevices.addEventListener('devicechange', () => {
-          refreshAudioOutputDevices();
+        navigator.mediaDevices.addEventListener('devicechange', async () => {
+          await refreshAudioOutputDevices();
+          if (!state.audioSinkId) {
+            await ensureAudioOutputBound();
+          }
         });
       }
 
@@ -11275,6 +12080,21 @@
           executePlaylistContextCommand(btn.dataset.plcmd);
         });
       }
+
+      if (el.savedPlContextMenu) {
+        el.savedPlContextMenu.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-splcmd]');
+          if (!btn) return;
+          e.stopPropagation();
+          executeSavedPlContextCommand(btn.dataset.splcmd);
+        });
+      }
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY) {
+          syncSavedPlaylistsFromStorage();
+        }
+      });
 
       // Pin on Top (Electron .exe)
       el.pinWindowBtn.addEventListener('click', async () => {
@@ -11699,7 +12519,8 @@
           if (saved.progressByKey && typeof saved.progressByKey === 'object') state.progressByKey = saved.progressByKey;
           if (saved.bookmarksByKey && typeof saved.bookmarksByKey === 'object') state.bookmarksByKey = saved.bookmarksByKey;
           if (Array.isArray(saved.savedPlaylists)) state.savedPlaylists = saved.savedPlaylists;
-          if (typeof saved.nativeFolderPath === 'string') state.nativeFolderPath = saved.nativeFolderPath;
+          // Do NOT pre-populate state.nativeFolderPath before a folder is actually loaded into this tab!
+          state.nativeFolderPath = '';
         } else {
           el.media.volume = 0.85;
           setPlaybackRate(1, false);
@@ -11714,11 +12535,21 @@
             return;
           }
           if (!inspected.entries?.length) return;
+          // Support dragging a single .srt / .vtt subtitle directly onto an active video!
+          if (inspected.entries.length === 1 && inspected.entries[0].kind === 'subtitle' && inspected.entries[0].fullPath) {
+            const subText = await desktopBridge.readTextFile(inspected.entries[0].fullPath);
+            if (subText) {
+              attachSubtitleVttText(subText, inspected.entries[0].name);
+              showNotice(t('subAutoLoaded', { name: inspected.entries[0].name }));
+              return;
+            }
+          }
           const { tracks, subMap } = buildTracksFromElectronEntries(inspected.entries);
           if (tracks.length === 0) return;
-          if (inspected.isDirectory && inspected.folderPath) state.nativeFolderPath = inspected.folderPath;
           await applyLoadedTracks(tracks, subMap, inspected.folderName || t('currentQueue'), 'electron', {
-            restoreSavedPosition: inspected.isDirectory, autoPlay: true
+            restoreSavedPosition: inspected.isDirectory,
+            autoPlay: true,
+            nativeFolderPath: inspected.isDirectory ? (inspected.folderPath || '') : ''
           });
         }
 
@@ -11787,23 +12618,29 @@
           }
         } catch {}
 
-        // Restore per-tab audio output channel if set for this tab session; auto-fallback to OS Default if unavailable
+        // Enumerate real hardware audio outputs FIRST, then bind preferred output OR concrete Windows Default!
+        await refreshAudioOutputDevices();
+        let restoredAudioSink = false;
         try {
-          const savedSinkRaw = sessionStorage.getItem(SESSION_SINK_KEY);
-          if (savedSinkRaw) {
-            const parsedSink = JSON.parse(savedSinkRaw);
+          const rawSink = sessionStorage.getItem(SESSION_SINK_KEY) || localStorage.getItem(LOCAL_SINK_KEY);
+          if (rawSink) {
+            const parsedSink = JSON.parse(rawSink);
             if (parsedSink && typeof parsedSink.id === 'string' && parsedSink.id) {
-              const ok = await applyAudioOutputDevice(parsedSink.id, parsedSink.label || '', true);
-              if (!ok) {
-                state.audioSinkId = '';
-                state.audioSinkLabel = '';
-                sessionStorage.removeItem(SESSION_SINK_KEY);
+              const matched = state.audioDevices.find((d) => d.deviceId === parsedSink.id) ||
+                (parsedSink.label ? state.audioDevices.find((d) => d.label && d.label === parsedSink.label) : null);
+              if (matched) {
+                restoredAudioSink = await applyAudioOutputDevice(matched.deviceId, matched.label || parsedSink.label || '', true, false);
               }
             }
           }
         } catch {}
+        if (!restoredAudioSink) {
+          state.audioSinkId = '';
+          state.audioSinkLabel = '';
+          await ensureAudioOutputBound();
+        }
         updateAudioOutputButtonUI();
-        refreshAudioOutputDevices();
+        renderAudioOutputList();
 
         el.toggleSidebarBtn.classList.add('is-active');
         updateModeTabsUI();

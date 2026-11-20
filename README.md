@@ -2,7 +2,7 @@
   <img src="desktop/assets/icon.png" alt="AAZ Player" width="96" height="96" />
   <h1>AAZ Player</h1>
   <p>
-    <img src="https://img.shields.io/badge/v1.4.1-3dc479?style=for-the-badge" alt="v1.4.1" />
+    <img src="https://img.shields.io/badge/v1.4.2-3dc479?style=for-the-badge" alt="v1.4.2" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
     <img src="https://img.shields.io/badge/Rust%20%2B%20Tauri%20v2-1f6f46?style=for-the-badge&logo=rust" alt="Rust + Tauri v2" />
     <img src="https://img.shields.io/badge/MIT-2ea05f?style=for-the-badge" alt="MIT" />

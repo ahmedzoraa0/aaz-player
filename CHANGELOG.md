@@ -4,6 +4,16 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.4.2] - 2026-06-03
+
+### Fixed & Improved
+- **System Default Audio Output (Windows WebView2)**: Automatically resolves Windows' concrete hardware output device ID backing `System Default Output` (matching `groupId`/label) instead of leaving WebView2 on a silent virtual `""` sink, re-binds live on `devicechange`, and persists the user's chosen audio output device across restarts.
+- **Saved Playlists Mix-Up Fix**: Fixed stale `nativeFolderPath` leaking across sessions/drops/imports/tabs and prioritized exact saved file paths (`nativeFilePaths` / `trackMeta.fullPath`) when opening Saved Playlists — also auto-healing previously affected saved playlists and preventing multi-tab `localStorage` overwrites.
+- **Saved Playlists Full Management**: Added visible Delete icon button on every card (with 1-click Undo), Pointer-Events drag-and-drop reordering, and a right-click context menu (Open, Inline Rename, Move Top/Up/Down/Bottom, Export `.XSPF`/`.M3U8`/`.PLS`, Delete).
+- **Native Tauri v2 Drag & Drop**: Wired `tauri://drag-drop` so files and folders dragged from Windows Explorer always carry real disk paths.
+
+---
+
 ## [1.4.1] - 2026-06-02
 
 ### Fixed & Improved
