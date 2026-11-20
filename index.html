@@ -2033,6 +2033,122 @@
       background-color: var(--bg-surface-hover);
     }
 
+    /* Per-Tab / Per-Window Audio Output Channel Picker Popover */
+    .output-picker-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .output-popover {
+      position: absolute;
+      bottom: calc(100% + 10px);
+      right: 0;
+      width: 286px;
+      max-height: 310px;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-panel);
+      background-color: var(--dropdown-bg);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.34);
+      z-index: 80;
+      overflow: hidden;
+    }
+
+    :root:not([data-theme="light"]) .output-popover {
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.65);
+    }
+
+    html[dir="rtl"] .output-popover {
+      right: auto;
+      left: 0;
+    }
+
+    .output-popover[hidden] {
+      display: none;
+    }
+
+    .output-popover-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    .output-popover-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .output-popover-sub {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .output-device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px;
+      overflow-y: auto;
+      max-height: 200px;
+    }
+
+    .output-device-item {
+      width: 100%;
+      padding: 7px 9px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: start;
+      white-space: normal;
+      line-height: 1.3;
+    }
+
+    .output-device-item:hover {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-primary);
+    }
+
+    .output-device-item.is-active {
+      background-color: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .output-device-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .output-check {
+      font-weight: 800;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .output-popover-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 7px 8px;
+      border-top: 1px solid var(--border-hairline);
+      background-color: var(--bg-inset);
+    }
+
     /* =========================================================================
        Narrow / Compact Window Responsive Mode
        ========================================================================= */
@@ -2129,6 +2245,7 @@
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="open-folder"><span class="menu-action-label" data-i18n="cmdOpenFolder">Open Folder...</span><span class="menu-shortcut">Ctrl+O</span></button>
               <button type="button" class="menu-action" data-cmd="open-files"><span class="menu-action-label" data-i18n="cmdOpenFiles">Open Files...</span><span class="menu-shortcut">Ctrl+Shift+O</span></button>
+              <button type="button" class="menu-action" data-cmd="new-window"><span class="menu-action-label" data-i18n="cmdNewWindow">New Window</span><span class="menu-shortcut">Ctrl+Shift+N</span></button>
               <button type="button" class="menu-action" data-cmd="resume-session"><span class="menu-action-label" data-i18n="cmdResume">Resume Last Session</span></button>
               <div class="menu-sep"></div>
               <button type="button" class="menu-action" data-cmd="save-to-library"><span class="menu-action-label" data-i18n="cmdSaveToLibrary">Save Playlist to Library...</span><span class="menu-shortcut">Ctrl+S</span></button>
@@ -2175,6 +2292,7 @@
           <div class="menu-item">
             <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false" data-i18n="menuAudio">Audio</button>
             <div class="menu-dropdown" role="menu">
+              <button type="button" class="menu-action" data-cmd="open-audio-output"><span class="menu-action-label" data-i18n="cmdAudioOutput">Audio Output Device...</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-eq"><span class="menu-action-label" data-i18n="cmdEq">Studio 5-Band Equalizer</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-mute"><span class="menu-action-label" data-i18n="cmdMute">Mute / Unmute</span><span class="menu-shortcut">M</span></button>
               <div class="menu-sep"></div>
@@ -2221,7 +2339,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.1.0</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.1.1</div>
             </div>
           </div>
         </nav>
@@ -2633,6 +2751,35 @@
             </svg>
           </button>
 
+          <!-- Per-Window / Per-Tab Audio Output Device Selector -->
+          <div class="output-picker-wrap">
+            <button type="button" class="btn-icon" id="audioOutputBtn" title="Audio Output Device (Per Window / Tab)" aria-label="Select audio output device" aria-haspopup="true" aria-expanded="false">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/>
+                <path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+              </svg>
+            </button>
+
+            <div class="output-popover" id="audioOutputPopover" hidden role="dialog" aria-label="Audio Output Device">
+              <div class="output-popover-header">
+                <div>
+                  <div class="output-popover-title" data-i18n="outputTitle">Audio Output Channel</div>
+                  <div class="output-popover-sub" data-i18n="outputSub">Independent for this window / tab</div>
+                </div>
+                <button type="button" class="btn-icon" id="refreshOutputsBtn" style="width:26px;height:26px" title="Refresh devices" aria-label="Refresh audio devices">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="output-device-list" id="audioOutputList" role="listbox"></div>
+              <div class="output-popover-footer" id="audioOutputFooter" hidden>
+                <button type="button" class="btn" id="chooseOutputNativeBtn" style="height:26px;font-size:11px;width:100%" data-i18n="outputUnlock">Select / Show Device Names...</button>
+              </div>
+            </div>
+          </div>
+
           <div class="volume-group">
             <button type="button" class="btn-icon" id="muteBtn" style="width:30px;height:30px" title="Mute / Unmute (M)" aria-label="Mute">
               <svg id="volHighIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -2672,6 +2819,7 @@
         <span class="shortcut-desc" data-i18n="scStar">Star / Favorite current track</span><span class="shortcut-key">S</span>
         <span class="shortcut-desc" data-i18n="scOpen">Open local folder</span><span class="shortcut-key">Ctrl + O</span>
         <span class="shortcut-desc" data-i18n="scSavePl">Save playlist to Library</span><span class="shortcut-key">Ctrl + S</span>
+        <span class="shortcut-desc" data-i18n="cmdNewWindow">New Window</span><span class="shortcut-key">Ctrl + Shift + N</span>
       </div>
     </div>
   </div>
@@ -2853,6 +3001,12 @@
         sleepBadge: document.getElementById('sleepBadge'),
         speedCycleBtn: document.getElementById('speedCycleBtn'),
         addBookmarkBtn: document.getElementById('addBookmarkBtn'),
+        audioOutputBtn: document.getElementById('audioOutputBtn'),
+        audioOutputPopover: document.getElementById('audioOutputPopover'),
+        audioOutputList: document.getElementById('audioOutputList'),
+        audioOutputFooter: document.getElementById('audioOutputFooter'),
+        refreshOutputsBtn: document.getElementById('refreshOutputsBtn'),
+        chooseOutputNativeBtn: document.getElementById('chooseOutputNativeBtn'),
         muteBtn: document.getElementById('muteBtn'),
         volHighIcon: document.getElementById('volHighIcon'),
         volMuteIcon: document.getElementById('volMuteIcon'),
@@ -2917,12 +3071,15 @@
         // Fullscreen 2-Second Auto-Hide Timer
         fsIdleTimer: null,
 
-        // Theme, Language & Visualizer Style
+        // Theme, Language, Visualizer & Per-Window Audio Output Channel
         theme: 'dark',                // 'dark' | 'light'
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
-        appVersion: '1.1.0',
+        appVersion: '1.1.1',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
+        audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-window/tab via sessionStorage)
+        audioSinkLabel: '',
+        audioDevices: [],
 
         // Sleep Timer
         sleepEndAt: null,
@@ -3059,7 +3216,18 @@
           updateDevHint: 'Auto-updates work inside the installed Windows AAZ Player app.',
           updateBtnDownload: 'Download',
           updateBtnRestart: 'Restart & Install',
-          updateError: 'Could not check for updates right now.'
+          updateError: 'Could not check for updates right now.',
+          cmdNewWindow: 'New Window',
+          cmdAudioOutput: 'Audio Output Device...',
+          outputTitle: 'Audio Output Channel',
+          outputSub: 'Independent for this window / tab',
+          outputDefault: 'System Default Output',
+          outputUnlock: 'Select / Show Device Names...',
+          outputUnsupported: 'Audio output switching requires Chrome, Edge, or the Windows AAZ Player app.',
+          outputSwitched: 'Audio output for this window: {name}',
+          outputFailed: 'Could not switch audio output device.',
+          outputNoExtra: 'No extra output devices detected.',
+          newWindowBrowserHint: 'In browser mode, open another tab of AAZ Player to assign a separate audio output.'
         },
         ar: {
           dropTitle: 'أفلت ملفات الصوت أو الفيديو أو المجلد أو قائمة التشغيل هنا',
@@ -3187,7 +3355,18 @@
           updateDevHint: 'تعمل التحديثات التلقائية داخل نسخة برنامج ويندوز المثبتة.',
           updateBtnDownload: 'تحميل التحديث',
           updateBtnRestart: 'إعادة التشغيل والتثبيت',
-          updateError: 'تعذر البحث عن التحديثات حاليا.'
+          updateError: 'تعذر البحث عن التحديثات حاليا.',
+          cmdNewWindow: 'فتح نافذة جديدة',
+          cmdAudioOutput: 'مخرج الصوت (سماعة / هاند فري)...',
+          outputTitle: 'قناة إخراج الصوت',
+          outputSub: 'مستقلة لهذه النافذة أو التبويب فقط',
+          outputDefault: 'مخرج الصوت الافتراضي للنظام',
+          outputUnlock: 'اختيار أو إظهار أسماء السماعات...',
+          outputUnsupported: 'تغيير مخرج الصوت يتطلب متصفح كروم أو إيدج أو برنامج ويندوز.',
+          outputSwitched: 'تم تحويل صوت هذه النافذة إلى: {name}',
+          outputFailed: 'تعذر تحويل مخرج الصوت لهذا الجهاز.',
+          outputNoExtra: 'لم يتم العثور على مخارج صوت إضافية.',
+          newWindowBrowserHint: 'في المتصفح افتح تبويبا جديدا من البرنامج واختر مخرج صوت مختلفا له.'
         }
       };
 
@@ -3243,6 +3422,8 @@
         updateShuffleRepeatUI();
         renderSavedPlaylists();
         refreshResumeBanner();
+        updateAudioOutputButtonUI();
+        renderAudioOutputList();
       }
 
       function setVizMode(mode, persist = true) {
@@ -3319,6 +3500,9 @@
             this.analyser.connect(this.ctx.destination);
 
             this.initialized = true;
+            if (state.audioSinkId && typeof this.ctx.setSinkId === 'function') {
+              this.ctx.setSinkId(state.audioSinkId).catch(() => {});
+            }
             if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
             return true;
           } catch {
@@ -5673,6 +5857,7 @@
         switch (cmd) {
           case 'open-folder': openFolderWithPersistence(false); break;
           case 'open-files': openFilesPicker(); break;
+          case 'new-window': openNewPlayerWindow(); break;
           case 'resume-session': handleResumeLastSession(); break;
           case 'save-to-library': openSavePlaylistPrompt(); break;
           case 'import-playlist': el.playlistImportInput.value = ''; el.playlistImportInput.click(); break;
@@ -5692,6 +5877,7 @@
           }
           case 'ab-loop': cycleABLoop(); break;
           case 'add-bookmark': addBookmarkAtCurrentTime(); break;
+          case 'open-audio-output': toggleAudioOutputPopover(true); break;
           case 'toggle-eq':
             el.eqDrawer.hidden = !el.eqDrawer.hidden;
             el.eqToggleBtn.setAttribute('aria-expanded', String(!el.eqDrawer.hidden));
@@ -5778,6 +5964,184 @@
           showNotice(t('updateDevHint'));
         } else if (res?.status === 'error') {
           showNotice(res.message ? `${t('updateError')} (${res.message})` : t('updateError'), true);
+        }
+      }
+
+      /* =======================================================================
+         14C. Per-Window / Per-Tab Audio Output Routing (Speakers / Hands-Free)
+         ======================================================================= */
+      const SESSION_SINK_KEY = 'aaz_window_audio_sink_v1';
+
+      function openNewPlayerWindow() {
+        if (desktopBridge && desktopBridge.openNewWindow) {
+          desktopBridge.openNewWindow();
+          return;
+        }
+        showNotice(t('newWindowBrowserHint'));
+      }
+
+      function canSwitchAudioOutput() {
+        return Boolean(
+          (typeof el.media.setSinkId === 'function') ||
+          (window.AudioContext && typeof AudioContext.prototype.setSinkId === 'function')
+        );
+      }
+
+      function updateAudioOutputButtonUI() {
+        const isCustom = Boolean(state.audioSinkId && state.audioSinkId !== 'default');
+        el.audioOutputBtn.classList.toggle('is-active', isCustom);
+        el.audioOutputBtn.title = isCustom && state.audioSinkLabel
+          ? `${t('outputTitle')}: ${state.audioSinkLabel}`
+          : `${t('outputTitle')}: ${t('outputDefault')}`;
+      }
+
+      async function applyAudioOutputDevice(deviceId, label = '', silent = false) {
+        const targetId = !deviceId || deviceId === 'default' ? '' : deviceId;
+        if (!canSwitchAudioOutput()) {
+          if (!silent) showNotice(t('outputUnsupported'), true);
+          return false;
+        }
+
+        let applied = false;
+        try {
+          if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
+            await AudioStudio.ctx.setSinkId(targetId);
+            applied = true;
+          }
+          if (typeof el.media.setSinkId === 'function') {
+            await el.media.setSinkId(targetId);
+            applied = true;
+          }
+        } catch (err) {
+          if (!silent) showNotice(`${t('outputFailed')} (${err?.message || ''})`, true);
+          return false;
+        }
+
+        if (!applied && !AudioStudio.initialized) {
+          // Will apply automatically when AudioStudio.ensureInit() initializes AudioContext
+          applied = true;
+        }
+
+        state.audioSinkId = targetId;
+        state.audioSinkLabel = label || (targetId ? targetId : t('outputDefault'));
+        try {
+          sessionStorage.setItem(SESSION_SINK_KEY, JSON.stringify({
+            id: state.audioSinkId,
+            label: state.audioSinkLabel
+          }));
+        } catch {}
+
+        updateAudioOutputButtonUI();
+        renderAudioOutputList();
+        if (!silent) {
+          showNotice(t('outputSwitched', { name: state.audioSinkLabel || t('outputDefault') }));
+        }
+        return true;
+      }
+
+      async function refreshAudioOutputDevices() {
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
+          state.audioDevices = [];
+          renderAudioOutputList();
+          return;
+        }
+        try {
+          const all = await navigator.mediaDevices.enumerateDevices();
+          const outputs = all.filter((d) => d.kind === 'audiooutput');
+          const seen = new Set();
+          state.audioDevices = outputs.filter((d) => {
+            if (!d.deviceId || d.deviceId === 'default' || d.deviceId === 'communications') {
+              if (d.deviceId === 'communications' && d.label) return true;
+              return false;
+            }
+            if (seen.has(d.deviceId)) return false;
+            seen.add(d.deviceId);
+            return true;
+          });
+        } catch {
+          state.audioDevices = [];
+        }
+        renderAudioOutputList();
+      }
+
+      function renderAudioOutputList() {
+        el.audioOutputList.innerHTML = '';
+
+        const makeRow = (id, label) => {
+          const isCurrent = (id === '' && !state.audioSinkId) || (id !== '' && state.audioSinkId === id);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `output-device-item${isCurrent ? ' is-active' : ''}`;
+          btn.setAttribute('role', 'option');
+          btn.setAttribute('aria-selected', String(isCurrent));
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'output-device-name';
+          nameSpan.textContent = label;
+          nameSpan.title = label;
+
+          const checkSpan = document.createElement('span');
+          checkSpan.className = 'output-check';
+          checkSpan.textContent = isCurrent ? '✓' : '';
+
+          btn.append(nameSpan, checkSpan);
+          btn.addEventListener('click', async () => {
+            await applyAudioOutputDevice(id, label, false);
+            toggleAudioOutputPopover(false);
+          });
+          return btn;
+        };
+
+        el.audioOutputList.appendChild(makeRow('', t('outputDefault')));
+
+        let hasMaskedLabels = false;
+        state.audioDevices.forEach((dev, idx) => {
+          if (!dev.label) hasMaskedLabels = true;
+          const cleanLabel = dev.label || `${t('outputTitle')} ${idx + 1}`;
+          el.audioOutputList.appendChild(makeRow(dev.deviceId, cleanLabel));
+        });
+
+        // Show unlock/native picker button if browser hides labels or supports selectAudioOutput()
+        const supportsSelect = Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.selectAudioOutput === 'function');
+        el.audioOutputFooter.hidden = !(supportsSelect || hasMaskedLabels || state.audioDevices.length === 0);
+      }
+
+      async function toggleAudioOutputPopover(forceState) {
+        const willOpen = typeof forceState === 'boolean' ? forceState : el.audioOutputPopover.hidden;
+        if (willOpen) {
+          closeAllMenus();
+          await refreshAudioOutputDevices();
+          el.audioOutputPopover.hidden = false;
+          el.audioOutputBtn.setAttribute('aria-expanded', 'true');
+        } else {
+          el.audioOutputPopover.hidden = true;
+          el.audioOutputBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      async function unlockOrSelectAudioOutput() {
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.selectAudioOutput === 'function') {
+          try {
+            const dev = await navigator.mediaDevices.selectAudioOutput();
+            if (dev && dev.deviceId) {
+              await refreshAudioOutputDevices();
+              await applyAudioOutputDevice(dev.deviceId, dev.label || t('outputTitle'), false);
+              toggleAudioOutputPopover(false);
+              return;
+            }
+          } catch (err) {
+            if (err && err.name === 'NotAllowedError') return;
+          }
+        }
+        // Fallback: brief mic permission probe unlocks full Windows audiooutput device labels in Chromium
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach((tr) => tr.stop());
+            await refreshAudioOutputDevices();
+          } catch {
+            showNotice(t('outputNoExtra'));
+          }
         }
       }
 
@@ -5882,6 +6246,23 @@
       el.dismissUpdateBtn.addEventListener('click', () => {
         el.updateBanner.hidden = true;
       });
+
+      // Audio Output Channel Picker Events
+      el.audioOutputBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleAudioOutputPopover();
+      });
+      el.audioOutputPopover.addEventListener('click', (e) => e.stopPropagation());
+      el.refreshOutputsBtn.addEventListener('click', () => refreshAudioOutputDevices());
+      el.chooseOutputNativeBtn.addEventListener('click', () => unlockOrSelectAudioOutput());
+      document.addEventListener('click', () => {
+        if (!el.audioOutputPopover.hidden) toggleAudioOutputPopover(false);
+      });
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
+        navigator.mediaDevices.addEventListener('devicechange', () => {
+          refreshAudioOutputDevices();
+        });
+      }
 
       el.dirInput.addEventListener('change', async (e) => {
         const files = e.target.files;
@@ -6106,11 +6487,17 @@
 
         if (e.key === 'Escape') {
           closeAllMenus();
+          toggleAudioOutputPopover(false);
           el.shortcutsModal.hidden = true;
           el.savePlBar.hidden = true;
           return;
         }
 
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+          e.preventDefault();
+          openNewPlayerWindow();
+          return;
+        }
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
           e.preventDefault();
           if (e.shiftKey) openFilesPicker();
@@ -6308,6 +6695,19 @@
         applyTheme(savedTheme, false);
         setVizMode(savedViz, false);
         applyLanguage(savedLang, false);
+
+        // Restore per-window / per-tab audio output channel if set for this session
+        try {
+          const savedSinkRaw = sessionStorage.getItem(SESSION_SINK_KEY);
+          if (savedSinkRaw) {
+            const parsedSink = JSON.parse(savedSinkRaw);
+            if (parsedSink && typeof parsedSink.id === 'string' && parsedSink.id) {
+              await applyAudioOutputDevice(parsedSink.id, parsedSink.label || '', true);
+            }
+          }
+        } catch {}
+        updateAudioOutputButtonUI();
+        refreshAudioOutputDevices();
 
         el.toggleSidebarBtn.classList.add('is-active');
         updateModeTabsUI();

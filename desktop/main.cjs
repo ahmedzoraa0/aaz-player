@@ -1,5 +1,5 @@
 // @ts-nocheck
-const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
@@ -23,13 +23,25 @@ const VIDEO_EXTS = new Set([
 const SUBTITLE_EXTS = new Set(['srt', 'vtt']);
 const PLAYLIST_EXTS = new Set(['xspf', 'm3u8', 'm3u', 'pls']);
 
-let mainWindow = null;
+const windows = new Set();
 let pendingLaunchFiles = [];
 let manualUpdateCheck = false;
+let updateCheckScheduled = false;
+
+function getPrimaryWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed()) return focused;
+  for (const win of windows) {
+    if (!win.isDestroyed()) return win;
+  }
+  return null;
+}
 
 function sendUpdateStatus(payload) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('aaz:update-status', payload);
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('aaz:update-status', payload);
+    }
   }
 }
 
@@ -175,7 +187,7 @@ function extractSupportedPathsFromArgv(argv) {
     });
 }
 
-function createWindow() {
+function createWindow(isSecondary = false) {
   const saved = loadWindowState();
   const iconIco = path.join(__dirname, 'assets', 'icon.ico');
   const iconPng = path.join(__dirname, 'assets', 'icon.png');
@@ -185,11 +197,14 @@ function createWindow() {
       ? iconPng
       : undefined;
 
-  mainWindow = new BrowserWindow({
+  // Offset secondary windows slightly so both windows are immediately visible side-by-side
+  const offset = isSecondary ? (windows.size * 34) : 0;
+
+  const win = new BrowserWindow({
     width: saved.width,
     height: saved.height,
-    x: saved.x,
-    y: saved.y,
+    x: Number.isFinite(saved.x) ? saved.x + offset : undefined,
+    y: Number.isFinite(saved.y) ? saved.y + offset : undefined,
     minWidth: 460,
     minHeight: 540,
     title: 'AAZ Player',
@@ -204,33 +219,42 @@ function createWindow() {
     }
   });
 
+  windows.add(win);
   Menu.setApplicationMenu(null);
 
-  if (saved.isMaximized) {
-    mainWindow.maximize();
+  if (!isSecondary && saved.isMaximized) {
+    win.maximize();
   }
 
   const packagedHtml = path.join(__dirname, 'app', 'index.html');
   const devHtml = path.join(__dirname, '..', 'index.html');
   const targetHtml = fs.existsSync(packagedHtml) ? packagedHtml : devHtml;
 
-  mainWindow.loadFile(targetHtml);
+  win.loadFile(targetHtml);
 
-  mainWindow.on('close', () => saveWindowState(mainWindow));
+  win.on('close', () => {
+    if (windows.size === 1) saveWindowState(win);
+  });
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (pendingLaunchFiles.length > 0) {
-      mainWindow.webContents.send('aaz:open-external', pendingLaunchFiles);
+  win.on('closed', () => {
+    windows.delete(win);
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    if (!isSecondary && pendingLaunchFiles.length > 0) {
+      win.webContents.send('aaz:open-external', pendingLaunchFiles);
       pendingLaunchFiles = [];
     }
-    // Silent background update check 5 seconds after startup (packaged builds only)
-    if (autoUpdater && app.isPackaged) {
+    if (!updateCheckScheduled && autoUpdater && app.isPackaged) {
+      updateCheckScheduled = true;
       setTimeout(() => {
         manualUpdateCheck = false;
         autoUpdater.checkForUpdates().catch(() => {});
       }, 5000);
     }
   });
+
+  return win;
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -241,12 +265,15 @@ if (!gotLock) {
 
   app.on('second-instance', (_event, argv) => {
     const files = extractSupportedPathsFromArgv(argv);
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    const targetWin = getPrimaryWindow();
+    if (targetWin) {
+      if (targetWin.isMinimized()) targetWin.restore();
+      targetWin.focus();
       if (files.length > 0) {
-        mainWindow.webContents.send('aaz:open-external', files);
+        targetWin.webContents.send('aaz:open-external', files);
       }
+    } else {
+      createWindow(false);
     }
   });
 
@@ -254,10 +281,28 @@ if (!gotLock) {
     if (process.platform === 'win32') {
       app.setAppUserModelId('com.aaz.player');
     }
+
+    // Allow audio output device enumeration & per-window speaker selection natively
+    if (session && session.defaultSession) {
+      session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+        if (permission === 'media' || permission === 'speaker-selection' || permission === 'audioCapture') {
+          return true;
+        }
+        return false;
+      });
+      session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+        if (permission === 'media' || permission === 'speaker-selection' || permission === 'audioCapture') {
+          callback(true);
+          return;
+        }
+        callback(false);
+      });
+    }
+
     initAutoUpdater();
-    createWindow();
+    createWindow(false);
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (windows.size === 0) createWindow(false);
     });
   });
 }
@@ -267,8 +312,13 @@ app.on('window-all-closed', () => {
 });
 
 /* ============================================================================
-   IPC Handlers — Native Windows Folder, Files, Playlists, Pinning & Auto-Update
+   IPC Handlers — Multi-Window, Folders, Files, Playlists, Pinning & Auto-Update
    ============================================================================ */
+ipcMain.handle('aaz:new-window', () => {
+  createWindow(true);
+  return true;
+});
+
 ipcMain.handle('aaz:get-app-version', () => app.getVersion());
 
 ipcMain.handle('aaz:check-updates', async () => {
@@ -302,8 +352,9 @@ ipcMain.handle('aaz:install-update', () => {
   return true;
 });
 
-ipcMain.handle('aaz:select-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('aaz:select-folder', async (event) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender) || getPrimaryWindow();
+  const result = await dialog.showOpenDialog(ownerWin, {
     title: 'AAZ Player',
     properties: ['openDirectory']
   });
@@ -316,8 +367,9 @@ ipcMain.handle('aaz:select-folder', async () => {
   };
 });
 
-ipcMain.handle('aaz:select-files', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('aaz:select-files', async (event) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender) || getPrimaryWindow();
+  const result = await dialog.showOpenDialog(ownerWin, {
     title: 'AAZ Player',
     properties: ['openFile', 'multiSelections'],
     filters: [
@@ -405,8 +457,9 @@ ipcMain.handle('aaz:inspect-paths', async (_event, paths) => {
   return inspectPathList(paths);
 });
 
-ipcMain.handle('aaz:set-always-on-top', (_event, enabled) => {
-  if (!mainWindow) return false;
-  mainWindow.setAlwaysOnTop(Boolean(enabled), 'floating');
-  return mainWindow.isAlwaysOnTop();
+ipcMain.handle('aaz:set-always-on-top', (event, enabled) => {
+  const ownerWin = BrowserWindow.fromWebContents(event.sender) || getPrimaryWindow();
+  if (!ownerWin) return false;
+  ownerWin.setAlwaysOnTop(Boolean(enabled), 'floating');
+  return ownerWin.isAlwaysOnTop();
 });

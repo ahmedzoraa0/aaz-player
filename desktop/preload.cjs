@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('aazDesktop', {
   isElectron: true,
+  openNewWindow: () => ipcRenderer.invoke('aaz:new-window'),
   getAppVersion: () => ipcRenderer.invoke('aaz:get-app-version'),
   checkForUpdates: () => ipcRenderer.invoke('aaz:check-updates'),
   downloadUpdate: () => ipcRenderer.invoke('aaz:download-update'),
