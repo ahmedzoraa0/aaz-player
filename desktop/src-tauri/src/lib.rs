@@ -3,11 +3,13 @@ use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::http::{header, Method, Response, StatusCode};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -37,6 +39,15 @@ const SUB_NOISE_TOKENS: &[&str] = &[
     "sub", "subs", "subtitle", "subtitles", "sdh", "hi", "forced", "cc",
 ];
 
+struct CastServerState {
+    running: Arc<AtomicBool>,
+    port: u16,
+    lan_ip: String,
+    media_path: Arc<Mutex<Option<String>>>,
+    media_title: Arc<Mutex<String>>,
+    subtitle_vtt: Arc<Mutex<Option<String>>>,
+}
+
 #[derive(Default)]
 struct AppState {
     launch_files: Mutex<Vec<String>>,
@@ -44,6 +55,7 @@ struct AppState {
     pending_update_url: Mutex<Option<String>>,
     pending_update_version: Mutex<Option<String>>,
     downloaded_installer: Mutex<Option<PathBuf>>,
+    cast_server: Mutex<Option<CastServerState>>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +119,26 @@ struct SaveSnapshotResult {
     saved: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CastServerInfo {
+    lan_ip: String,
+    port: u16,
+    receiver_url: String,
+    media_url: String,
+    subtitle_url: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CastDevice {
+    id: String,
+    name: String,
+    manufacturer: String,
+    control_url: String,
+    location: String,
 }
 
 fn is_ext_in(ext: &str, list: &[&str]) -> bool {
@@ -1349,6 +1381,565 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
     }
 }
 
+/* ============================================================================
+   Native LAN Cast Server & UPnP / DLNA Smart TV Casting Engine
+   ============================================================================ */
+
+fn detect_local_lan_ip() -> String {
+    if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+        if sock.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = sock.local_addr() {
+                let ip = addr.ip().to_string();
+                if !ip.starts_with("127.") {
+                    return ip;
+                }
+            }
+        }
+    }
+    "127.0.0.1".to_string()
+}
+
+fn xml_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
+    let lower = xml.to_lowercase();
+    let open = format!("<{}", tag.to_lowercase());
+    let close = format!("</{}>", tag.to_lowercase());
+    let start_idx = lower.find(&open)?;
+    let gt_offset = lower[start_idx..].find('>')?;
+    let content_start = start_idx + gt_offset + 1;
+    let end_offset = lower[content_start..].find(&close)?;
+    Some(xml[content_start..content_start + end_offset].trim().to_string())
+}
+
+fn extract_avtransport_control_url(xml: &str, location: &str) -> Option<String> {
+    let lower = xml.to_lowercase();
+    let mut cursor = 0usize;
+    while let Some(rel) = lower[cursor..].find("<service") {
+        let svc_start = cursor + rel;
+        let svc_end_rel = lower[svc_start..].find("</service>")?;
+        let svc_slice = &xml[svc_start..svc_start + svc_end_rel + 10];
+        let svc_lower = svc_slice.to_lowercase();
+        if svc_lower.contains("avtransport") {
+            if let Some(ctrl) = extract_xml_tag(svc_slice, "controlURL") {
+                if ctrl.starts_with("http://") || ctrl.starts_with("https://") {
+                    return Some(ctrl);
+                }
+                let origin = if let Some(scheme_end) = location.find("://") {
+                    let after = &location[scheme_end + 3..];
+                    if let Some(slash) = after.find('/') {
+                        &location[..scheme_end + 3 + slash]
+                    } else {
+                        location
+                    }
+                } else {
+                    location
+                };
+                let joined = if ctrl.starts_with('/') {
+                    format!("{origin}{ctrl}")
+                } else {
+                    format!("{origin}/{ctrl}")
+                };
+                return Some(joined);
+            }
+        }
+        cursor = svc_start + svc_end_rel + 10;
+    }
+    None
+}
+
+fn build_cast_receiver_html(title: &str, has_sub: bool) -> String {
+    let safe_title = xml_escape(title);
+    let track_tag = if has_sub {
+        r#"<track kind="subtitles" srclang="ar" label="Subtitles" src="/sub.vtt" default>"#
+    } else {
+        ""
+    };
+    format!(
+        r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{safe_title} — AAZ Cast</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  html,body{{width:100%;height:100%;background:#040806;color:#edf5ef;font-family:system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}}
+  .wrap{{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:#000}}
+  video{{width:100%;height:100%;object-fit:contain;background:#000}}
+  .hud{{position:fixed;top:14px;left:16px;right:16px;display:flex;align-items:center;justify-content:space-between;pointer-events:none;z-index:5;transition:opacity .35s}}
+  .pill{{background:rgba(10,20,14,.78);border:1px solid rgba(61,196,121,.45);backdrop-filter:blur(8px);padding:7px 14px;border-radius:8px;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px}}
+  .dot{{width:8px;height:8px;border-radius:50%;background:#3dc479}}
+  video::cue{{background:rgba(4,10,6,.72);color:#fff;font-size:1.15em;line-height:1.45}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud" id="hud"><div class="pill"><span class="dot"></span><span>AAZ Cast — {safe_title}</span></div></div>
+    <video id="v" controls autoplay playsinline crossorigin="anonymous" src="/media">{track_tag}</video>
+  </div>
+  <script>
+    const hud=document.getElementById('hud');
+    let t=setTimeout(()=>hud.style.opacity='0',4000);
+    window.addEventListener('mousemove',()=>{{hud.style.opacity='1';clearTimeout(t);t=setTimeout(()=>hud.style.opacity='0',3500);}});
+  </script>
+</body>
+</html>"#
+    )
+}
+
+fn handle_cast_http_client(
+    mut stream: TcpStream,
+    media_path: Arc<Mutex<Option<String>>>,
+    media_title: Arc<Mutex<String>>,
+    subtitle_vtt: Arc<Mutex<Option<String>>>,
+) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+
+    let mut reader = BufReader::new(match stream.try_clone() {
+        Ok(s) => s,
+        Err(_) => return,
+    });
+
+    let mut request_line = String::new();
+    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
+        return;
+    }
+
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("GET").to_uppercase();
+    let raw_target = parts.next().unwrap_or("/");
+    let path_only = raw_target.split('?').next().unwrap_or("/");
+
+    let mut range_header: Option<String> = None;
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            break;
+        }
+        if let Some((k, v)) = trimmed.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("range") {
+                range_header = Some(v.trim().to_string());
+            }
+        }
+    }
+
+    if method == "OPTIONS" {
+        let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n\r\n";
+        let _ = stream.write_all(resp.as_bytes());
+        return;
+    }
+
+    if path_only == "/" || path_only == "/index.html" {
+        let title = media_title.lock().unwrap().clone();
+        let has_sub = subtitle_vtt.lock().unwrap().is_some();
+        let html = build_cast_receiver_html(&title, has_sub);
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+            html.len()
+        );
+        let _ = stream.write_all(header.as_bytes());
+        if method != "HEAD" {
+            let _ = stream.write_all(html.as_bytes());
+        }
+        return;
+    }
+
+    if path_only == "/sub.vtt" {
+        let sub_opt = subtitle_vtt.lock().unwrap().clone();
+        if let Some(vtt) = sub_opt {
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/vtt; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                vtt.len()
+            );
+            let _ = stream.write_all(header.as_bytes());
+            if method != "HEAD" {
+                let _ = stream.write_all(vtt.as_bytes());
+            }
+        } else {
+            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        }
+        return;
+    }
+
+    if path_only == "/info" {
+        let title = media_title.lock().unwrap().clone();
+        let has_sub = subtitle_vtt.lock().unwrap().is_some();
+        let json = serde_json::json!({ "title": title, "hasSubtitle": has_sub }).to_string();
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+            json.len()
+        );
+        let _ = stream.write_all(header.as_bytes());
+        if method != "HEAD" {
+            let _ = stream.write_all(json.as_bytes());
+        }
+        return;
+    }
+
+    if path_only.starts_with("/media") {
+        let active_path = match media_path.lock().unwrap().clone() {
+            Some(p) => p,
+            None => {
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+        };
+        let path = Path::new(&active_path);
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            Err(_) => {
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+        };
+        let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+        let ext = path_ext_lower(path);
+        let mime = mime_for_ext(&ext);
+
+        let (status, start, end) = if let Some(ref rng) = range_header {
+            if let Some(spec) = rng.strip_prefix("bytes=") {
+                let first = spec.split(',').next().unwrap_or("").trim();
+                if let Some((s_str, e_str)) = first.split_once('-') {
+                    if s_str.is_empty() {
+                        let suffix = e_str.parse::<u64>().unwrap_or(0);
+                        let s = file_len.saturating_sub(suffix);
+                        ("206 Partial Content", s, file_len.saturating_sub(1))
+                    } else {
+                        let s = s_str.parse::<u64>().unwrap_or(0);
+                        if s >= file_len {
+                            let resp = format!("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{file_len}\r\nConnection: close\r\n\r\n");
+                            let _ = stream.write_all(resp.as_bytes());
+                            return;
+                        }
+                        let e = if e_str.is_empty() {
+                            file_len.saturating_sub(1)
+                        } else {
+                            e_str.parse::<u64>().unwrap_or(file_len.saturating_sub(1)).min(file_len.saturating_sub(1))
+                        };
+                        ("206 Partial Content", s, e.max(s))
+                    }
+                } else {
+                    ("200 OK", 0, file_len.saturating_sub(1))
+                }
+            } else {
+                ("200 OK", 0, file_len.saturating_sub(1))
+            }
+        } else {
+            ("200 OK", 0, file_len.saturating_sub(1))
+        };
+
+        let content_len = if file_len == 0 { 0 } else { end - start + 1 };
+        let range_line = if status.starts_with("206") {
+            format!("Content-Range: bytes {start}-{end}/{file_len}\r\n")
+        } else {
+            String::new()
+        };
+
+        let headers = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {content_len}\r\n{range_line}Accept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\ntransferMode.dlna.org: Streaming\r\ncontentFeatures.dlna.org: DLNA.ORG_OP=01;DLNA.ORG_CI=0\r\nConnection: close\r\n\r\n"
+        );
+        if stream.write_all(headers.as_bytes()).is_err() {
+            return;
+        }
+        if method == "HEAD" || content_len == 0 {
+            return;
+        }
+        if file.seek(SeekFrom::Start(start)).is_err() {
+            return;
+        }
+        let mut remaining = content_len;
+        let mut buf = [0u8; 65536];
+        while remaining > 0 {
+            let to_read = (remaining as usize).min(buf.len());
+            match file.read(&mut buf[..to_read]) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if stream.write_all(&buf[..n]).is_err() {
+                        break;
+                    }
+                    remaining -= n as u64;
+                }
+                Err(_) => break,
+            }
+        }
+        return;
+    }
+
+    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+}
+
+#[tauri::command]
+fn aaz_cast_start_server(
+    state: State<'_, AppState>,
+    media_path: String,
+    title: String,
+    subtitle_vtt: Option<String>,
+) -> Result<CastServerInfo, String> {
+    if !Path::new(&media_path).exists() {
+        return Err("Media file not found on disk.".to_string());
+    }
+
+    let mut guard = state.cast_server.lock().unwrap();
+    if let Some(existing) = guard.as_ref() {
+        if existing.running.load(Ordering::Relaxed) {
+            *existing.media_path.lock().unwrap() = Some(media_path);
+            *existing.media_title.lock().unwrap() = title;
+            *existing.subtitle_vtt.lock().unwrap() = subtitle_vtt;
+            let base = format!("http://{}:{}", existing.lan_ip, existing.port);
+            return Ok(CastServerInfo {
+                lan_ip: existing.lan_ip.clone(),
+                port: existing.port,
+                receiver_url: format!("{base}/"),
+                media_url: format!("{base}/media"),
+                subtitle_url: format!("{base}/sub.vtt"),
+            });
+        }
+    }
+
+    let listener = TcpListener::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let _ = listener.set_nonblocking(true);
+    let lan_ip = detect_local_lan_ip();
+
+    let running = Arc::new(AtomicBool::new(true));
+    let path_arc = Arc::new(Mutex::new(Some(media_path)));
+    let title_arc = Arc::new(Mutex::new(title));
+    let sub_arc = Arc::new(Mutex::new(subtitle_vtt));
+
+    let r_flag = running.clone();
+    let p_clone = path_arc.clone();
+    let t_clone = title_arc.clone();
+    let s_clone = sub_arc.clone();
+
+    std::thread::spawn(move || {
+        while r_flag.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((stream, _addr)) => {
+                    let _ = stream.set_nonblocking(false);
+                    let mp = p_clone.clone();
+                    let mt = t_clone.clone();
+                    let sv = s_clone.clone();
+                    std::thread::spawn(move || handle_cast_http_client(stream, mp, mt, sv));
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(35));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    *guard = Some(CastServerState {
+        running,
+        port,
+        lan_ip: lan_ip.clone(),
+        media_path: path_arc,
+        media_title: title_arc,
+        subtitle_vtt: sub_arc,
+    });
+
+    let base = format!("http://{lan_ip}:{port}");
+    Ok(CastServerInfo {
+        lan_ip,
+        port,
+        receiver_url: format!("{base}/"),
+        media_url: format!("{base}/media"),
+        subtitle_url: format!("{base}/sub.vtt"),
+    })
+}
+
+#[tauri::command]
+fn aaz_cast_stop_server(state: State<'_, AppState>) -> bool {
+    let mut guard = state.cast_server.lock().unwrap();
+    if let Some(srv) = guard.take() {
+        srv.running.store(false, Ordering::Relaxed);
+        true
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+async fn aaz_cast_discover_devices() -> Vec<CastDevice> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut locations = HashSet::new();
+        if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+            let _ = sock.set_read_timeout(Some(Duration::from_millis(300)));
+            let targets = [
+                "urn:schemas-upnp-org:service:AVTransport:1",
+                "urn:schemas-upnp-org:device:MediaRenderer:1",
+            ];
+            for st in targets {
+                let req = format!(
+                    "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: {st}\r\n\r\n"
+                );
+                let _ = sock.send_to(req.as_bytes(), "239.255.255.250:1900");
+            }
+            let deadline = Instant::now() + Duration::from_millis(1600);
+            let mut buf = [0u8; 4096];
+            while Instant::now() < deadline {
+                match sock.recv_from(&mut buf) {
+                    Ok((n, _)) => {
+                        let text = String::from_utf8_lossy(&buf[..n]);
+                        for line in text.lines() {
+                            if let Some((k, v)) = line.split_once(':') {
+                                if k.trim().eq_ignore_ascii_case("location") {
+                                    let loc = v.trim().to_string();
+                                    if loc.starts_with("http://") || loc.starts_with("https://") {
+                                        locations.insert(loc);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let mut devices = Vec::new();
+        for loc in locations {
+            let resp = match ureq::get(&loc).timeout(Duration::from_secs(2)).call() {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let xml = match resp.into_string() {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let Some(control_url) = extract_avtransport_control_url(&xml, &loc) else {
+                continue;
+            };
+            let name = extract_xml_tag(&xml, "friendlyName").unwrap_or_else(|| "Smart TV".to_string());
+            let manufacturer = extract_xml_tag(&xml, "manufacturer").unwrap_or_default();
+            devices.push(CastDevice {
+                id: control_url.clone(),
+                name,
+                manufacturer,
+                control_url,
+                location: loc,
+            });
+        }
+        devices.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        devices
+    })
+    .await
+    .unwrap_or_default()
+}
+
+fn send_avtransport_soap(control_url: &str, action: &str, inner_xml: &str) -> Result<(), String> {
+    let envelope = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>{inner_xml}</s:Body></s:Envelope>"#
+    );
+    let soap_action = format!("\"urn:schemas-upnp-org:service:AVTransport:1#{action}\"");
+    ureq::post(control_url)
+        .set("Content-Type", "text/xml; charset=\"utf-8\"")
+        .set("SOAPAction", &soap_action)
+        .timeout(Duration::from_secs(4))
+        .send_string(&envelope)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn aaz_cast_to_dlna(
+    control_url: String,
+    media_url: String,
+    title: String,
+    mime_type: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let upnp_class = if mime_type.starts_with("audio/") {
+            "object.item.audioItem.musicTrack"
+        } else {
+            "object.item.videoItem.movie"
+        };
+        let didl = format!(
+            r#"<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1"><dc:title>{}</dc:title><upnp:class>{}</upnp:class><res protocolInfo="http-get:*:{}:DLNA.ORG_OP=01;DLNA.ORG_CI=0">{}</res></item></DIDL-Lite>"#,
+            xml_escape(&title),
+            upnp_class,
+            xml_escape(&mime_type),
+            xml_escape(&media_url)
+        );
+        let set_body = format!(
+            r#"<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>{}</CurrentURI><CurrentURIMetaData>{}</CurrentURIMetaData></u:SetAVTransportURI>"#,
+            xml_escape(&media_url),
+            xml_escape(&didl)
+        );
+        send_avtransport_soap(&control_url, "SetAVTransportURI", &set_body)?;
+
+        let play_body = r#"<u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>"#;
+        send_avtransport_soap(&control_url, "Play", play_body)?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn aaz_cast_dlna_control(
+    control_url: String,
+    action: String,
+    seek_target: Option<String>,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        match action.as_str() {
+            "play" => {
+                let body = r#"<u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>"#;
+                send_avtransport_soap(&control_url, "Play", body)?;
+            }
+            "pause" => {
+                let body = r#"<u:Pause xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:Pause>"#;
+                send_avtransport_soap(&control_url, "Pause", body)?;
+            }
+            "stop" => {
+                let body = r#"<u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:Stop>"#;
+                send_avtransport_soap(&control_url, "Stop", body)?;
+            }
+            "seek" => {
+                let target = seek_target.unwrap_or_else(|| "00:00:00".to_string());
+                let body = format!(
+                    r#"<u:Seek xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target></u:Seek>"#,
+                    xml_escape(&target)
+                );
+                send_avtransport_soap(&control_url, "Seek", &body)?;
+            }
+            _ => return Err("Unsupported DLNA control action".to_string()),
+        }
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn aaz_cast_open_windows_cast() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        return Command::new("explorer.exe")
+            .arg("ms-settings-connectabledevices:devicediscovery")
+            .spawn()
+            .is_ok();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_argv: Vec<String> = std::env::args().collect();
@@ -1394,7 +1985,13 @@ pub fn run() {
             aaz_list_system_fonts,
             aaz_check_updates,
             aaz_download_update,
-            aaz_install_update
+            aaz_install_update,
+            aaz_cast_start_server,
+            aaz_cast_stop_server,
+            aaz_cast_discover_devices,
+            aaz_cast_to_dlna,
+            aaz_cast_dlna_control,
+            aaz_cast_open_windows_cast
         ])
         .run(tauri::generate_context!())
         .expect("error while running AAZ Player");

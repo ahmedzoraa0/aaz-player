@@ -1714,20 +1714,27 @@
       margin-top: 4px;
     }
 
-    /* Track Row */
+    /* Track Row — Drag-and-Drop Reorder, Progress Strip & Power Badges */
     .track-row {
+      position: relative;
       width: 100%;
       display: grid;
-      grid-template-columns: 26px minmax(0, 1fr) auto auto;
+      grid-template-columns: 14px 24px minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: 8px;
-      min-height: 42px;
-      padding: 6px 9px;
+      gap: 7px;
+      min-height: 44px;
+      padding: 6px 9px 8px 6px;
       border-radius: var(--radius-control);
       border: 1px solid transparent;
       text-align: left;
       color: var(--text-primary);
       cursor: pointer;
+      transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), opacity 120ms var(--ease-out);
+    }
+
+    html[dir="rtl"] .track-row {
+      padding: 6px 6px 8px 9px;
+      text-align: right;
     }
 
     .track-row + .track-row {
@@ -1741,6 +1748,57 @@
     .track-row.is-active {
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
+    }
+
+    .track-row.is-dragging {
+      opacity: 0.38;
+      border-color: var(--accent-border);
+    }
+
+    .track-row.is-drop-before::before,
+    .track-row.is-drop-after::after {
+      content: '';
+      position: absolute;
+      left: 6px;
+      right: 6px;
+      height: 2px;
+      background-color: var(--accent);
+      border-radius: 2px;
+      pointer-events: none;
+      z-index: 6;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .track-row.is-drop-before::before {
+      top: -2px;
+    }
+
+    .track-row.is-drop-after::after {
+      bottom: -2px;
+    }
+
+    .track-drag-handle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      opacity: 0.25;
+      cursor: grab;
+      transition: opacity 120ms, color 120ms;
+    }
+
+    .track-row:hover .track-drag-handle,
+    .track-row.is-active .track-drag-handle {
+      opacity: 0.8;
+    }
+
+    .track-drag-handle:hover {
+      color: var(--accent);
+      opacity: 1 !important;
+    }
+
+    .track-drag-handle:active {
+      cursor: grabbing;
     }
 
     .track-index {
@@ -1761,7 +1819,14 @@
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 1px;
+      gap: 2px;
+    }
+
+    .track-name-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
     }
 
     .track-name {
@@ -1771,11 +1836,51 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
     }
 
     .track-row.is-active .track-name {
       font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    :root:not([data-theme="light"]) .track-row.is-active .track-name {
       color: #ffffff;
+    }
+
+    .track-row.is-watched:not(.is-active) .track-name {
+      color: var(--text-secondary);
+    }
+
+    .track-watched-dot {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .track-mini-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      line-height: 1.35;
+      letter-spacing: 0.02em;
+    }
+
+    .track-mini-tag.is-upnext {
+      background-color: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+    }
+
+    .track-mini-tag.is-stop {
+      background-color: var(--gold-soft);
+      border: 1px solid var(--gold-border);
+      color: var(--gold);
     }
 
     .track-sub {
@@ -1785,6 +1890,24 @@
       overflow: hidden;
       text-overflow: ellipsis;
       font-variant-numeric: tabular-nums;
+    }
+
+    .track-progress-bar {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 2px;
+      height: 2px;
+      border-radius: 2px;
+      background-color: var(--border-hairline);
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .track-progress-fill {
+      height: 100%;
+      background-color: var(--accent);
+      border-radius: 2px;
     }
 
     .track-star-btn {
@@ -1817,6 +1940,198 @@
 
     .track-row.is-active .track-right {
       color: var(--accent);
+    }
+
+    /* Playlist Header Tools Dropdown & Notice Undo Button */
+    .pl-tools-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .pl-tools-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      min-width: 222px;
+      padding: 5px;
+      border-radius: var(--radius-control);
+      background-color: var(--dropdown-bg);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 90;
+    }
+
+    html[dir="rtl"] .pl-tools-menu {
+      right: auto;
+      left: 0;
+    }
+
+    .pl-tools-menu[hidden] {
+      display: none !important;
+    }
+
+    .menu-action.is-danger:hover:not(:disabled) {
+      background-color: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .status-notice-undo {
+      height: 24px;
+      padding: 0 9px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+      background-color: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .status-notice-undo:hover {
+      background-color: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    /* Cast to TV / Smart Screen Modal */
+    .cast-modal-card {
+      width: min(560px, 94vw);
+      max-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    .cast-section {
+      background-color: var(--bg-inset);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-control);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .cast-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    .cast-device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 170px;
+      overflow-y: auto;
+    }
+
+    .cast-device-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-hairline);
+      background-color: var(--bg-surface-elevated);
+    }
+
+    .cast-device-item.is-connected {
+      border-color: var(--accent-border);
+      background-color: var(--accent-soft);
+    }
+
+    .cast-device-meta {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cast-device-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cast-device-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .cast-empty-hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      padding: 6px 2px;
+    }
+
+    .cast-url-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      direction: ltr;
+    }
+
+    .cast-url-text {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      user-select: text;
+    }
+
+    .cast-remote-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      background-color: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      flex-wrap: wrap;
+    }
+
+    .cast-remote-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cast-quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .btn-icon.is-casting {
+      color: var(--accent);
+      background-color: var(--accent-soft);
+      border-color: var(--accent-border);
     }
 
     /* Saved Playlist Item Row */
@@ -3360,6 +3675,7 @@
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="toggle-video-view"><span class="menu-action-label" data-i18n="cmdToggleVideoView">Toggle Video / Audio-Only View</span></button>
               <button type="button" class="menu-action" data-cmd="take-snapshot"><span class="menu-action-label" data-i18n="cmdSnapshot">Take Snapshot</span><span class="menu-shortcut">Shift+S</span></button>
+              <button type="button" class="menu-action" data-cmd="open-cast"><span class="menu-action-label" data-i18n="cmdCast">Cast to TV / Screen...</span><span class="menu-shortcut">C</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
               <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
               <div class="menu-sep"></div>
@@ -3452,7 +3768,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.3.1</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.4.0</div>
             </div>
           </div>
         </nav>
@@ -3545,6 +3861,7 @@
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <span class="status-notice-text" id="statusNoticeText"></span>
+            <button type="button" class="status-notice-undo" id="noticeUndoBtn" hidden data-i18n="btnUndo">Undo</button>
             <button type="button" class="status-notice-close" id="closeNoticeBtn" aria-label="Dismiss message">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -3636,6 +3953,7 @@
               </div>
             </div>
             <div class="menu-sep"></div>
+            <button type="button" class="menu-action" data-cmd="open-cast"><span class="menu-action-label" data-i18n="cmdCast">Cast to TV / Screen...</span><span class="menu-shortcut">C</span></button>
             <button type="button" class="menu-action" data-cmd="toggle-pip"><span class="menu-action-label" data-i18n="cmdPip">Picture-in-Picture</span><span class="menu-shortcut">P</span></button>
             <button type="button" class="menu-action" data-cmd="toggle-fullscreen"><span class="menu-action-label" data-i18n="cmdFullscreen">Fullscreen</span><span class="menu-shortcut">F</span></button>
           </div>
@@ -3680,6 +3998,12 @@
               </button>
               <button type="button" class="video-tool-btn" id="pipBtn" title="Picture-in-Picture (P)">
                 <span>PiP</span>
+              </button>
+              <button type="button" class="video-tool-btn" id="videoCastBtn" title="Cast to TV / Screen (C)" aria-label="Cast to TV">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
+                  <line x1="2" y1="20" x2="2.01" y2="20"/>
+                </svg>
               </button>
             </div>
 
@@ -3836,6 +4160,22 @@
             </div>
             <div class="playlist-header-actions">
               <button type="button" class="btn" id="openSavePlBarBtn" hidden style="height:28px;padding:0 9px;font-size:11.5px" title="Save playlist to Library (Ctrl+S)" data-i18n="btnSavePl">+ Save</button>
+              <div class="pl-tools-wrap">
+                <button type="button" class="btn-icon" id="playlistToolsBtn" style="width:28px;height:28px" title="Playlist Power Tools" aria-label="Playlist Power Tools" aria-haspopup="true" aria-expanded="false">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>
+                  </svg>
+                </button>
+                <div class="pl-tools-menu" id="playlistToolsMenu" hidden role="menu">
+                  <button type="button" class="menu-action" data-pltool="append-files"><span class="menu-action-label" data-i18n="plAppendFiles">Add Files to Queue...</span></button>
+                  <button type="button" class="menu-action" data-pltool="append-folder"><span class="menu-action-label" data-i18n="plAppendFolder">Add Folder to Queue...</span></button>
+                  <div class="menu-sep"></div>
+                  <button type="button" class="menu-action" data-pltool="shuffle-order"><span class="menu-action-label" data-i18n="plShuffleOrder">Shuffle Queue Order</span></button>
+                  <button type="button" class="menu-action" data-pltool="remove-dupes"><span class="menu-action-label" data-i18n="plRemoveDupes">Remove Duplicates</span></button>
+                  <button type="button" class="menu-action" data-pltool="remove-watched"><span class="menu-action-label" data-i18n="plRemoveWatched">Remove Watched Items</span></button>
+                  <button type="button" class="menu-action" data-pltool="clear-upnext"><span class="menu-action-label" data-i18n="plClearUpNext">Clear Up Next Queue</span></button>
+                </div>
+              </div>
               <button type="button" class="btn btn-ghost" id="clearQueueBtn" hidden style="height:28px;font-size:11.5px" data-i18n="btnClear">Clear</button>
             </div>
           </div>
@@ -4045,6 +4385,13 @@
             <span class="volume-readout" id="volumeReadout">85%</span>
           </div>
 
+          <button type="button" class="btn-icon" id="dockCastBtn" title="Cast to TV / Screen (C)" aria-label="Cast to TV / Screen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
+              <line x1="2" y1="20" x2="2.01" y2="20"/>
+            </svg>
+          </button>
+
           <button type="button" class="btn-icon" id="dockFullscreenBtn" title="Fullscreen (F)" aria-label="Toggle Fullscreen" aria-pressed="false">
             <svg id="dockFsEnterIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
@@ -4089,6 +4436,9 @@
         <span class="shortcut-desc" data-i18n="scSubSync">Subtitle timing earlier / later</span><span class="shortcut-key">G / H</span>
         <span class="shortcut-desc" data-i18n="scFrameStep">Step backward / forward 1 frame</span><span class="shortcut-key">, / .</span>
         <span class="shortcut-desc" data-i18n="scSnapshot">Take video snapshot</span><span class="shortcut-key">Shift + S</span>
+        <span class="shortcut-desc" data-i18n="scCast">Cast to TV / Smart Screen</span><span class="shortcut-key">C</span>
+        <span class="shortcut-desc" data-i18n="scReorder">Move focused playlist track up / down</span><span class="shortcut-key">Alt + ↑ / ↓</span>
+        <span class="shortcut-desc" data-i18n="scRemoveTrack">Remove focused track from playlist</span><span class="shortcut-key">Delete</span>
         <span class="shortcut-desc" data-i18n="cmdNewWindow">New Window</span><span class="shortcut-key">Ctrl + Shift + N</span>
       </div>
     </div>
@@ -4262,6 +4612,83 @@
     </div>
   </div>
 
+  <!-- Custom Right-Click Context Menu for Playlist Tracks -->
+  <div class="context-menu" id="playlistContextMenu" hidden role="menu" aria-label="Playlist Track Menu">
+    <button type="button" class="menu-action" data-plcmd="play"><span class="menu-action-label" data-i18n="plCtxPlay">Play Now</span></button>
+    <button type="button" class="menu-action" data-plcmd="play-next"><span class="menu-action-label" id="plCtxPlayNextLbl" data-i18n="plCtxPlayNext">Play Next (Up Next)</span></button>
+    <button type="button" class="menu-action" data-plcmd="stop-after"><span class="menu-action-label" id="plCtxStopAfterLbl" data-i18n="plCtxStopAfter">Stop After This Track</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action" data-plcmd="move-top"><span class="menu-action-label" data-i18n="plCtxMoveTop">Move to Top</span></button>
+    <button type="button" class="menu-action" data-plcmd="move-up"><span class="menu-action-label" data-i18n="plCtxMoveUp">Move Up</span><span class="menu-shortcut">Alt+↑</span></button>
+    <button type="button" class="menu-action" data-plcmd="move-down"><span class="menu-action-label" data-i18n="plCtxMoveDown">Move Down</span><span class="menu-shortcut">Alt+↓</span></button>
+    <button type="button" class="menu-action" data-plcmd="move-bottom"><span class="menu-action-label" data-i18n="plCtxMoveBottom">Move to Bottom</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action" data-plcmd="toggle-star"><span class="menu-action-label" id="plCtxStarLbl" data-i18n="plCtxStar">Star / Favorite</span></button>
+    <button type="button" class="menu-action" data-plcmd="toggle-watched"><span class="menu-action-label" id="plCtxWatchedLbl" data-i18n="plCtxWatched">Mark as Watched</span></button>
+    <button type="button" class="menu-action" data-plcmd="reset-progress"><span class="menu-action-label" data-i18n="plCtxResetProg">Reset Resume Position</span></button>
+    <button type="button" class="menu-action" data-plcmd="copy-name"><span class="menu-action-label" data-i18n="plCtxCopyName">Copy File Name</span></button>
+    <div class="menu-sep"></div>
+    <button type="button" class="menu-action is-danger" data-plcmd="remove"><span class="menu-action-label" data-i18n="plCtxRemove">Remove from Playlist</span><span class="menu-shortcut">Del</span></button>
+  </div>
+
+  <!-- Cast to TV / Smart Screen Modal (DLNA/UPnP + Wi-Fi LAN Receiver + Miracast + RemotePlayback) -->
+  <div class="modal-backdrop" id="castModal" hidden role="dialog" aria-modal="true" aria-labelledby="castModalTitle">
+    <div class="modal-card cast-modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="castModalTitle" data-i18n="castModalTitle">Cast to TV / Smart Screen</div>
+        <button type="button" class="btn-icon" id="closeCastModalBtn" style="width:30px;height:30px" aria-label="Close cast panel">×</button>
+      </div>
+
+      <!-- Active Cast Remote Control Bar -->
+      <div class="cast-remote-bar" id="castRemoteBar" hidden>
+        <div class="cast-device-meta">
+          <div class="cast-device-name" id="castConnectedName">Smart TV</div>
+          <div class="cast-device-sub" id="castConnectedTrack"></div>
+        </div>
+        <div class="cast-remote-actions">
+          <button type="button" class="btn" id="castRemotePlayBtn" style="height:28px;font-size:11.5px" data-i18n="castPlay">Play</button>
+          <button type="button" class="btn" id="castRemotePauseBtn" style="height:28px;font-size:11.5px" data-i18n="castPause">Pause</button>
+          <button type="button" class="btn" id="castRemoteStopBtn" style="height:28px;font-size:11.5px;color:var(--danger)" data-i18n="castStop">Stop</button>
+        </div>
+      </div>
+
+      <!-- Section 1: Smart TVs on Wi-Fi (UPnP / DLNA Auto-Discovery) -->
+      <div class="cast-section">
+        <div class="cast-section-head">
+          <span data-i18n="castDlnaHeading">Smart TVs on Local Wi-Fi (DLNA / UPnP)</span>
+          <button type="button" class="btn" id="castScanBtn" style="height:26px;font-size:11px;padding:0 9px" data-i18n="castScan">Scan Network</button>
+        </div>
+        <div class="cast-device-list" id="castDeviceList">
+          <div class="cast-empty-hint" data-i18n="castScanningHint">Click "Scan Network" to discover Samsung, LG, Sony, Android TV, Xbox, or DLNA screens on the same Wi-Fi.</div>
+        </div>
+      </div>
+
+      <!-- Section 2: Direct Wi-Fi Smart TV / Phone Stream (Zero-Setup LAN Receiver) -->
+      <div class="cast-section">
+        <div class="cast-section-head">
+          <span data-i18n="castLanHeading">Wi-Fi TV Browser &amp; Phone Stream</span>
+          <button type="button" class="btn btn-primary" id="castLanToggleBtn" style="height:26px;font-size:11px;padding:0 10px" data-i18n="castStartLan">Start Wi-Fi Stream</button>
+        </div>
+        <div class="cast-empty-hint" data-i18n="castLanDesc">Streams your local video &amp; subtitles directly over home Wi-Fi. Open this link in any Smart TV browser or phone on the same Wi-Fi.</div>
+        <div class="cast-url-box" id="castLanUrlBox" hidden>
+          <span class="cast-url-text" id="castLanUrlText"></span>
+          <button type="button" class="btn" id="castCopyUrlBtn" style="height:26px;font-size:11px;padding:0 9px" data-i18n="castCopyUrl">Copy</button>
+        </div>
+      </div>
+
+      <!-- Section 3: Native Screen & Browser Cast -->
+      <div class="cast-section">
+        <div class="cast-section-head">
+          <span data-i18n="castWirelessHeading">Wireless Display &amp; Browser Cast</span>
+        </div>
+        <div class="cast-quick-grid">
+          <button type="button" class="btn" id="castWindowsBtn" style="height:34px" data-i18n="castWinMiracast">Windows Cast (Miracast)</button>
+          <button type="button" class="btn" id="castBrowserBtn" style="height:34px" data-i18n="castBrowserRemote">Browser / Chromecast</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     (() => {
       'use strict';
@@ -4314,6 +4741,12 @@
           startWindowDrag: () => invoke('aaz_win_start_drag'),
           saveSnapshot: (dataBase64, suggestedName) => invoke('aaz_save_snapshot', { dataBase64, suggestedName }),
           listSystemFonts: () => invoke('aaz_list_system_fonts'),
+          castStartServer: (mediaPath, title, subtitleVtt = null) => invoke('aaz_cast_start_server', { mediaPath, title, subtitleVtt }),
+          castStopServer: () => invoke('aaz_cast_stop_server'),
+          castDiscoverDevices: () => invoke('aaz_cast_discover_devices'),
+          castToDlna: (controlUrl, mediaUrl, title, mimeType) => invoke('aaz_cast_to_dlna', { controlUrl, mediaUrl, title, mimeType }),
+          castDlnaControl: (controlUrl, action, seekTarget = null) => invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget }),
+          castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
           onOpenExternal: (callback) => listen('aaz:open-external', callback)
         };
       })();
@@ -4842,6 +5275,7 @@
 
         statusNotice: document.getElementById('statusNotice'),
         statusNoticeText: document.getElementById('statusNoticeText'),
+        noticeUndoBtn: document.getElementById('noticeUndoBtn'),
         closeNoticeBtn: document.getElementById('closeNoticeBtn'),
 
         mediaStage: document.getElementById('mediaStage'),
@@ -4856,6 +5290,7 @@
         snapshotBtn: document.getElementById('snapshotBtn'),
         audioOnlyViewBtn: document.getElementById('audioOnlyViewBtn'),
         subtitleBtn: document.getElementById('subtitleBtn'),
+        videoCastBtn: document.getElementById('videoCastBtn'),
         pipBtn: document.getElementById('pipBtn'),
 
         subtitleModal: document.getElementById('subtitleModal'),
@@ -4934,12 +5369,19 @@
 
         playlistTitle: document.getElementById('playlistTitle'),
         playlistMeta: document.getElementById('playlistMeta'),
+        playlistToolsBtn: document.getElementById('playlistToolsBtn'),
+        playlistToolsMenu: document.getElementById('playlistToolsMenu'),
         openSavePlBarBtn: document.getElementById('openSavePlBarBtn'),
         clearQueueBtn: document.getElementById('clearQueueBtn'),
         savePlBar: document.getElementById('savePlBar'),
         savePlNameInput: document.getElementById('savePlNameInput'),
         confirmSavePlBtn: document.getElementById('confirmSavePlBtn'),
         cancelSavePlBtn: document.getElementById('cancelSavePlBtn'),
+        playlistContextMenu: document.getElementById('playlistContextMenu'),
+        plCtxPlayNextLbl: document.getElementById('plCtxPlayNextLbl'),
+        plCtxStopAfterLbl: document.getElementById('plCtxStopAfterLbl'),
+        plCtxStarLbl: document.getElementById('plCtxStarLbl'),
+        plCtxWatchedLbl: document.getElementById('plCtxWatchedLbl'),
 
         modeTabs: Array.from(document.querySelectorAll('.mode-tab')),
         countAll: document.getElementById('countAll'),
@@ -4993,9 +5435,27 @@
         volMuteIcon: document.getElementById('volMuteIcon'),
         volumeSlider: document.getElementById('volumeSlider'),
         volumeReadout: document.getElementById('volumeReadout'),
+        dockCastBtn: document.getElementById('dockCastBtn'),
         dockFullscreenBtn: document.getElementById('dockFullscreenBtn'),
         dockFsEnterIcon: document.getElementById('dockFsEnterIcon'),
         dockFsExitIcon: document.getElementById('dockFsExitIcon'),
+
+        castModal: document.getElementById('castModal'),
+        closeCastModalBtn: document.getElementById('closeCastModalBtn'),
+        castRemoteBar: document.getElementById('castRemoteBar'),
+        castConnectedName: document.getElementById('castConnectedName'),
+        castConnectedTrack: document.getElementById('castConnectedTrack'),
+        castRemotePlayBtn: document.getElementById('castRemotePlayBtn'),
+        castRemotePauseBtn: document.getElementById('castRemotePauseBtn'),
+        castRemoteStopBtn: document.getElementById('castRemoteStopBtn'),
+        castScanBtn: document.getElementById('castScanBtn'),
+        castDeviceList: document.getElementById('castDeviceList'),
+        castLanToggleBtn: document.getElementById('castLanToggleBtn'),
+        castLanUrlBox: document.getElementById('castLanUrlBox'),
+        castLanUrlText: document.getElementById('castLanUrlText'),
+        castCopyUrlBtn: document.getElementById('castCopyUrlBtn'),
+        castWindowsBtn: document.getElementById('castWindowsBtn'),
+        castBrowserBtn: document.getElementById('castBrowserBtn'),
 
         shortcutsModal: document.getElementById('shortcutsModal'),
         closeShortcutsBtn: document.getElementById('closeShortcutsBtn')
@@ -5037,13 +5497,24 @@
         eqGains: [0, 0, 0, 0, 0],
         preampGain: 1,
 
-        // Favorites & Bookmarks
+        // Favorites, Bookmarks & Playlist Powerhouse State
         starredKeys: new Set(),
         bookmarksByKey: {},
+        upNextKeys: [],
+        stopAfterKey: '',
+        watchedKeys: new Set(),
+        progressByKey: {},
+        lastRemovedUndo: null,
+        activeContextTrackKey: '',
+        dragTrackKey: '',
+        lastProgressSaveTs: 0,
+        appendModePending: null,
+        noticeUndoHandler: null,
 
         // Runtime Media State
         activeObjectUrl: null,
         activeSubtitleUrl: null,
+        activeSubtitleVtt: null,
         subtitlesEnabled: true,
         pendingSeekTime: null,
         isSeeking: false,
@@ -5051,6 +5522,12 @@
         savedDirHandle: null,
         savedSession: null,
         resumeAutoPlayPending: false,
+
+        // Cast to TV State
+        castServerInfo: null,
+        castDevices: [],
+        activeCastDevice: null,
+        castScanning: false,
 
         // Fullscreen 2-Second Auto-Hide Timer
         fsIdleTimer: null,
@@ -5069,7 +5546,7 @@
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
-        appVersion: '1.3.1',
+        appVersion: '1.4.0',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId (per-tab via sessionStorage)
         audioSinkLabel: '',
@@ -5283,7 +5760,77 @@
           aspectChanged: 'Aspect Ratio: {val}',
           zoomChanged: 'Video Zoom: {val}',
           cropChanged: 'Video Crop: {val}',
-          videoResetNotice: 'Video aspect ratio, zoom & crop reset to default.'
+          videoResetNotice: 'Video aspect ratio, zoom & crop reset to default.',
+          btnUndo: 'Undo',
+          sortCustom: 'Manual',
+          sortDuration: 'Length',
+          watchedWord: 'watched',
+          upNextBadge: 'Next #{n}',
+          stopAfterBadge: 'Stop After',
+          plAppendFiles: 'Add Files to Queue...',
+          plAppendFolder: 'Add Folder to Queue...',
+          plShuffleOrder: 'Shuffle Queue Order',
+          plRemoveDupes: 'Remove Duplicates',
+          plRemoveWatched: 'Remove Watched Items',
+          plClearUpNext: 'Clear Up Next Queue',
+          plCtxPlay: 'Play Now',
+          plCtxPlayNext: 'Play Next (Up Next)',
+          plCtxRemoveUpNext: 'Remove from Up Next',
+          plCtxStopAfter: 'Stop After This Track',
+          plCtxClearStopAfter: 'Cancel Stop After',
+          plCtxMoveTop: 'Move to Top',
+          plCtxMoveUp: 'Move Up',
+          plCtxMoveDown: 'Move Down',
+          plCtxMoveBottom: 'Move to Bottom',
+          plCtxStar: 'Star / Favorite',
+          plCtxUnstar: 'Remove Star',
+          plCtxWatched: 'Mark as Watched',
+          plCtxUnwatched: 'Mark as Unwatched',
+          plCtxResetProg: 'Reset Resume Position',
+          plCtxCopyName: 'Copy File Name',
+          plCtxRemove: 'Remove from Playlist',
+          plRemovedNotice: 'Removed "{name}" from playlist.',
+          plRestoredNotice: 'Restored "{name}" to playlist.',
+          plDupesRemoved: 'Removed {n} duplicate item(s).',
+          plNoDupes: 'No duplicate items found in playlist.',
+          plWatchedRemoved: 'Removed {n} watched item(s).',
+          plNoWatched: 'No watched items to remove.',
+          plShuffledNotice: 'Playlist queue order shuffled.',
+          plAppendedNotice: 'Added {n} item(s) to current playlist.',
+          plStopAfterSet: 'Playback will stop after "{name}".',
+          plStopAfterCleared: 'Stop-after-track cleared.',
+          plStoppedAfterNotice: 'Playback stopped after "{name}".',
+          plUpNextAdded: 'Queued "{name}" to play next.',
+          plCopiedName: 'Copied "{name}".',
+          cmdCast: 'Cast to TV / Screen...',
+          scCast: 'Cast to TV / Smart Screen',
+          scReorder: 'Move focused playlist track up / down',
+          scRemoveTrack: 'Remove focused track from playlist',
+          castModalTitle: 'Cast to TV / Smart Screen',
+          castDlnaHeading: 'Smart TVs on Local Wi-Fi (DLNA / UPnP)',
+          castScan: 'Scan Network',
+          castScanning: 'Scanning Wi-Fi...',
+          castScanningHint: 'Click "Scan Network" to discover Samsung, LG, Sony, Android TV, Xbox, or DLNA screens on the same Wi-Fi.',
+          castNoneFound: 'No DLNA Smart TVs responded yet. Make sure your TV and PC are on the same Wi-Fi, or use Wi-Fi TV Browser Stream / Windows Cast below.',
+          castDesktopOnly: 'Automatic DLNA TV discovery and LAN streaming require the AAZ Player Windows desktop app.',
+          castBtnSend: 'Cast Here',
+          castBtnConnected: 'Casting',
+          castLanHeading: 'Wi-Fi TV Browser & Phone Stream',
+          castStartLan: 'Start Wi-Fi Stream',
+          castStopLan: 'Stop Stream',
+          castLanDesc: 'Streams your local video & subtitles directly over home Wi-Fi. Open this link in any Smart TV browser or phone on the same Wi-Fi.',
+          castCopyUrl: 'Copy',
+          castUrlCopied: 'Cast link copied! Open it on your Smart TV or phone.',
+          castWirelessHeading: 'Wireless Display & Browser Cast',
+          castWinMiracast: 'Windows Cast (Miracast)',
+          castBrowserRemote: 'Browser / Chromecast',
+          castPlay: 'Play',
+          castPause: 'Pause',
+          castStop: 'Stop',
+          castNoTrack: 'Load a video or audio track first before casting.',
+          castSentNotice: 'Now casting "{title}" to {device}.',
+          castFailedNotice: 'Could not cast to {device}: {err}',
+          castBrowserUnsupported: 'Direct browser Chromecast is not available here. Use DLNA Smart TV, Wi-Fi Stream, or Windows Cast instead.'
         },
         ar: {
           dropTitle: 'أفلت ملفات الصوت أو الفيديو أو المجلد أو قائمة التشغيل هنا',
@@ -5484,7 +6031,77 @@
           aspectChanged: 'نسبة العرض: {val}',
           zoomChanged: 'التكبير: {val}',
           cropChanged: 'قص الحواف: {val}',
-          videoResetNotice: 'تمت إعادة ضبط أبعاد وتكبير وقص الفيديو للافتراضي.'
+          videoResetNotice: 'تمت إعادة ضبط أبعاد وتكبير وقص الفيديو للافتراضي.',
+          btnUndo: 'تراجع',
+          sortCustom: 'يدوي',
+          sortDuration: 'المدة',
+          watchedWord: 'تمت مشاهدته',
+          upNextBadge: 'التالي #{n}',
+          stopAfterBadge: 'إيقاف بعده',
+          plAppendFiles: 'إضافة ملفات للقائمة الحالية...',
+          plAppendFolder: 'إضافة مجلد للقائمة الحالية...',
+          plShuffleOrder: 'خلط ترتيب القائمة نهائياً',
+          plRemoveDupes: 'حذف العناصر المكررة',
+          plRemoveWatched: 'حذف ما تمت مشاهدته',
+          plClearUpNext: 'مسح قائمة التشغيل التالي',
+          plCtxPlay: 'تشغيل الآن',
+          plCtxPlayNext: 'تشغيل كالتالي فوراً',
+          plCtxRemoveUpNext: 'إزالة من التشغيل التالي',
+          plCtxStopAfter: 'إيقاف التشغيل بعد هذا الملف',
+          plCtxClearStopAfter: 'إلغاء الإيقاف بعد هذا الملف',
+          plCtxMoveTop: 'نقل إلى أعلى القائمة',
+          plCtxMoveUp: 'تحريك لأعلى',
+          plCtxMoveDown: 'تحريك لأسفل',
+          plCtxMoveBottom: 'نقل إلى أسفل القائمة',
+          plCtxStar: 'إضافة للمفضلة',
+          plCtxUnstar: 'إزالة من المفضلة',
+          plCtxWatched: 'تحديد كتمت مشاهدته',
+          plCtxUnwatched: 'تحديد كغير مشاهد',
+          plCtxResetProg: 'إعادة موضع الاستكمال للبداية',
+          plCtxCopyName: 'نسخ اسم الملف',
+          plCtxRemove: 'حذف من قائمة التشغيل',
+          plRemovedNotice: 'تم حذف "{name}" من قائمة التشغيل.',
+          plRestoredNotice: 'تمت استعادة "{name}" إلى قائمة التشغيل.',
+          plDupesRemoved: 'تم حذف {n} عنصر مكرر من القائمة.',
+          plNoDupes: 'لا توجد عناصر مكررة في القائمة.',
+          plWatchedRemoved: 'تم حذف {n} عنصر تمت مشاهدته.',
+          plNoWatched: 'لا توجد عناصر محددة كمشاهدة لحذفها.',
+          plShuffledNotice: 'تم خلط ترتيب عناصر قائمة التشغيل.',
+          plAppendedNotice: 'تمت إضافة {n} عنصر إلى القائمة الحالية.',
+          plStopAfterSet: 'سيتوقف التشغيل تلقائياً بعد "{name}".',
+          plStopAfterCleared: 'تم إلغاء الإيقاف بعد المقطع.',
+          plStoppedAfterNotice: 'توقف التشغيل تلقائياً بعد انتهاء "{name}".',
+          plUpNextAdded: 'تمت جدولة "{name}" ليعمل تالياً.',
+          plCopiedName: 'تم نسخ الاسم "{name}".',
+          cmdCast: 'بث إلى الشاشة / التلفاز...',
+          scCast: 'البث إلى الشاشة أو التلفاز الذكي',
+          scReorder: 'تحريك العنصر المحدد لأعلى أو لأسفل',
+          scRemoveTrack: 'حذف العنصر المحدد من القائمة',
+          castModalTitle: 'البث إلى التلفاز / الشاشة الذكية',
+          castDlnaHeading: 'الشاشات الذكية على نفس الشبكة',
+          castScan: 'بحث في الشبكة',
+          castScanning: 'جاري البحث عن الشاشات...',
+          castScanningHint: 'اضغط "بحث في الشبكة" لاكتشاف شاشات التلفاز الذكية المتصلة بنفس شبكة الواي فاي.',
+          castNoneFound: 'لم يتم العثور على شاشات متصلة حالياً. تأكد من اتصال التلفاز والكمبيوتر بنفس الشبكة أو استخدم البث عبر رابط الشبكة أو البث اللاسلكي بالأسفل.',
+          castDesktopOnly: 'الاكتشاف التلقائي للشاشات والبث المحلي يتطلب تشغيل تطبيق سطح المكتب على ويندوز.',
+          castBtnSend: 'بث الآن',
+          castBtnConnected: 'جاري البث',
+          castLanHeading: 'البث المباشر لمتصفح التلفاز أو الهاتف',
+          castStartLan: 'تشغيل بث الشبكة',
+          castStopLan: 'إيقاف البث',
+          castLanDesc: 'يبث الفيديو والترجمة مباشرة عبر شبكة الواي فاي المنزلية. افتح الرابط التالي في متصفح التلفاز أو الهاتف على نفس الشبكة.',
+          castCopyUrl: 'نسخ الرابط',
+          castUrlCopied: 'تم نسخ رابط البث! افتحه في التلفاز الذكي أو الهاتف.',
+          castWirelessHeading: 'البث اللاسلكي للشاشة والمتصفح',
+          castWinMiracast: 'بث شاشة ويندوز اللاسلكي',
+          castBrowserRemote: 'بث المتصفح / كروم كاست',
+          castPlay: 'تشغيل',
+          castPause: 'إيقاف مؤقت',
+          castStop: 'إيقاف',
+          castNoTrack: 'قم بتشغيل فيديو أو ملف صوتي أولاً قبل بدء البث.',
+          castSentNotice: 'جاري بث "{title}" على {device}.',
+          castFailedNotice: 'تعذر البث إلى {device}: {err}',
+          castBrowserUnsupported: 'بث المتصفح غير مدعوم هنا، استخدم اكتشاف الشاشات أو بث الواي فاي أو بث ويندوز اللاسلكي.'
         }
       };
 
@@ -5550,6 +6167,9 @@
         refreshResumeBanner();
         updateAudioOutputButtonUI();
         renderAudioOutputList();
+        if (state.allTracks.length > 0) renderPlaylist();
+        syncCastButtonState();
+        if (el.castModal && !el.castModal.hidden) renderCastDevices();
       }
 
       function setVizMode(mode, persist = true) {
@@ -6208,13 +6828,19 @@
         inputEl.style.setProperty('--progress', `${pct}%`);
       }
 
-      function showNotice(message, isError = false) {
+      function showNotice(message, isError = false, undoAction = null) {
         el.statusNoticeText.textContent = message;
         el.statusNotice.classList.toggle('is-error', isError);
+        state.noticeUndoHandler = typeof undoAction === 'function' ? undoAction : null;
+        if (el.noticeUndoBtn) {
+          el.noticeUndoBtn.hidden = !state.noticeUndoHandler;
+        }
         el.statusNotice.hidden = false;
       }
 
       function hideNotice() {
+        state.noticeUndoHandler = null;
+        if (el.noticeUndoBtn) el.noticeUndoBtn.hidden = true;
         el.statusNotice.hidden = true;
       }
 
@@ -6442,6 +7068,21 @@
         showNotice(`Saved "${name}" to your Library (${tracks.length} items).`);
       }
 
+      function applySavedPlaylistOrder(tracks, savedKeys) {
+        if (!Array.isArray(savedKeys) || savedKeys.length === 0) return tracks;
+        const byKey = new Map(tracks.map((tr) => [tr.key, tr]));
+        const ordered = [];
+        for (const k of savedKeys) {
+          const found = byKey.get(k);
+          if (found) {
+            ordered.push(found);
+            byKey.delete(k);
+          }
+        }
+        for (const rem of byKey.values()) ordered.push(rem);
+        return ordered;
+      }
+
       async function openSavedPlaylist(playlistId) {
         const pl = state.savedPlaylists.find((p) => p.id === playlistId);
         if (!pl) return;
@@ -6451,11 +7092,16 @@
         const targetTrackName = pl.lastTrackName;
         const targetTime = Number.isFinite(pl.lastTime) ? pl.lastTime : 0;
 
-        // 1. Electron .exe: Native folder path (instant, zero prompts!)
+        // 1. Electron/Tauri .exe: Native folder path (instant, zero prompts!)
         if (desktopBridge && pl.nativeFolderPath) {
           const res = await desktopBridge.readFolder(pl.nativeFolderPath);
           if (res && res.entries?.length) {
-            const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+            let { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+            if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
+              tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
+              state.sortMode = 'custom';
+              updateSortButtonUI();
+            }
             state.nativeFolderPath = res.folderPath;
             state.activeSavedPlaylistId = pl.id;
             state.playlistMode = pl.playlistMode || 'all';
@@ -6472,11 +7118,16 @@
           }
         }
 
-        // 2. Electron .exe: Saved individual file paths
+        // 2. Electron/Tauri .exe: Saved individual file paths
         if (desktopBridge && Array.isArray(pl.nativeFilePaths) && pl.nativeFilePaths.length > 0) {
           const res = await desktopBridge.inspectPaths(pl.nativeFilePaths);
           if (res && res.entries?.length) {
-            const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+            let { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+            if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
+              tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
+              state.sortMode = 'custom';
+              updateSortButtonUI();
+            }
             state.nativeFolderPath = '';
             state.activeSavedPlaylistId = pl.id;
             await applyLoadedTracks(tracks, subMap, pl.name, 'electron', {
@@ -6503,6 +7154,11 @@
                 let tracks = await scanDirectoryHandle(handle, '', subMap);
                 tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
                 if (tracks.length > 0) {
+                  if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
+                    tracks = applySavedPlaylistOrder(tracks, pl.trackKeys);
+                    state.sortMode = 'custom';
+                    updateSortButtonUI();
+                  }
                   state.currentDirHandle = handle;
                   state.activeSavedPlaylistId = pl.id;
                   state.playlistMode = pl.playlistMode || 'all';
@@ -6706,15 +7362,19 @@
          ======================================================================= */
       function getModeQueue() {
         let list = state.allTracks;
-        if (state.playlistMode === 'audio') list = list.filter((t) => t.kind === 'audio');
-        else if (state.playlistMode === 'video') list = list.filter((t) => t.kind === 'video');
-        else if (state.playlistMode === 'starred') list = list.filter((t) => state.starredKeys.has(t.key));
+        if (state.playlistMode === 'audio') list = list.filter((tItem) => tItem.kind === 'audio');
+        else if (state.playlistMode === 'video') list = list.filter((tItem) => tItem.kind === 'video');
+        else if (state.playlistMode === 'starred') list = list.filter((tItem) => state.starredKeys.has(tItem.key));
 
         const sorted = [...list];
-        if (state.sortMode === 'desc') {
+        if (state.sortMode === 'custom') {
+          return sorted;
+        } else if (state.sortMode === 'desc') {
           sorted.sort((a, b) => naturalCollator.compare(b.key, a.key));
         } else if (state.sortMode === 'type') {
           sorted.sort((a, b) => (a.kind !== b.kind ? (a.kind === 'video' ? -1 : 1) : naturalCollator.compare(a.key, b.key)));
+        } else if (state.sortMode === 'duration') {
+          sorted.sort((a, b) => ((b.duration || 0) - (a.duration || 0)) || naturalCollator.compare(a.key, b.key));
         } else {
           sorted.sort((a, b) => naturalCollator.compare(a.key, b.key));
         }
@@ -6726,20 +7386,20 @@
         const q = state.searchQuery.trim().toLowerCase();
         if (!q) return queue;
         return queue.filter(
-          (t) =>
-            t.displayName.toLowerCase().includes(q) ||
-            t.folderPath.toLowerCase().includes(q) ||
-            t.ext.toLowerCase().includes(q)
+          (tItem) =>
+            tItem.displayName.toLowerCase().includes(q) ||
+            tItem.folderPath.toLowerCase().includes(q) ||
+            tItem.ext.toLowerCase().includes(q)
         );
       }
 
       function getCurrentTrack() {
-        return state.currentKey ? state.allTracks.find((t) => t.key === state.currentKey) || null : null;
+        return state.currentKey ? state.allTracks.find((tItem) => tItem.key === state.currentKey) || null : null;
       }
 
       function getCurrentQueuePosition() {
         const queue = getModeQueue();
-        return { queue, idx: queue.findIndex((t) => t.key === state.currentKey) };
+        return { queue, idx: queue.findIndex((tItem) => tItem.key === state.currentKey) };
       }
 
       function persistPlaybackState(overrideTime = null) {
@@ -6752,7 +7412,7 @@
               : 0;
         const cleanTime = Math.floor(currentTime * 10) / 10;
 
-        // Also update the active Saved Playlist's own per-playlist resume state!
+        // Also update the active Saved Playlist's own per-playlist resume state & manual order!
         if (state.activeSavedPlaylistId && track) {
           const pl = state.savedPlaylists.find((p) => p.id === state.activeSavedPlaylistId);
           if (pl) {
@@ -6760,6 +7420,9 @@
             pl.lastTrackName = track.name;
             pl.lastTime = cleanTime;
             pl.playlistMode = state.playlistMode;
+            if (state.sortMode === 'custom') {
+              pl.trackKeys = state.allTracks.map((tr) => tr.key);
+            }
             pl.updatedAt = Date.now();
             if (state.sidebarTab === 'saved') renderSavedPlaylists();
           }
@@ -6785,6 +7448,8 @@
           eqGains: state.eqGains,
           preampGain: state.preampGain,
           starredKeys: Array.from(state.starredKeys),
+          watchedKeys: Array.from(state.watchedKeys),
+          progressByKey: state.progressByKey,
           bookmarksByKey: state.bookmarksByKey,
           savedPlaylists: state.savedPlaylists,
           updatedAt: Date.now()
@@ -7361,6 +8026,7 @@
           URL.revokeObjectURL(state.activeSubtitleUrl);
           state.activeSubtitleUrl = null;
         }
+        state.activeSubtitleVtt = null;
         state.subtitleOffsetSec = 0;
         updateSubtitleOffsetUI();
         el.media.querySelectorAll('track').forEach((tr) => tr.remove());
@@ -7380,6 +8046,7 @@
       function attachSubtitleVttText(vttSourceText, label = 'Subtitles') {
         clearActiveSubtitles();
         const vtt = srtToWebVtt(vttSourceText);
+        state.activeSubtitleVtt = vtt;
         const blob = new Blob([vtt], { type: 'text/vtt;charset=utf-8' });
         state.activeSubtitleUrl = URL.createObjectURL(blob);
 
@@ -7531,9 +8198,19 @@
       }
 
       async function loadTrackByKey(trackKey, options = {}) {
-        const { autoPlay = true, startTime = 0 } = options;
-        const track = state.allTracks.find((t) => t.key === trackKey);
+        const { autoPlay = true } = options;
+        const track = state.allTracks.find((tr) => tr.key === trackKey);
         if (!track) return;
+
+        let startTime = options.startTime;
+        if (startTime === undefined) {
+          const savedProg = state.progressByKey[track.key];
+          if (savedProg && Number.isFinite(savedProg.time) && savedProg.time > 2 && (!savedProg.duration || savedProg.time < savedProg.duration * 0.92)) {
+            startTime = savedProg.time;
+          } else {
+            startTime = 0;
+          }
+        }
 
         hideNotice();
         stopAutosaveTimer();
@@ -7580,6 +8257,11 @@
           persistPlaybackState(startTime);
           await autoLoadMatchingSubtitle(track);
 
+          // If Cast LAN Server is running, automatically sync the newly selected track + subtitle to the TV!
+          if (state.castServerInfo && track.fullPath && desktopBridge && desktopBridge.castStartServer) {
+            syncActiveCastTrack(track).catch(() => {});
+          }
+
           if (startTime > 0 && el.media.readyState < 1) {
             await new Promise((resolve) => {
               const done = () => {
@@ -7609,7 +8291,7 @@
         if (state.allTracks.length === 0) return;
         if (!state.currentKey) {
           const first = getModeQueue()[0] || state.allTracks[0];
-          if (first) await loadTrackByKey(first.key, { autoPlay: true, startTime: 0 });
+          if (first) await loadTrackByKey(first.key, { autoPlay: true, startTime: undefined });
           return;
         }
         if (el.media.paused) {
@@ -7628,6 +8310,16 @@
         const { queue, idx } = getCurrentQueuePosition();
         if (queue.length === 0) return null;
         if (isAutoAdvance && state.repeatMode === 'one' && state.currentKey) return state.currentKey;
+
+        // Honor Up Next priority queue first!
+        while (state.upNextKeys.length > 0) {
+          const queuedKey = state.upNextKeys.shift();
+          if (state.allTracks.some((tr) => tr.key === queuedKey)) {
+            renderPlaylist();
+            return queuedKey;
+          }
+        }
+
         if (state.shuffle && queue.length > 1) {
           let r = idx;
           while (r === idx) r = Math.floor(Math.random() * queue.length);
@@ -8240,6 +8932,9 @@
         state.sourceMode = 'none';
         state.pendingSeekTime = null;
         state.searchQuery = '';
+        state.upNextKeys = [];
+        state.stopAfterKey = '';
+        state.lastRemovedUndo = null;
         el.searchInput.value = '';
         el.savePlBar.hidden = true;
 
@@ -8385,8 +9080,15 @@
       }
 
       function updateSortButtonUI() {
-        const map = { asc: 'A–Z', desc: 'Z–A', type: t('sortType') };
+        const map = {
+          custom: t('sortCustom'),
+          asc: 'A–Z',
+          desc: 'Z–A',
+          type: t('sortType'),
+          duration: t('sortDuration')
+        };
         el.sortBtn.textContent = map[state.sortMode] || 'A–Z';
+        el.sortBtn.classList.toggle('is-active', state.sortMode === 'custom');
       }
 
       function updateModeTabsUI() {
@@ -8422,12 +9124,444 @@
         } else {
           const audio = state.allTracks.filter((tItem) => tItem.kind === 'audio').length;
           const video = total - audio;
-          el.playlistMeta.textContent = (state.searchQuery.trim() || state.playlistMode !== 'all')
-            ? `${t('showingWord')} ${visible} ${t('ofWord')} ${total} · ${audio} ${t('audioWord')} · ${video} ${t('videoWord')}`
-            : `${total} ${t('itemsWord')} · ${audio} ${t('audioWord')} · ${video} ${t('videoWord')}`;
+          const watchedCount = state.allTracks.filter((tItem) => state.watchedKeys.has(tItem.key)).length;
+          const totalDur = state.allTracks.reduce((acc, tr) => acc + (Number.isFinite(tr.duration) && tr.duration > 0 ? tr.duration : 0), 0);
+          const parts = [];
+          if (state.searchQuery.trim() || state.playlistMode !== 'all') {
+            parts.push(`${t('showingWord')} ${visible} ${t('ofWord')} ${total}`);
+          } else {
+            parts.push(`${total} ${t('itemsWord')}`);
+          }
+          if (audio > 0 && video > 0) parts.push(`${audio} ${t('audioWord')} · ${video} ${t('videoWord')}`);
+          else if (video > 0) parts.push(`${video} ${t('videoWord')}`);
+          else if (audio > 0) parts.push(`${audio} ${t('audioWord')}`);
+          if (totalDur > 0) parts.push(formatTime(totalDur));
+          if (watchedCount > 0) parts.push(`${watchedCount} ${t('watchedWord')}`);
+          el.playlistMeta.textContent = parts.join(' · ');
         }
         el.clearQueueBtn.hidden = total === 0;
         el.openSavePlBarBtn.hidden = total === 0;
+      }
+
+      /* =======================================================================
+         13B. Playlist Powerhouse: Drag Reorder, Context Menu, Up Next, Undo & Tools
+         ======================================================================= */
+      function snapshotCurrentOrderToCustom() {
+        if (state.sortMode === 'custom') return;
+        const modeOrdered = getModeQueue();
+        const inModeSet = new Set(modeOrdered.map((tr) => tr.key));
+        const outside = state.allTracks.filter((tr) => !inModeSet.has(tr.key));
+        state.allTracks = [...modeOrdered, ...outside];
+        state.sortMode = 'custom';
+        updateSortButtonUI();
+      }
+
+      function reorderTrack(fromKey, toKey, dropAfter = false) {
+        if (!fromKey || !toKey || fromKey === toKey) return;
+        snapshotCurrentOrderToCustom();
+        const fromIdx = state.allTracks.findIndex((tr) => tr.key === fromKey);
+        if (fromIdx === -1) return;
+        const [moved] = state.allTracks.splice(fromIdx, 1);
+        let toIdx = state.allTracks.findIndex((tr) => tr.key === toKey);
+        if (toIdx === -1) {
+          state.allTracks.push(moved);
+        } else {
+          if (dropAfter) toIdx += 1;
+          state.allTracks.splice(toIdx, 0, moved);
+        }
+        renderPlaylist();
+        updateNowPlayingUI();
+        updateTransportAvailability();
+        persistPlaybackState();
+      }
+
+      function moveTrackRelative(trackKey, direction, keepFocus = false) {
+        if (!trackKey) return;
+        snapshotCurrentOrderToCustom();
+        const visible = getVisibleQueue();
+        const visIdx = visible.findIndex((tr) => tr.key === trackKey);
+        if (visIdx === -1) return;
+
+        if (direction === 'top') {
+          if (visIdx === 0) return;
+          reorderTrack(trackKey, visible[0].key, false);
+        } else if (direction === 'bottom') {
+          if (visIdx === visible.length - 1) return;
+          reorderTrack(trackKey, visible[visible.length - 1].key, true);
+        } else if (direction === 'up') {
+          if (visIdx <= 0) return;
+          reorderTrack(trackKey, visible[visIdx - 1].key, false);
+        } else if (direction === 'down') {
+          if (visIdx >= visible.length - 1) return;
+          reorderTrack(trackKey, visible[visIdx + 1].key, true);
+        }
+
+        if (keepFocus) {
+          const row = Array.from(el.playlistList.querySelectorAll('.track-row')).find((r) => r.dataset.key === trackKey);
+          if (row) row.focus();
+        }
+      }
+
+      function removeTrackByKey(trackKey) {
+        const idx = state.allTracks.findIndex((tr) => tr.key === trackKey);
+        if (idx === -1) return;
+        const wasCurrent = trackKey === state.currentKey;
+        const prevQueue = getModeQueue();
+        const prevQueueIdx = prevQueue.findIndex((tr) => tr.key === trackKey);
+        const [removed] = state.allTracks.splice(idx, 1);
+
+        state.upNextKeys = state.upNextKeys.filter((k) => k !== trackKey);
+        if (state.stopAfterKey === trackKey) state.stopAfterKey = '';
+
+        state.lastRemovedUndo = { track: removed, index: idx, wasCurrent };
+
+        if (wasCurrent) {
+          const nextQueue = getModeQueue();
+          if (nextQueue.length > 0) {
+            const nextTrack = nextQueue[Math.min(Math.max(prevQueueIdx, 0), nextQueue.length - 1)];
+            const wasPlaying = !el.media.paused && !el.media.ended;
+            loadTrackByKey(nextTrack.key, { autoPlay: wasPlaying, startTime: undefined });
+          } else {
+            stopAutosaveTimer();
+            el.media.pause();
+            el.media.removeAttribute('src');
+            el.media.load();
+            revokeMediaUrls();
+            clearABLoop();
+            AudioStudio.stopVisualizer();
+            state.currentKey = '';
+          }
+        }
+
+        updateModeCounts();
+        updateSidebarCounts();
+        updatePlaylistHeader();
+        updateStageVisibility();
+        updateNowPlayingUI();
+        updateTransportAvailability();
+        renderPlaylist();
+        persistPlaybackState();
+
+        showNotice(t('plRemovedNotice', { name: removed.displayName }), false, undoLastTrackRemoval);
+      }
+
+      function undoLastTrackRemoval() {
+        const undo = state.lastRemovedUndo;
+        if (!undo || !undo.track) return;
+        state.lastRemovedUndo = null;
+        if (!state.allTracks.some((tr) => tr.key === undo.track.key)) {
+          const insertAt = Math.min(Math.max(0, undo.index), state.allTracks.length);
+          state.allTracks.splice(insertAt, 0, undo.track);
+        }
+        updateModeCounts();
+        updateSidebarCounts();
+        updatePlaylistHeader();
+        updateTransportAvailability();
+        renderPlaylist();
+        persistPlaybackState();
+        showNotice(t('plRestoredNotice', { name: undo.track.displayName }));
+      }
+
+      function toggleUpNext(trackKey) {
+        const track = state.allTracks.find((tr) => tr.key === trackKey);
+        if (!track) return;
+        const pos = state.upNextKeys.indexOf(trackKey);
+        if (pos !== -1) {
+          state.upNextKeys.splice(pos, 1);
+        } else {
+          state.upNextKeys.push(trackKey);
+          showNotice(t('plUpNextAdded', { name: track.displayName }));
+        }
+        renderPlaylist();
+      }
+
+      function toggleStopAfter(trackKey) {
+        const track = state.allTracks.find((tr) => tr.key === trackKey);
+        if (!track) return;
+        if (state.stopAfterKey === trackKey) {
+          state.stopAfterKey = '';
+          showNotice(t('plStopAfterCleared'));
+        } else {
+          state.stopAfterKey = trackKey;
+          showNotice(t('plStopAfterSet', { name: track.displayName }));
+        }
+        renderPlaylist();
+      }
+
+      function toggleWatchedKey(trackKey) {
+        if (!trackKey) return;
+        if (state.watchedKeys.has(trackKey)) {
+          state.watchedKeys.delete(trackKey);
+        } else {
+          state.watchedKeys.add(trackKey);
+          delete state.progressByKey[trackKey];
+        }
+        updatePlaylistHeader();
+        renderPlaylist();
+        persistPlaybackState();
+      }
+
+      function resetTrackProgress(trackKey) {
+        if (!trackKey) return;
+        delete state.progressByKey[trackKey];
+        state.watchedKeys.delete(trackKey);
+        if (trackKey === state.currentKey) {
+          seekToSeconds(0);
+        }
+        updatePlaylistHeader();
+        renderPlaylist();
+        persistPlaybackState();
+      }
+
+      function shuffleQueueOrder() {
+        if (state.allTracks.length < 2) return;
+        snapshotCurrentOrderToCustom();
+        const arr = [...state.allTracks];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        state.allTracks = arr;
+        renderPlaylist();
+        updateNowPlayingUI();
+        updateTransportAvailability();
+        persistPlaybackState();
+        showNotice(t('plShuffledNotice'));
+      }
+
+      function removeDuplicateTracks() {
+        if (state.allTracks.length < 2) {
+          showNotice(t('plNoDupes'));
+          return;
+        }
+        const seen = new Set();
+        const kept = [];
+        let removedCount = 0;
+        for (const tr of state.allTracks) {
+          const sig = `${tr.name.toLowerCase()}::${tr.size || ''}`;
+          if (seen.has(sig)) {
+            removedCount += 1;
+          } else {
+            seen.add(sig);
+            kept.push(tr);
+          }
+        }
+        if (removedCount === 0) {
+          showNotice(t('plNoDupes'));
+          return;
+        }
+        state.allTracks = kept;
+        state.upNextKeys = state.upNextKeys.filter((k) => kept.some((tr) => tr.key === k));
+        updateModeCounts();
+        updateSidebarCounts();
+        updatePlaylistHeader();
+        updateTransportAvailability();
+        renderPlaylist();
+        persistPlaybackState();
+        showNotice(t('plDupesRemoved', { n: removedCount }));
+      }
+
+      function removeWatchedTracks() {
+        const before = state.allTracks.length;
+        const kept = state.allTracks.filter((tr) => !state.watchedKeys.has(tr.key) || tr.key === state.currentKey);
+        const removedCount = before - kept.length;
+        if (removedCount === 0) {
+          showNotice(t('plNoWatched'));
+          return;
+        }
+        state.allTracks = kept;
+        state.upNextKeys = state.upNextKeys.filter((k) => kept.some((tr) => tr.key === k));
+        updateModeCounts();
+        updateSidebarCounts();
+        updatePlaylistHeader();
+        updateTransportAvailability();
+        renderPlaylist();
+        persistPlaybackState();
+        showNotice(t('plWatchedRemoved', { n: removedCount }));
+      }
+
+      function appendTracksToQueue(newTracks, newSubMap) {
+        if (!Array.isArray(newTracks) || newTracks.length === 0) return;
+        const existingKeys = new Set(state.allTracks.map((tr) => tr.key));
+        let added = 0;
+        for (const tr of newTracks) {
+          let key = tr.key;
+          if (existingKeys.has(key)) {
+            if (tr.fullPath && state.allTracks.some((e) => e.fullPath && e.fullPath === tr.fullPath)) continue;
+            let suffix = 2;
+            while (existingKeys.has(`${key} (${suffix})`)) suffix++;
+            key = `${key} (${suffix})`;
+            tr.key = key;
+          }
+          existingKeys.add(key);
+          state.allTracks.push(tr);
+          added++;
+        }
+        if (newSubMap) {
+          for (const [k, v] of newSubMap.entries()) {
+            state.subtitlesByBaseKey.set(k, v);
+          }
+        }
+        if (!state.folderName) state.folderName = t('currentQueue');
+        el.resumeBanner.hidden = true;
+        updateModeCounts();
+        updateSidebarCounts();
+        updatePlaylistHeader();
+        updateTransportAvailability();
+        renderPlaylist();
+        persistPlaybackState();
+        if (!state.currentKey && state.allTracks.length > 0) {
+          loadTrackByKey(state.allTracks[0].key, { autoPlay: false, startTime: undefined });
+        }
+        showNotice(t('plAppendedNotice', { n: added }));
+      }
+
+      async function appendFilesToQueue() {
+        hideNotice();
+        if (desktopBridge && desktopBridge.selectFiles) {
+          const res = await desktopBridge.selectFiles();
+          if (!res || !res.entries?.length) return;
+          const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+          appendTracksToQueue(tracks, subMap);
+          return;
+        }
+        state.appendModePending = 'files';
+        el.filesInput.value = '';
+        el.filesInput.click();
+      }
+
+      async function appendFolderToQueue() {
+        hideNotice();
+        if (desktopBridge && desktopBridge.selectFolder) {
+          const res = await desktopBridge.selectFolder();
+          if (!res || !res.entries?.length) return;
+          const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+          appendTracksToQueue(tracks, subMap);
+          return;
+        }
+        const pickerFn =
+          (IS_TAB_FRAME && typeof window.parent.showDirectoryPicker === 'function')
+            ? window.parent.showDirectoryPicker.bind(window.parent)
+            : (typeof window.showDirectoryPicker === 'function' ? window.showDirectoryPicker.bind(window) : null);
+        if (pickerFn) {
+          try {
+            const dirHandle = await pickerFn({ id: 'aaz-media-folder', mode: 'read' });
+            const subMap = new Map();
+            const tracks = await scanDirectoryHandle(dirHandle, '', subMap);
+            tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
+            appendTracksToQueue(tracks, subMap);
+            return;
+          } catch (err) {
+            if (err && err.name === 'AbortError') return;
+          }
+        }
+        state.appendModePending = 'folder';
+        el.dirInput.value = '';
+        el.dirInput.click();
+      }
+
+      function closePlaylistMenus() {
+        if (el.playlistContextMenu) el.playlistContextMenu.hidden = true;
+        if (el.playlistToolsMenu) el.playlistToolsMenu.hidden = true;
+        state.activeContextTrackKey = '';
+      }
+
+      function openPlaylistContextMenu(trackKey, clientX, clientY) {
+        if (!el.playlistContextMenu) return;
+        const track = state.allTracks.find((tr) => tr.key === trackKey);
+        if (!track) return;
+        closeAllMenus();
+        state.activeContextTrackKey = trackKey;
+
+        const isUpNext = state.upNextKeys.includes(trackKey);
+        const isStopAfter = state.stopAfterKey === trackKey;
+        const isStarred = state.starredKeys.has(trackKey);
+        const isWatched = state.watchedKeys.has(trackKey);
+
+        if (el.plCtxPlayNextLbl) el.plCtxPlayNextLbl.textContent = isUpNext ? t('plCtxRemoveUpNext') : t('plCtxPlayNext');
+        if (el.plCtxStopAfterLbl) el.plCtxStopAfterLbl.textContent = isStopAfter ? t('plCtxClearStopAfter') : t('plCtxStopAfter');
+        if (el.plCtxStarLbl) el.plCtxStarLbl.textContent = isStarred ? t('plCtxUnstar') : t('plCtxStar');
+        if (el.plCtxWatchedLbl) el.plCtxWatchedLbl.textContent = isWatched ? t('plCtxUnwatched') : t('plCtxWatched');
+
+        el.playlistContextMenu.hidden = false;
+        el.playlistContextMenu.style.left = '0px';
+        el.playlistContextMenu.style.top = '0px';
+        const rect = el.playlistContextMenu.getBoundingClientRect();
+        const pad = 8;
+        const x = Math.min(Math.max(clientX, pad), Math.max(pad, window.innerWidth - rect.width - pad));
+        const y = Math.min(Math.max(clientY, pad), Math.max(pad, window.innerHeight - rect.height - pad));
+        el.playlistContextMenu.style.left = `${x}px`;
+        el.playlistContextMenu.style.top = `${y}px`;
+      }
+
+      function executePlaylistContextCommand(cmd) {
+        const key = state.activeContextTrackKey;
+        closePlaylistMenus();
+        if (!key) return;
+        const track = state.allTracks.find((tr) => tr.key === key);
+        if (!track) return;
+
+        switch (cmd) {
+          case 'play':
+            loadTrackByKey(key, { autoPlay: true, startTime: undefined });
+            break;
+          case 'play-next':
+            toggleUpNext(key);
+            break;
+          case 'stop-after':
+            toggleStopAfter(key);
+            break;
+          case 'move-top':
+            moveTrackRelative(key, 'top');
+            break;
+          case 'move-up':
+            moveTrackRelative(key, 'up');
+            break;
+          case 'move-down':
+            moveTrackRelative(key, 'down');
+            break;
+          case 'move-bottom':
+            moveTrackRelative(key, 'bottom');
+            break;
+          case 'toggle-star':
+            toggleStarKey(key);
+            break;
+          case 'toggle-watched':
+            toggleWatchedKey(key);
+            break;
+          case 'reset-progress':
+            resetTrackProgress(key);
+            break;
+          case 'copy-name':
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(track.name).then(() => {
+                showNotice(t('plCopiedName', { name: track.name }));
+              }).catch(() => {});
+            }
+            break;
+          case 'remove':
+            removeTrackByKey(key);
+            break;
+        }
+      }
+
+      function updateTrackRowProgress(trackKey, pct) {
+        const rows = el.playlistList.querySelectorAll('.track-row');
+        for (const row of rows) {
+          if (row.dataset.key === trackKey) {
+            let fill = row.querySelector('.track-progress-fill');
+            if (!fill && pct > 0) {
+              const bar = document.createElement('span');
+              bar.className = 'track-progress-bar';
+              fill = document.createElement('span');
+              fill.className = 'track-progress-fill';
+              bar.appendChild(fill);
+              row.appendChild(bar);
+            }
+            if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+            break;
+          }
+        }
       }
 
       function renderPlaylist() {
@@ -8453,15 +9587,26 @@
         visible.forEach((track, idx) => {
           const isActive = track.key === state.currentKey;
           const isStarred = state.starredKeys.has(track.key);
+          const isWatched = state.watchedKeys.has(track.key);
+          const upNextPos = state.upNextKeys.indexOf(track.key);
+          const isStopAfter = state.stopAfterKey === track.key;
+          const prog = state.progressByKey[track.key];
+          const progPct = prog && prog.duration > 0 ? Math.min(100, Math.round((prog.time / prog.duration) * 100)) : 0;
           const hasSub = track.kind === 'video' && state.subtitlesByBaseKey.has(stripExtension(track.key).toLowerCase());
 
           const row = document.createElement('div');
-          row.className = `track-row${isActive ? ' is-active' : ''}`;
+          row.className = `track-row${isActive ? ' is-active' : ''}${isWatched ? ' is-watched' : ''}`;
           row.dataset.key = track.key;
+          row.draggable = true;
           row.setAttribute('role', 'option');
           row.setAttribute('tabindex', '0');
           row.setAttribute('aria-selected', String(isActive));
           row.title = track.key;
+
+          const dragGrip = document.createElement('span');
+          dragGrip.className = 'track-drag-handle';
+          dragGrip.setAttribute('aria-hidden', 'true');
+          dragGrip.innerHTML = '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg>';
 
           const idxCell = document.createElement('span');
           idxCell.className = 'track-index';
@@ -8472,10 +9617,34 @@
           const infoCell = document.createElement('span');
           infoCell.className = 'track-info';
 
+          const nameRow = document.createElement('span');
+          nameRow.className = 'track-name-row';
+
           const nameSpan = document.createElement('span');
           nameSpan.className = 'track-name';
           nameSpan.textContent = track.displayName;
-          infoCell.appendChild(nameSpan);
+          nameRow.appendChild(nameSpan);
+
+          if (isWatched) {
+            const wDot = document.createElement('span');
+            wDot.className = 'track-watched-dot';
+            wDot.title = t('watchedWord');
+            wDot.textContent = '✓';
+            nameRow.appendChild(wDot);
+          }
+          if (upNextPos !== -1) {
+            const badge = document.createElement('span');
+            badge.className = 'track-mini-tag is-upnext';
+            badge.textContent = t('upNextBadge', { n: upNextPos + 1 });
+            nameRow.appendChild(badge);
+          }
+          if (isStopAfter) {
+            const badge = document.createElement('span');
+            badge.className = 'track-mini-tag is-stop';
+            badge.textContent = t('stopAfterBadge');
+            nameRow.appendChild(badge);
+          }
+          infoCell.appendChild(nameRow);
 
           const subParts = [];
           if (track.kind === 'video') subParts.push('Video');
@@ -8502,14 +9671,87 @@
           rightCell.className = 'track-right';
           rightCell.textContent = track.duration ? formatTime(track.duration) : track.size ? formatBytes(track.size) : '';
 
-          row.append(idxCell, infoCell, starBtn, rightCell);
+          row.append(dragGrip, idxCell, infoCell, starBtn, rightCell);
+
+          if (progPct > 2 && !isWatched) {
+            const bar = document.createElement('span');
+            bar.className = 'track-progress-bar';
+            const fill = document.createElement('span');
+            fill.className = 'track-progress-fill';
+            fill.style.width = `${progPct}%`;
+            bar.appendChild(fill);
+            row.appendChild(bar);
+          }
+
+          // Manual Drag-and-Drop Reordering
+          row.addEventListener('dragstart', (e) => {
+            state.dragTrackKey = track.key;
+            row.classList.add('is-dragging');
+            if (e.dataTransfer) {
+              e.dataTransfer.effectAllowed = 'move';
+              try { e.dataTransfer.setData('text/aaz-track-key', track.key); } catch {}
+            }
+          });
+          row.addEventListener('dragover', (e) => {
+            if (!state.dragTrackKey || state.dragTrackKey === track.key) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            const rect = row.getBoundingClientRect();
+            const isAfter = (e.clientY - rect.top) > rect.height / 2;
+            row.classList.toggle('is-drop-before', !isAfter);
+            row.classList.toggle('is-drop-after', isAfter);
+          });
+          row.addEventListener('dragleave', () => {
+            row.classList.remove('is-drop-before', 'is-drop-after');
+          });
+          row.addEventListener('drop', (e) => {
+            if (!state.dragTrackKey) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const fromKey = state.dragTrackKey;
+            const dropAfter = row.classList.contains('is-drop-after');
+            row.classList.remove('is-drop-before', 'is-drop-after');
+            state.dragTrackKey = '';
+            reorderTrack(fromKey, track.key, dropAfter);
+          });
+          row.addEventListener('dragend', () => {
+            state.dragTrackKey = '';
+            row.classList.remove('is-dragging');
+            el.playlistList.querySelectorAll('.is-drop-before, .is-drop-after').forEach((n) => {
+              n.classList.remove('is-drop-before', 'is-drop-after');
+            });
+          });
+
+          // Right-click Playlist Track Context Menu
+          row.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openPlaylistContextMenu(track.key, e.clientX, e.clientY);
+          });
 
           const activate = () => {
             if (track.key === state.currentKey) togglePlayPause();
-            else loadTrackByKey(track.key, { autoPlay: true, startTime: 0 });
+            else loadTrackByKey(track.key, { autoPlay: true, startTime: undefined });
           };
           row.addEventListener('click', activate);
-          row.addEventListener('keydown', (e) => { if (e.key === 'Enter') activate(); });
+          row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              activate();
+            } else if (e.key === 'Delete') {
+              e.preventDefault();
+              e.stopPropagation();
+              removeTrackByKey(track.key);
+            } else if (e.altKey && e.key === 'ArrowUp') {
+              e.preventDefault();
+              e.stopPropagation();
+              moveTrackRelative(track.key, 'up', true);
+            } else if (e.altKey && e.key === 'ArrowDown') {
+              e.preventDefault();
+              e.stopPropagation();
+              moveTrackRelative(track.key, 'down', true);
+            }
+          });
           frag.appendChild(row);
         });
         el.playlistList.appendChild(frag);
@@ -8581,6 +9823,7 @@
         });
         closeAllSubmenus(el.menuBar);
         closeContextMenu();
+        closePlaylistMenus();
       }
 
       function positionSubmenuFlyout(subEl) {
@@ -8683,7 +9926,7 @@
           return;
         }
         e.preventDefault();
-        if (e.target.closest('#aazContextMenu')) return;
+        if (e.target.closest('#aazContextMenu, #playlistContextMenu, .track-row')) return;
         if (e.target.closest('#mediaStage')) {
           openStageContextMenu(e.clientX, e.clientY);
         } else {
@@ -8787,6 +10030,7 @@
           case 'sub-sync-earlier': adjustSubtitleOffset(-0.5, true); break;
           case 'sub-sync-later': adjustSubtitleOffset(0.5, true); break;
           case 'sub-sync-reset': resetSubtitleOffset(true); break;
+          case 'open-cast': openCastModal(); break;
           case 'toggle-pip': togglePictureInPicture(); break;
           case 'toggle-fullscreen': toggleFullscreen(); break;
           case 'toggle-theme': applyTheme(state.theme === 'dark' ? 'light' : 'dark', true); break;
@@ -8816,6 +10060,297 @@
           e.stopPropagation();
           executeMenuAction(actionBtn);
         });
+      }
+
+      /* =======================================================================
+         14C. Cast to TV & Smart Screen Engine (DLNA/UPnP + LAN Stream + Miracast)
+         ======================================================================= */
+      function getMimeForTrack(track) {
+        const ext = (track?.ext || '').toLowerCase();
+        const map = {
+          mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska',
+          mov: 'video/quicktime', avi: 'video/x-msvideo', ogv: 'video/ogg', ts: 'video/mp2t',
+          mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', ogg: 'audio/ogg',
+          m4a: 'audio/mp4', aac: 'audio/aac', opus: 'audio/opus'
+        };
+        return map[ext] || (track?.kind === 'audio' ? 'audio/mpeg' : 'video/mp4');
+      }
+
+      function formatVttTimestamp(totalSec) {
+        const clamped = Math.max(0, totalSec);
+        const hrs = Math.floor(clamped / 3600);
+        const mins = Math.floor((clamped % 3600) / 60);
+        const secs = Math.floor(clamped % 60);
+        const ms = Math.round((clamped - Math.floor(clamped)) * 1000);
+        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+      }
+
+      function parseVttTimestamp(ts) {
+        const parts = ts.trim().split(':');
+        if (parts.length === 3) return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + parseFloat(parts[2]);
+        if (parts.length === 2) return Number(parts[0]) * 60 + parseFloat(parts[1]);
+        return 0;
+      }
+
+      function getShiftedSubtitleVtt() {
+        if (!state.activeSubtitleVtt || !state.subtitlesEnabled) return null;
+        if (Math.abs(state.subtitleOffsetSec) < 0.001) return state.activeSubtitleVtt;
+        return state.activeSubtitleVtt.replace(
+          /(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})/g,
+          (_, s1, s2) => `${formatVttTimestamp(parseVttTimestamp(s1) + state.subtitleOffsetSec)} --> ${formatVttTimestamp(parseVttTimestamp(s2) + state.subtitleOffsetSec)}`
+        );
+      }
+
+      function syncCastButtonState() {
+        const active = Boolean(state.castServerInfo || state.activeCastDevice);
+        if (el.dockCastBtn) el.dockCastBtn.classList.toggle('is-casting', active);
+        if (el.videoCastBtn) el.videoCastBtn.classList.toggle('is-active', active);
+        if (el.castLanToggleBtn) {
+          el.castLanToggleBtn.textContent = state.castServerInfo ? t('castStopLan') : t('castStartLan');
+          el.castLanToggleBtn.classList.toggle('btn-primary', !state.castServerInfo);
+        }
+        if (el.castLanUrlBox && el.castLanUrlText) {
+          el.castLanUrlBox.hidden = !state.castServerInfo;
+          if (state.castServerInfo) {
+            el.castLanUrlText.textContent = state.castServerInfo.receiverUrl;
+          }
+        }
+        if (el.castRemoteBar) {
+          el.castRemoteBar.hidden = !state.activeCastDevice;
+          if (state.activeCastDevice) {
+            const cur = getCurrentTrack();
+            el.castConnectedName.textContent = state.activeCastDevice.name;
+            el.castConnectedTrack.textContent = cur ? cur.displayName : '';
+          }
+        }
+      }
+
+      async function ensureCastLanServer(track) {
+        if (!desktopBridge || !desktopBridge.castStartServer) {
+          showNotice(t('castDesktopOnly'), true);
+          return null;
+        }
+        if (!track || !track.fullPath) {
+          showNotice(t('castNoTrack'), true);
+          return null;
+        }
+        const info = await desktopBridge.castStartServer(
+          track.fullPath,
+          track.displayName || track.name,
+          getShiftedSubtitleVtt()
+        );
+        state.castServerInfo = info;
+        syncCastButtonState();
+        return info;
+      }
+
+      async function syncActiveCastTrack(track) {
+        if (!track || !track.fullPath || !desktopBridge || !desktopBridge.castStartServer) return;
+        const info = await desktopBridge.castStartServer(
+          track.fullPath,
+          track.displayName || track.name,
+          getShiftedSubtitleVtt()
+        );
+        state.castServerInfo = info;
+        if (state.activeCastDevice && desktopBridge.castToDlna) {
+          const bustUrl = `${info.mediaUrl}?t=${Date.now()}`;
+          await desktopBridge.castToDlna(
+            state.activeCastDevice.controlUrl,
+            bustUrl,
+            track.displayName || track.name,
+            getMimeForTrack(track)
+          );
+        }
+        syncCastButtonState();
+      }
+
+      async function toggleCastLanServer() {
+        if (state.castServerInfo) {
+          if (desktopBridge && desktopBridge.castStopServer) {
+            await desktopBridge.castStopServer().catch(() => {});
+          }
+          state.castServerInfo = null;
+          state.activeCastDevice = null;
+          syncCastButtonState();
+          renderCastDevices();
+          return;
+        }
+        const track = getCurrentTrack();
+        if (!track) {
+          showNotice(t('castNoTrack'), true);
+          return;
+        }
+        try {
+          await ensureCastLanServer(track);
+        } catch (err) {
+          showNotice(String(err || 'Could not start Wi-Fi stream.'), true);
+        }
+      }
+
+      function renderCastDevices() {
+        if (!el.castDeviceList) return;
+        el.castDeviceList.innerHTML = '';
+
+        if (!desktopBridge || !desktopBridge.castDiscoverDevices) {
+          const hint = document.createElement('div');
+          hint.className = 'cast-empty-hint';
+          hint.textContent = t('castDesktopOnly');
+          el.castDeviceList.appendChild(hint);
+          return;
+        }
+
+        if (state.castScanning) {
+          const scanning = document.createElement('div');
+          scanning.className = 'cast-empty-hint';
+          scanning.textContent = t('castScanning');
+          el.castDeviceList.appendChild(scanning);
+          return;
+        }
+
+        if (state.castDevices.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'cast-empty-hint';
+          empty.textContent = t('castNoneFound');
+          el.castDeviceList.appendChild(empty);
+          return;
+        }
+
+        const frag = document.createDocumentFragment();
+        for (const dev of state.castDevices) {
+          const isConnected = state.activeCastDevice && state.activeCastDevice.id === dev.id;
+          const item = document.createElement('div');
+          item.className = `cast-device-item${isConnected ? ' is-connected' : ''}`;
+
+          const info = document.createElement('div');
+          info.className = 'cast-device-meta';
+          const nameEl = document.createElement('div');
+          nameEl.className = 'cast-device-name';
+          nameEl.textContent = dev.name;
+          const metaEl = document.createElement('div');
+          metaEl.className = 'cast-device-sub';
+          metaEl.textContent = dev.manufacturer ? `${dev.manufacturer} · DLNA / UPnP` : 'DLNA / UPnP Smart TV';
+          info.append(nameEl, metaEl);
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `btn ${isConnected ? 'btn-primary' : ''}`;
+          btn.style.height = '28px';
+          btn.style.padding = '0 12px';
+          btn.style.fontSize = '12px';
+          btn.textContent = isConnected ? t('castBtnConnected') : t('castBtnSend');
+          btn.addEventListener('click', () => castToDlnaDevice(dev));
+
+          item.append(info, btn);
+          frag.appendChild(item);
+        }
+        el.castDeviceList.appendChild(frag);
+      }
+
+      async function scanCastDevices() {
+        if (!desktopBridge || !desktopBridge.castDiscoverDevices) {
+          renderCastDevices();
+          return;
+        }
+        state.castScanning = true;
+        if (el.castScanBtn) {
+          el.castScanBtn.disabled = true;
+          el.castScanBtn.textContent = t('castScanning');
+        }
+        renderCastDevices();
+        try {
+          const devices = await desktopBridge.castDiscoverDevices();
+          state.castDevices = Array.isArray(devices) ? devices : [];
+        } catch {
+          state.castDevices = [];
+        } finally {
+          state.castScanning = false;
+          if (el.castScanBtn) {
+            el.castScanBtn.disabled = false;
+            el.castScanBtn.textContent = t('castScan');
+          }
+          renderCastDevices();
+        }
+      }
+
+      async function castToDlnaDevice(device) {
+        const track = getCurrentTrack();
+        if (!track || !track.fullPath) {
+          showNotice(t('castNoTrack'), true);
+          return;
+        }
+        try {
+          const info = await ensureCastLanServer(track);
+          if (!info) return;
+          const bustUrl = `${info.mediaUrl}?t=${Date.now()}`;
+          await desktopBridge.castToDlna(
+            device.controlUrl,
+            bustUrl,
+            track.displayName || track.name,
+            getMimeForTrack(track)
+          );
+          state.activeCastDevice = device;
+          el.media.pause();
+          syncCastButtonState();
+          renderCastDevices();
+          showNotice(t('castSentNotice', { title: track.displayName, device: device.name }));
+        } catch (err) {
+          showNotice(t('castFailedNotice', { device: device.name, err: String(err || 'Error') }), true);
+        }
+      }
+
+      async function sendDlnaControl(action) {
+        if (!state.activeCastDevice || !desktopBridge || !desktopBridge.castDlnaControl) return;
+        try {
+          await desktopBridge.castDlnaControl(state.activeCastDevice.controlUrl, action, null);
+          if (action === 'stop') {
+            state.activeCastDevice = null;
+            syncCastButtonState();
+            renderCastDevices();
+          }
+        } catch (err) {
+          showNotice(String(err || 'TV control failed'), true);
+        }
+      }
+
+      async function triggerWindowsMiracast() {
+        if (desktopBridge && desktopBridge.castOpenWindowsCast) {
+          await desktopBridge.castOpenWindowsCast().catch(() => {});
+        } else {
+          showNotice(t('castDesktopOnly'), true);
+        }
+      }
+
+      async function triggerBrowserRemoteCast() {
+        const track = getCurrentTrack();
+        if (!track) {
+          showNotice(t('castNoTrack'), true);
+          return;
+        }
+        if (el.media && el.media.remote && typeof el.media.remote.prompt === 'function') {
+          try {
+            await el.media.remote.prompt();
+            return;
+          } catch (err) {
+            if (err && err.name === 'AbortError') return;
+          }
+        }
+        showNotice(t('castBrowserUnsupported'), true);
+      }
+
+      function openCastModal() {
+        if (!el.castModal) return;
+        closeAllMenus();
+        el.castModal.hidden = false;
+        syncCastButtonState();
+        if (desktopBridge && desktopBridge.castDiscoverDevices && state.castDevices.length === 0 && !state.castScanning) {
+          scanCastDevices();
+        } else {
+          renderCastDevices();
+        }
+      }
+
+      function closeCastModal() {
+        if (el.castModal) el.castModal.hidden = true;
       }
 
       /* =======================================================================
@@ -9075,6 +10610,7 @@
           if (track) {
             track.duration = dur;
             updateTrackRowDuration(track.key, dur);
+            updatePlaylistHeader();
           }
           if (state.pendingSeekTime !== null) {
             el.media.currentTime = Math.max(0, Math.min(state.pendingSeekTime, Math.max(0, dur - 0.25)));
@@ -9096,6 +10632,26 @@
         updateSeekUI();
         if (state.activeSubtitleUrl && state.subtitlesEnabled) renderActiveSubtitleCues();
         if (el.media.currentTime > 3 && el.prevBtn.disabled) updateTransportAvailability();
+
+        // Save per-track resume progress & auto-mark watched at >= 92%
+        const nowTs = Date.now();
+        if (state.currentKey && Number.isFinite(el.media.duration) && el.media.duration > 8 && nowTs - state.lastProgressSaveTs >= 3000) {
+          state.lastProgressSaveTs = nowTs;
+          const cur = el.media.currentTime;
+          const dur = el.media.duration;
+          const pct = Math.round((cur / dur) * 100);
+          if (pct >= 92) {
+            if (!state.watchedKeys.has(state.currentKey)) {
+              state.watchedKeys.add(state.currentKey);
+              delete state.progressByKey[state.currentKey];
+              updatePlaylistHeader();
+              renderPlaylist();
+            }
+          } else if (cur > 2) {
+            state.progressByKey[state.currentKey] = { time: Math.floor(cur * 10) / 10, duration: Math.floor(dur) };
+            updateTrackRowProgress(state.currentKey, pct);
+          }
+        }
       });
 
       el.media.addEventListener('play', () => {
@@ -9121,6 +10677,21 @@
         stopAutosaveTimer();
         updatePlayButtonUI();
         AudioStudio.stopVisualizer();
+        const finishedKey = state.currentKey;
+        const finishedTrack = getCurrentTrack();
+        if (finishedKey) {
+          state.watchedKeys.add(finishedKey);
+          delete state.progressByKey[finishedKey];
+          updatePlaylistHeader();
+          renderPlaylist();
+        }
+        if (state.stopAfterKey && state.stopAfterKey === finishedKey) {
+          state.stopAfterKey = '';
+          renderPlaylist();
+          persistPlaybackState(0);
+          showNotice(t('plStoppedAfterNotice', { name: finishedTrack ? finishedTrack.displayName : '' }));
+          return;
+        }
         if (state.sleepEndAt === 'track') {
           clearSleepTimer();
           persistPlaybackState(0);
@@ -9210,11 +10781,17 @@
       el.dirInput.addEventListener('change', async (e) => {
         const files = e.target.files;
         const shouldPlay = state.resumeAutoPlayPending;
+        const isAppend = state.appendModePending === 'folder';
         state.resumeAutoPlayPending = false;
+        state.appendModePending = null;
         if (!files || files.length === 0) return;
         const { tracks, subMap, folderName } = buildTracksFromFileList(files);
         if (tracks.length === 0) {
           showNotice('No supported audio or video files were found in that folder.', true);
+          return;
+        }
+        if (isAppend) {
+          appendTracksToQueue(tracks, subMap);
           return;
         }
         state.currentDirHandle = null;
@@ -9223,8 +10800,10 @@
 
       el.filesInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files || []);
+        const isAppend = state.appendModePending === 'files';
+        state.appendModePending = null;
         if (files.length === 0) return;
-        if (files.length === 1 && PLAYLIST_EXTENSIONS.has(getExtension(files[0].name))) {
+        if (!isAppend && files.length === 1 && PLAYLIST_EXTENSIONS.has(getExtension(files[0].name))) {
           try {
             await handleImportedPlaylistContent(files[0].name, await files[0].text());
           } catch {
@@ -9235,6 +10814,10 @@
         const { tracks, subMap, folderName } = buildTracksFromFileList(files);
         if (tracks.length === 0) {
           showNotice('Please select supported audio or video files.', true);
+          return;
+        }
+        if (isAppend) {
+          appendTracksToQueue(tracks, subMap);
           return;
         }
         state.currentDirHandle = null;
@@ -9325,8 +10908,15 @@
         el.resumeBanner.hidden = true;
       });
       el.closeNoticeBtn.addEventListener('click', hideNotice);
+      if (el.noticeUndoBtn) {
+        el.noticeUndoBtn.addEventListener('click', () => {
+          const fn = state.noticeUndoHandler;
+          hideNotice();
+          if (typeof fn === 'function') fn();
+        });
+      }
 
-      // Sidebar & Save Playlist Bar
+      // Sidebar, Playlist Power Tools, Track Context Menu & Save Playlist Bar
       el.toggleSidebarBtn.addEventListener('click', toggleSidebar);
       el.tabQueueBtn.addEventListener('click', () => switchSidebarTab('queue'));
       el.tabSavedBtn.addEventListener('click', () => switchSidebarTab('saved'));
@@ -9337,6 +10927,40 @@
         if (e.key === 'Enter') saveCurrentQueueToLibrary(el.savePlNameInput.value);
         if (e.key === 'Escape') el.savePlBar.hidden = true;
       });
+
+      if (el.playlistToolsBtn && el.playlistToolsMenu) {
+        el.playlistToolsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const wasOpen = !el.playlistToolsMenu.hidden;
+          closeAllMenus();
+          if (!wasOpen) el.playlistToolsMenu.hidden = false;
+        });
+        el.playlistToolsMenu.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-pltool]');
+          if (!btn) return;
+          e.stopPropagation();
+          const tool = btn.dataset.pltool;
+          closePlaylistMenus();
+          if (tool === 'append-files') appendFilesToQueue();
+          else if (tool === 'append-folder') appendFolderToQueue();
+          else if (tool === 'shuffle-order') shuffleQueueOrder();
+          else if (tool === 'remove-dupes') removeDuplicateTracks();
+          else if (tool === 'remove-watched') removeWatchedTracks();
+          else if (tool === 'clear-upnext') {
+            state.upNextKeys = [];
+            renderPlaylist();
+          }
+        });
+      }
+
+      if (el.playlistContextMenu) {
+        el.playlistContextMenu.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-plcmd]');
+          if (!btn) return;
+          e.stopPropagation();
+          executePlaylistContextCommand(btn.dataset.plcmd);
+        });
+      }
 
       // Pin on Top (Electron .exe)
       el.pinWindowBtn.addEventListener('click', async () => {
@@ -9356,11 +10980,38 @@
       el.fsSnapshotBtn.addEventListener('click', captureVideoSnapshot);
       el.audioOnlyViewBtn.addEventListener('click', () => setVideoDisplayMode('audio', true));
       el.showVideoBtn.addEventListener('click', () => setVideoDisplayMode('video', true));
+      if (el.videoCastBtn) el.videoCastBtn.addEventListener('click', openCastModal);
+      if (el.dockCastBtn) el.dockCastBtn.addEventListener('click', openCastModal);
       el.pipBtn.addEventListener('click', togglePictureInPicture);
       el.dockFullscreenBtn.addEventListener('click', toggleFullscreen);
       el.audioExitFsBtn.addEventListener('click', toggleFullscreen);
       el.fsExitBtn.addEventListener('click', toggleFullscreen);
       el.fsPlayBtn.addEventListener('click', togglePlayPause);
+
+      // Cast Modal Controls
+      if (el.closeCastModalBtn) el.closeCastModalBtn.addEventListener('click', closeCastModal);
+      if (el.castModal) {
+        el.castModal.addEventListener('click', (e) => {
+          if (e.target === el.castModal) closeCastModal();
+        });
+      }
+      if (el.castScanBtn) el.castScanBtn.addEventListener('click', scanCastDevices);
+      if (el.castLanToggleBtn) el.castLanToggleBtn.addEventListener('click', toggleCastLanServer);
+      if (el.castCopyUrlBtn) {
+        el.castCopyUrlBtn.addEventListener('click', () => {
+          if (!state.castServerInfo) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(state.castServerInfo.receiverUrl).then(() => {
+              showNotice(t('castUrlCopied'));
+            }).catch(() => {});
+          }
+        });
+      }
+      if (el.castWindowsBtn) el.castWindowsBtn.addEventListener('click', triggerWindowsMiracast);
+      if (el.castBrowserBtn) el.castBrowserBtn.addEventListener('click', triggerBrowserRemoteCast);
+      if (el.castRemotePlayBtn) el.castRemotePlayBtn.addEventListener('click', () => sendDlnaControl('play'));
+      if (el.castRemotePauseBtn) el.castRemotePauseBtn.addEventListener('click', () => sendDlnaControl('pause'));
+      if (el.castRemoteStopBtn) el.castRemoteStopBtn.addEventListener('click', () => sendDlnaControl('stop'));
 
       // EQ Drawer
       el.eqToggleBtn.addEventListener('click', () => {
@@ -9451,7 +11102,7 @@
         renderPlaylist();
       });
       el.sortBtn.addEventListener('click', () => {
-        const order = ['asc', 'desc', 'type'];
+        const order = ['custom', 'asc', 'desc', 'type', 'duration'];
         state.sortMode = order[(order.indexOf(state.sortMode) + 1) % order.length];
         updateSortButtonUI();
         renderPlaylist();
@@ -9479,6 +11130,7 @@
           }
           closeAllMenus();
           toggleAudioOutputPopover(false);
+          closeCastModal();
           el.shortcutsModal.hidden = true;
           el.subtitleModal.hidden = true;
           el.savePlBar.hidden = true;
@@ -9572,6 +11224,8 @@
           toggleFullscreen();
         } else if (e.key === 'p' || e.key === 'P') {
           togglePictureInPicture();
+        } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+          openCastModal();
         } else if (e.key === 'g' || e.key === 'G') {
           adjustSubtitleOffset(-0.25, true);
         } else if (e.key === 'h' || e.key === 'H') {
@@ -9586,17 +11240,23 @@
          ======================================================================= */
       let dragDepth = 0;
       el.shell.addEventListener('dragenter', (e) => {
+        if (state.dragTrackKey) return;
         e.preventDefault();
         dragDepth++;
         el.shell.classList.add('is-dragging');
       });
-      el.shell.addEventListener('dragover', (e) => e.preventDefault());
+      el.shell.addEventListener('dragover', (e) => {
+        if (state.dragTrackKey) return;
+        e.preventDefault();
+      });
       el.shell.addEventListener('dragleave', (e) => {
+        if (state.dragTrackKey) return;
         e.preventDefault();
         dragDepth = Math.max(0, dragDepth - 1);
         if (dragDepth === 0) el.shell.classList.remove('is-dragging');
       });
       el.shell.addEventListener('drop', async (e) => {
+        if (state.dragTrackKey) return;
         e.preventDefault();
         dragDepth = 0;
         el.shell.classList.remove('is-dragging');
@@ -9662,7 +11322,7 @@
           setPlaybackRate(saved.playbackRate || 1, false);
           if (['all', 'audio', 'video', 'starred'].includes(saved.playlistMode)) state.playlistMode = saved.playlistMode;
           if (['video', 'audio'].includes(saved.videoDisplayMode)) state.videoDisplayMode = saved.videoDisplayMode;
-          if (['asc', 'desc', 'type'].includes(saved.sortMode)) state.sortMode = saved.sortMode;
+          if (['custom', 'asc', 'desc', 'type', 'duration'].includes(saved.sortMode)) state.sortMode = saved.sortMode;
           state.shuffle = Boolean(saved.shuffle);
           if (['off', 'all', 'one'].includes(saved.repeatMode)) state.repeatMode = saved.repeatMode;
           if (typeof saved.eqPreset === 'string') state.eqPreset = saved.eqPreset;
@@ -9671,6 +11331,8 @@
           }
           if (Number.isFinite(saved.preampGain)) state.preampGain = Math.max(1, Math.min(1.5, saved.preampGain));
           if (Array.isArray(saved.starredKeys)) state.starredKeys = new Set(saved.starredKeys);
+          if (Array.isArray(saved.watchedKeys)) state.watchedKeys = new Set(saved.watchedKeys);
+          if (saved.progressByKey && typeof saved.progressByKey === 'object') state.progressByKey = saved.progressByKey;
           if (saved.bookmarksByKey && typeof saved.bookmarksByKey === 'object') state.bookmarksByKey = saved.bookmarksByKey;
           if (Array.isArray(saved.savedPlaylists)) state.savedPlaylists = saved.savedPlaylists;
           if (typeof saved.nativeFolderPath === 'string') state.nativeFolderPath = saved.nativeFolderPath;
