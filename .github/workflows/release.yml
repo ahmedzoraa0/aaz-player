@@ -33,46 +33,32 @@ jobs:
           $pkg = Get-Content "desktop/package.json" -Raw | ConvertFrom-Json
           $ver = $pkg.version
           $tag = "v$ver"
-          echo "version=$ver" >> $env:GITHUB_OUTPUT
-          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$ver"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
 
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            echo "should_release=true" >> $env:GITHUB_OUTPUT
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
+            $global:LASTEXITCODE = 0
             exit 0
           }
 
-          gh release view $tag 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          $ErrorActionPreference = "Continue"
+          gh release view $tag *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+
+          if ($exists) {
             Write-Host "Release $tag already exists. Bump version in desktop/package.json to publish a new update."
-            echo "should_release=false" >> $env:GITHUB_OUTPUT
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=false"
           } else {
             Write-Host "New version $tag detected! Proceeding with Windows build & GitHub Release."
-            echo "should_release=true" >> $env:GITHUB_OUTPUT
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
           }
+          exit 0
 
       - name: Prepare app HTML & bind GitHub repo for auto-updater
         if: steps.version_check.outputs.should_release == 'true'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "desktop/app" | Out-Null
-          Copy-Item -Force "index.html" "desktop/app/index.html"
-
-          $parts = "$env:GITHUB_REPOSITORY".Split("/")
-          $owner = $parts[0]
-          $repo = $parts[1]
-          node -e "
-            const fs = require('fs');
-            const p = 'desktop/package.json';
-            const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
-            pkg.build.publish = [{
-              provider: 'github',
-              owner: process.argv[1],
-              repo: process.argv[2],
-              releaseType: 'release'
-            }];
-            fs.writeFileSync(p, JSON.stringify(pkg, null, 2));
-            console.log('Bound electron-updater publish target to', process.argv[1] + '/' + process.argv[2]);
-          " $owner $repo
+        run: node desktop/scripts/prepare-ci.cjs
 
       - name: Install desktop dependencies
         if: steps.version_check.outputs.should_release == 'true'
