@@ -1,0 +1,2553 @@
+/* =============================================================================
+   AAZ PLAYER — 16 BOLD GREEN-IDENTITY VISUAL THEMES (DARK + LIGHT = 32 MODES)
+   Orthogonal architecture:
+     html[data-skin="<id>"]                     -> Dark Mode skin
+     html[data-skin="<id>"][data-theme="light"] -> Light Mode skin
+   Every theme keeps GREEN as the signature primary brand color (--accent) while
+   dramatically transforming world palettes, materials, textures, corners, bevels,
+   shadows, buttons, sliders, and typography. 100% offline CSS (zero external URLs).
+   ============================================================================= */
+
+/* =============================================================================
+   SKIN 1: minecraft — Blockcraft (Grass-Top Strip, Cobblestone 3D Slots, XP Bar)
+   ============================================================================= */
+:root[data-skin="minecraft"] {
+  --bg-canvas: #1c1a1e;
+  --bg-surface: #28252b;
+  --bg-surface-elevated: #3a3740;
+  --bg-surface-hover: #4b4752;
+  --bg-inset: #131115;
+  --dropdown-bg: #262329;
+  --border-hairline: #4d4854;
+  --border-strong: #0b0a0c;
+  --text-primary: #f5f5f5;
+  --text-secondary: #cfcbd6;
+  --text-muted: #9b95a3;
+  --accent: #44dd55;
+  --accent-hover: #64f074;
+  --accent-soft: rgba(68, 221, 85, 0.22);
+  --accent-border: #2da63c;
+  --accent-ink: #0a1f0c;
+  --gold: #f0b938;
+  --gold-soft: rgba(240, 185, 56, 0.2);
+  --gold-border: #c68e1c;
+  --range-track: #181a18;
+  --scroll-thumb: #585460;
+  --scroll-thumb-hover: #706b7a;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: 'JetBrains Mono', 'Courier New', 'Cairo', monospace;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --mc-hi: #66616e;
+  --mc-lo: #161419;
+  --mc-dirt: #5c3d24;
+  --mc-grass: #44dd55;
+  --mc-stone-a: rgba(255, 255, 255, 0.03);
+  --mc-stone-b: rgba(0, 0, 0, 0.12);
+}
+
+:root[data-skin="minecraft"][data-theme="light"] {
+  --bg-canvas: #c6c6c6;
+  --bg-surface: #d4d4d4;
+  --bg-surface-elevated: #b8b8b8;
+  --bg-surface-hover: #a8a8a8;
+  --bg-inset: #8b8b8b;
+  --dropdown-bg: #d4d4d4;
+  --border-hairline: #555555;
+  --border-strong: #1b1b1b;
+  --text-primary: #1a1a1a;
+  --text-secondary: #2e2e2e;
+  --text-muted: #4b4b4b;
+  --accent: #38a832;
+  --accent-hover: #2d8f28;
+  --accent-soft: rgba(56, 168, 50, 0.24);
+  --accent-border: #1e6b1a;
+  --accent-ink: #ffffff;
+  --gold: #a66d14;
+  --gold-soft: rgba(214, 152, 34, 0.22);
+  --gold-border: #8c5c10;
+  --range-track: #777777;
+  --scroll-thumb: #6f6f6f;
+  --scroll-thumb-hover: #4d4d4d;
+  --mc-hi: #ffffff;
+  --mc-lo: #555555;
+  --mc-dirt: #7d5432;
+  --mc-grass: #4cb83b;
+  --mc-stone-a: rgba(255, 255, 255, 0.2);
+  --mc-stone-b: rgba(0, 0, 0, 0.06);
+}
+
+html[dir="rtl"][data-skin="minecraft"] {
+  --font-ui: 'Cairo', 'JetBrains Mono', monospace;
+}
+
+/* Signature Grass-Block Top Border on Topbar & Tabstrip + Pixel Stone Canvas */
+[data-skin="minecraft"] .topbar {
+  border-top: 4px solid var(--mc-grass);
+  border-bottom: 4px solid var(--mc-dirt);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.16);
+}
+
+[data-skin="minecraft"] .tabstrip {
+  border-bottom: 3px solid var(--mc-grass);
+}
+
+[data-skin="minecraft"] .transport-dock {
+  border-top: 4px solid var(--mc-dirt);
+  box-shadow: inset 0 3px 0 var(--mc-grass);
+}
+
+[data-skin="minecraft"] .stage-column {
+  background-color: var(--bg-canvas);
+  background-image:
+    linear-gradient(90deg, var(--mc-stone-a) 50%, transparent 50%),
+    linear-gradient(var(--mc-stone-b) 50%, transparent 50%);
+  background-size: 24px 24px;
+}
+
+/* Chunky Minecraft Inventory Buttons & Panels */
+[data-skin="minecraft"] .btn,
+[data-skin="minecraft"] .btn-icon,
+[data-skin="minecraft"] .lang-toggle-btn,
+[data-skin="minecraft"] .sidebar-tab-btn,
+[data-skin="minecraft"] .mode-tab,
+[data-skin="minecraft"] .tab-add-btn,
+[data-skin="minecraft"] .modal-card,
+[data-skin="minecraft"] .menu-dropdown,
+[data-skin="minecraft"] .menu-sub-panel,
+[data-skin="minecraft"] .context-menu,
+[data-skin="minecraft"] .saved-pl-card,
+[data-skin="minecraft"] .resume-banner {
+  border-radius: 0 !important;
+  border: 2px solid var(--border-strong) !important;
+  box-shadow:
+    inset 3px 3px 0 var(--mc-hi),
+    inset -3px -3px 0 var(--mc-lo);
+}
+
+[data-skin="minecraft"] .btn-primary,
+[data-skin="minecraft"] .btn-play {
+  border-radius: 0 !important;
+  background-color: var(--accent) !important;
+  color: var(--accent-ink) !important;
+  border: 2px solid #091d0b !important;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 255, 255, 0.45),
+    inset -3px -3px 0 rgba(0, 0, 0, 0.38) !important;
+}
+
+[data-skin="minecraft"] .btn:active:not(:disabled),
+[data-skin="minecraft"] .btn-icon:active:not(:disabled),
+[data-skin="minecraft"] .btn-play:active:not(:disabled),
+[data-skin="minecraft"] .sidebar-tab-btn.is-active,
+[data-skin="minecraft"] .mode-tab.is-active {
+  transform: none;
+  box-shadow:
+    inset 3px 3px 0 var(--mc-lo),
+    inset -3px -3px 0 var(--mc-hi) !important;
+}
+
+/* Recessed Minecraft Inventory Slots for Lists & Inputs */
+[data-skin="minecraft"] .search-input,
+[data-skin="minecraft"] .p3-select,
+[data-skin="minecraft"] .track-row {
+  border-radius: 0 !important;
+  border: 2px solid var(--border-strong);
+  box-shadow: inset 2px 2px 0 var(--mc-lo), inset -2px -2px 0 var(--mc-hi);
+}
+
+[data-skin="minecraft"] .track-row.is-active {
+  background-color: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+[data-skin="minecraft"] .workspace-tab {
+  border-radius: 0 !important;
+  border: 2px solid var(--border-strong);
+  border-bottom: none;
+  box-shadow: inset 2px 2px 0 var(--mc-hi);
+}
+
+/* Segmented Green Minecraft XP-Bar Scrubber */
+[data-skin="minecraft"] .range-input::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 0;
+  border: 2px solid var(--border-strong);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 18px,
+      rgba(0, 0, 0, 0.42) 18px 20px
+    ),
+    linear-gradient(
+      to right,
+      var(--accent) 0%,
+      var(--accent) var(--progress, 0%),
+      var(--range-track) var(--progress, 0%),
+      var(--range-track) 100%
+    );
+}
+
+[data-skin="minecraft"] .range-input::-webkit-slider-thumb {
+  width: 14px;
+  height: 16px;
+  border-radius: 0;
+  margin-top: -5px;
+  background: var(--gold);
+  border: 2px solid var(--border-strong);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* =============================================================================
+   SKIN 2: lego — LEGO Brick Builder (Circular Stud Grid, 3D Clickable Plastic)
+   ============================================================================= */
+:root[data-skin="lego"] {
+  --bg-canvas: #141923;
+  --bg-surface: #1c2433;
+  --bg-surface-elevated: #253045;
+  --bg-surface-hover: #2f3e59;
+  --bg-inset: #0e131b;
+  --dropdown-bg: #1d2636;
+  --border-hairline: #344460;
+  --border-strong: #496087;
+  --text-primary: #f7f9fc;
+  --text-secondary: #c7d4e8;
+  --text-muted: #8b9db8;
+  --accent: #22cf64;
+  --accent-hover: #3ce67d;
+  --accent-soft: rgba(34, 207, 100, 0.22);
+  --accent-border: #22cf64;
+  --accent-ink: #041d0d;
+  --gold: #ffd400;
+  --gold-soft: rgba(255, 212, 0, 0.2);
+  --gold-border: #e5be00;
+  --danger: #ff3b30;
+  --range-track: #26334a;
+  --scroll-thumb: #3c5175;
+  --scroll-thumb-hover: #5370a1;
+  --radius-panel: 6px;
+  --radius-control: 5px;
+  --radius-sm: 4px;
+  --font-ui: 'Plus Jakarta Sans', 'Trebuchet MS', 'Cairo', sans-serif;
+  --lego-lip: #0a0f17;
+  --lego-green-lip: #0f7836;
+  --lego-yellow: #ffd400;
+  --lego-red: #e3000b;
+  --lego-blue: #006cb7;
+  --lego-stud-hi: rgba(255, 255, 255, 0.08);
+  --lego-stud-lo: rgba(0, 0, 0, 0.35);
+}
+
+:root[data-skin="lego"][data-theme="light"] {
+  --bg-canvas: #f2f4ea;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f7f8f2;
+  --bg-surface-hover: #e7f5ec;
+  --bg-inset: #e5eadf;
+  --dropdown-bg: #ffffff;
+  --border-hairline: #c7d2c2;
+  --border-strong: #89a087;
+  --text-primary: #141c17;
+  --text-secondary: #34473b;
+  --text-muted: #5c7063;
+  --accent: #009c44;
+  --accent-hover: #008238;
+  --accent-soft: rgba(0, 156, 68, 0.16);
+  --accent-border: #009c44;
+  --accent-ink: #ffffff;
+  --gold: #d9a700;
+  --gold-soft: rgba(255, 212, 0, 0.25);
+  --gold-border: #d9a700;
+  --danger: #d90416;
+  --range-track: #d4dfd0;
+  --scroll-thumb: #9ab5a0;
+  --scroll-thumb-hover: #709679;
+  --lego-lip: #b8c4b4;
+  --lego-green-lip: #00662b;
+  --lego-yellow: #ffd400;
+  --lego-red: #e3000b;
+  --lego-blue: #006cb7;
+  --lego-stud-hi: rgba(255, 255, 255, 0.85);
+  --lego-stud-lo: rgba(0, 100, 42, 0.14);
+}
+
+html[dir="rtl"][data-skin="lego"] {
+  --font-ui: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Iconic LEGO Baseplate Circular Stud Pattern on Stage & Brick Trim */
+[data-skin="lego"] .stage-column {
+  background-color: var(--bg-canvas);
+  background-image:
+    radial-gradient(circle at 12px 12px, var(--lego-stud-hi) 4px, var(--lego-stud-lo) 5.5px, transparent 6px);
+  background-size: 24px 24px;
+}
+
+[data-skin="lego"] .topbar {
+  border-bottom: 4px solid var(--lego-yellow);
+  box-shadow: 0 3px 0 var(--accent);
+}
+
+[data-skin="lego"] .transport-dock {
+  border-top: 4px solid var(--accent);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Glossy 3D Clickable LEGO Brick Buttons */
+[data-skin="lego"] .btn,
+[data-skin="lego"] .lang-toggle-btn,
+[data-skin="lego"] .sidebar-tab-btn,
+[data-skin="lego"] .mode-tab,
+[data-skin="lego"] .saved-pl-card,
+[data-skin="lego"] .resume-banner {
+  border-radius: 5px;
+  border: 2px solid var(--border-strong);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.28),
+    0 3px 0 var(--lego-lip);
+  font-weight: 700;
+}
+
+[data-skin="lego"] .btn-primary,
+[data-skin="lego"] .btn-play {
+  background-color: var(--accent) !important;
+  border: 2px solid var(--lego-green-lip) !important;
+  border-radius: 7px !important;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.38),
+    0 4px 0 var(--lego-green-lip) !important;
+}
+
+[data-skin="lego"] .btn:active:not(:disabled),
+[data-skin="lego"] .btn-play:active:not(:disabled) {
+  transform: translateY(3px) !important;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.2), 0 1px 0 var(--lego-lip) !important;
+}
+
+[data-skin="lego"] .sidebar-tab-btn.is-active {
+  background-color: var(--lego-blue);
+  color: #ffffff;
+  border-color: #004b82;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 3px 0 #004b82;
+}
+
+[data-skin="lego"] .sidebar-tab-btn.is-active .tab-count {
+  color: #ffffff;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+[data-skin="lego"] .modal-card {
+  border-radius: 10px;
+  border: 3px solid var(--accent);
+  box-shadow: 0 7px 0 var(--lego-green-lip), 0 22px 50px rgba(0, 0, 0, 0.45);
+}
+
+[data-skin="lego"] .workspace-tab {
+  border-radius: 6px 6px 0 0;
+  border: 2px solid var(--border-hairline);
+  border-bottom: none;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.2);
+}
+
+[data-skin="lego"] .workspace-tab.is-active::before {
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent) 0 55%, var(--lego-yellow) 55% 78%, var(--lego-red) 78% 100%);
+}
+
+[data-skin="lego"] .range-input::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+}
+
+[data-skin="lego"] .range-input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  margin-top: -5px;
+  background: var(--lego-yellow);
+  border: 2px solid #997d00;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.65), 0 2px 0 #8a7000;
+}
+
+/* =============================================================================
+   SKIN 3: roblox — Roblox Studio Blox (Studio Charcoal/White, Emerald + Cobalt)
+   ============================================================================= */
+:root[data-skin="roblox"] {
+  --bg-canvas: #16181c;
+  --bg-surface: #1e2026;
+  --bg-surface-elevated: #282b33;
+  --bg-surface-hover: #333842;
+  --bg-inset: #111317;
+  --dropdown-bg: #22252c;
+  --border-hairline: #363b47;
+  --border-strong: #4e5668;
+  --text-primary: #ffffff;
+  --text-secondary: #c5cbd8;
+  --text-muted: #8a92a3;
+  --accent: #00c975;
+  --accent-hover: #1be08d;
+  --accent-soft: rgba(0, 201, 117, 0.18);
+  --accent-border: #00c975;
+  --accent-ink: #031f13;
+  --gold: #3d8bff;
+  --gold-soft: rgba(61, 139, 255, 0.18);
+  --gold-border: rgba(61, 139, 255, 0.55);
+  --range-track: #2e333e;
+  --scroll-thumb: #454c5c;
+  --scroll-thumb-hover: #5e687d;
+  --radius-panel: 10px;
+  --radius-control: 8px;
+  --radius-sm: 6px;
+  --font-ui: 'Plus Jakarta Sans', 'Segoe UI', 'Cairo', sans-serif;
+  --rblx-blue: #3388ff;
+}
+
+:root[data-skin="roblox"][data-theme="light"] {
+  --bg-canvas: #ebedf0;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f2f4f7;
+  --bg-surface-hover: #e3e7ed;
+  --bg-inset: #e2e6ec;
+  --dropdown-bg: #ffffff;
+  --border-hairline: #cfd5df;
+  --border-strong: #9aa4b5;
+  --text-primary: #191b1f;
+  --text-secondary: #434956;
+  --text-muted: #6c7484;
+  --accent: #00a862;
+  --accent-hover: #008f53;
+  --accent-soft: rgba(0, 168, 98, 0.14);
+  --accent-border: #00a862;
+  --accent-ink: #ffffff;
+  --gold: #0066ff;
+  --gold-soft: rgba(0, 102, 255, 0.13);
+  --gold-border: rgba(0, 102, 255, 0.45);
+  --range-track: #cfd6e0;
+  --scroll-thumb: #aeb7c7;
+  --scroll-thumb-hover: #838fa3;
+  --rblx-blue: #0066ff;
+}
+
+html[dir="rtl"][data-skin="roblox"] {
+  --font-ui: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+}
+
+[data-skin="roblox"] .stage-column {
+  background-color: var(--bg-canvas);
+  background-image:
+    linear-gradient(rgba(128, 144, 175, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128, 144, 175, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+[data-skin="roblox"] .topbar {
+  border-bottom: 2px solid var(--border-hairline);
+}
+
+[data-skin="roblox"] .btn,
+[data-skin="roblox"] .lang-toggle-btn,
+[data-skin="roblox"] .sidebar-tab-btn,
+[data-skin="roblox"] .mode-tab,
+[data-skin="roblox"] .saved-pl-card,
+[data-skin="roblox"] .resume-banner {
+  border-radius: 8px;
+  border-width: 1.5px;
+  font-weight: 700;
+}
+
+/* Signature Wide Rounded-Square Roblox Green Play Button */
+[data-skin="roblox"] .btn-play {
+  width: 54px;
+  height: 42px;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 14px rgba(0, 201, 117, 0.35);
+}
+
+[data-skin="roblox"] .sidebar-tab-btn.is-active {
+  border-color: var(--rblx-blue);
+  background-color: var(--gold-soft);
+  color: var(--rblx-blue);
+}
+
+[data-skin="roblox"] .track-row.is-active {
+  border-inline-start: 4px solid var(--accent);
+}
+
+[data-skin="roblox"] .modal-card {
+  border-radius: 12px;
+  border: 2px solid var(--border-strong);
+}
+
+[data-skin="roblox"] .range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 4px;
+}
+
+[data-skin="roblox"] .range-input::-webkit-slider-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  margin-top: -4.5px;
+  background: var(--accent);
+  border: 2px solid var(--bg-surface);
+}
+
+/* =============================================================================
+   SKIN 4: mario — Super Arcade 16-Bit (Pipe Green, Coin Gold, Sky/Castle Gloss)
+   ============================================================================= */
+:root[data-skin="mario"] {
+  --bg-canvas: #13152e;
+  --bg-surface: #1b1f42;
+  --bg-surface-elevated: #252b59;
+  --bg-surface-hover: #303870;
+  --bg-inset: #0d0f22;
+  --dropdown-bg: #1c2146;
+  --border-hairline: #3e4785;
+  --border-strong: #ffd23f;
+  --text-primary: #fffdf5;
+  --text-secondary: #cfd7ff;
+  --text-muted: #8f9bd1;
+  --accent: #2ee05a;
+  --accent-hover: #52f57b;
+  --accent-soft: rgba(46, 224, 90, 0.22);
+  --accent-border: #2ee05a;
+  --accent-ink: #07200e;
+  --gold: #ffd23f;
+  --gold-soft: rgba(255, 210, 63, 0.22);
+  --gold-border: #ffd23f;
+  --danger: #ff4747;
+  --range-track: #272f5c;
+  --scroll-thumb: #465196;
+  --scroll-thumb-hover: #6472c2;
+  --radius-panel: 12px;
+  --radius-control: 10px;
+  --radius-sm: 7px;
+  --font-ui: 'Trebuchet MS', 'Plus Jakarta Sans', 'Cairo', sans-serif;
+  --mario-red: #e83535;
+  --mario-outline: #070814;
+}
+
+:root[data-skin="mario"][data-theme="light"] {
+  --bg-canvas: #dff2ff;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f2f9ff;
+  --bg-surface-hover: #dff5e6;
+  --bg-inset: #cde6fa;
+  --dropdown-bg: #ffffff;
+  --border-hairline: #7bb4e0;
+  --border-strong: #1b2840;
+  --text-primary: #141c2e;
+  --text-secondary: #304569;
+  --text-muted: #567099;
+  --accent: #1cb846;
+  --accent-hover: #149e3a;
+  --accent-soft: rgba(28, 184, 70, 0.18);
+  --accent-border: #12782d;
+  --accent-ink: #ffffff;
+  --gold: #d99100;
+  --gold-soft: rgba(255, 205, 41, 0.28);
+  --gold-border: #c98600;
+  --danger: #d92626;
+  --range-track: #b9dcf7;
+  --scroll-thumb: #7db4de;
+  --scroll-thumb-hover: #4d90c7;
+  --mario-red: #e02828;
+  --mario-outline: #1b2840;
+}
+
+html[dir="rtl"][data-skin="mario"] {
+  --font-ui: 'Cairo', 'Trebuchet MS', sans-serif;
+}
+
+[data-skin="mario"] .topbar {
+  border-bottom: 3px solid var(--mario-outline);
+  box-shadow: 0 3px 0 var(--mario-red);
+}
+
+[data-skin="mario"] .transport-dock {
+  border-top: 3px solid var(--mario-outline);
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+[data-skin="mario"] .btn,
+[data-skin="mario"] .lang-toggle-btn,
+[data-skin="mario"] .sidebar-tab-btn,
+[data-skin="mario"] .saved-pl-card,
+[data-skin="mario"] .resume-banner {
+  border-radius: 10px;
+  border: 2.5px solid var(--mario-outline);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.3), 0 3px 0 var(--mario-outline);
+  font-weight: 800;
+}
+
+[data-skin="mario"] .btn-play {
+  border-radius: 50%;
+  border: 3px solid var(--mario-outline);
+  background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 100%);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), 0 4px 0 var(--mario-outline);
+}
+
+[data-skin="mario"] .modal-card {
+  border-radius: 14px;
+  border: 3px solid var(--mario-outline);
+  box-shadow: 0 6px 0 var(--mario-outline);
+}
+
+[data-skin="mario"] .range-input::-webkit-slider-runnable-track {
+  height: 9px;
+  border-radius: 999px;
+  border: 2px solid var(--mario-outline);
+}
+
+[data-skin="mario"] .range-input::-webkit-slider-thumb {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  margin-top: -6px;
+  background: var(--gold);
+  border: 2.5px solid var(--mario-outline);
+}
+
+/* =============================================================================
+   SKIN 5: retro95 — Authentic Classic OS 95 (Teal Desktop + Silver-Gray Chrome)
+   ============================================================================= */
+:root[data-skin="retro95"] {
+  --bg-canvas: #0b3438;
+  --bg-surface: #252b2c;
+  --bg-surface-elevated: #323a3b;
+  --bg-surface-hover: #3f494a;
+  --bg-inset: #131819;
+  --dropdown-bg: #272e2f;
+  --border-hairline: #4d5859;
+  --border-strong: #6b7a7b;
+  --text-primary: #eef6f4;
+  --text-secondary: #c0d2cf;
+  --text-muted: #8ea4a0;
+  --accent: #24c46b;
+  --accent-hover: #3ee086;
+  --accent-soft: rgba(36, 196, 107, 0.24);
+  --accent-border: #3ee086;
+  --accent-ink: #051c0f;
+  --range-track: #141a1b;
+  --scroll-thumb: #4c595b;
+  --scroll-thumb-hover: #657678;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: Tahoma, 'MS Sans Serif', 'Segoe UI', 'Cairo', sans-serif;
+  --font-mono: 'Courier New', 'JetBrains Mono', monospace;
+  --bevel-hi: #5c6a6b;
+  --bevel-lo: #0c0f10;
+  --bevel-mid-hi: #424d4e;
+  --bevel-mid-lo: #181d1e;
+}
+
+/* Authentic Classic Windows 95 Teal Desktop (#008080) + Battleship Silver-Gray (#c0c0c0)! */
+:root[data-skin="retro95"][data-theme="light"] {
+  --bg-canvas: #008080;
+  --bg-surface: #c0c0c0;
+  --bg-surface-elevated: #d4d0c8;
+  --bg-surface-hover: #dedad2;
+  --bg-inset: #ffffff;
+  --dropdown-bg: #c0c0c0;
+  --border-hairline: #808080;
+  --border-strong: #404040;
+  --text-primary: #000000;
+  --text-secondary: #1e2424;
+  --text-muted: #4a4a4a;
+  --accent: #0f7a3e;
+  --accent-hover: #0a5e2f;
+  --accent-soft: rgba(15, 122, 62, 0.2);
+  --accent-border: #0a5e2f;
+  --accent-ink: #ffffff;
+  --range-track: #9e9e9e;
+  --scroll-thumb: #8a8a8a;
+  --scroll-thumb-hover: #666666;
+  --bevel-hi: #ffffff;
+  --bevel-lo: #404040;
+  --bevel-mid-hi: #dfdfdf;
+  --bevel-mid-lo: #808080;
+}
+
+html[dir="rtl"][data-skin="retro95"] {
+  --font-ui: 'Cairo', Tahoma, sans-serif;
+}
+
+[data-skin="retro95"] .stage-column {
+  background: var(--bg-canvas) !important;
+}
+
+[data-skin="retro95"][data-theme="light"] .stage-empty-title,
+[data-skin="retro95"][data-theme="light"] .stage-empty-sub {
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-skin="retro95"] .topbar,
+[data-skin="retro95"] .transport-dock,
+[data-skin="retro95"] .sidebar-pane,
+[data-skin="retro95"] .tabstrip {
+  background-color: var(--bg-surface);
+  border-radius: 0 !important;
+  border: 2px solid var(--bevel-mid-lo);
+  box-shadow: inset 1px 1px 0 var(--bevel-hi), inset -1px -1px 0 var(--bevel-lo);
+}
+
+[data-skin="retro95"] .btn,
+[data-skin="retro95"] .btn-icon,
+[data-skin="retro95"] .lang-toggle-btn,
+[data-skin="retro95"] .sidebar-tab-btn,
+[data-skin="retro95"] .mode-tab,
+[data-skin="retro95"] .tab-add-btn,
+[data-skin="retro95"] .win-ctrl-btn {
+  border-radius: 0 !important;
+  background-color: var(--bg-surface-elevated);
+  border: 2px solid var(--bevel-mid-lo);
+  box-shadow: inset 1px 1px 0 var(--bevel-hi), inset -1px -1px 0 var(--bevel-lo);
+}
+
+[data-skin="retro95"] .btn-primary,
+[data-skin="retro95"] .btn-play {
+  border-radius: 0 !important;
+  background-color: var(--accent);
+  color: var(--accent-ink);
+  border: 2px solid var(--bevel-lo);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.4), inset -2px -2px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-skin="retro95"] .btn:active:not(:disabled),
+[data-skin="retro95"] .btn-icon:active:not(:disabled),
+[data-skin="retro95"] .btn-icon.is-active,
+[data-skin="retro95"] .sidebar-tab-btn.is-active,
+[data-skin="retro95"] .mode-tab.is-active {
+  transform: none;
+  box-shadow: inset 1px 1px 0 var(--bevel-lo), inset -1px -1px 0 var(--bevel-hi);
+}
+
+[data-skin="retro95"] .modal-card,
+[data-skin="retro95"] .menu-dropdown,
+[data-skin="retro95"] .menu-sub-panel,
+[data-skin="retro95"] .context-menu {
+  border-radius: 0 !important;
+  border: 2px solid var(--bevel-lo);
+  box-shadow: inset 1px 1px 0 var(--bevel-hi), inset -1px -1px 0 var(--bevel-mid-lo);
+}
+
+[data-skin="retro95"] .modal-header {
+  background: linear-gradient(90deg, var(--accent) 0%, #0a4d29 100%);
+  color: #ffffff;
+  margin: -18px -20px 6px;
+  padding: 7px 12px;
+  border-bottom: 2px solid var(--bevel-lo);
+}
+
+[data-skin="retro95"] .modal-header .modal-title {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+[data-skin="retro95"] .search-input,
+[data-skin="retro95"] .p3-select,
+[data-skin="retro95"] .playlist-list,
+[data-skin="retro95"] .saved-list {
+  border-radius: 0 !important;
+  background-color: var(--bg-inset);
+  border: 2px solid var(--bevel-mid-hi);
+  box-shadow: inset 1px 1px 0 var(--bevel-lo), inset -1px -1px 0 var(--bevel-hi);
+}
+
+[data-skin="retro95"] .track-row,
+[data-skin="retro95"] .saved-pl-card,
+[data-skin="retro95"] .workspace-tab {
+  border-radius: 0 !important;
+}
+
+[data-skin="retro95"] .track-row.is-active {
+  background-color: var(--accent) !important;
+  color: var(--accent-ink) !important;
+}
+
+[data-skin="retro95"] .track-row.is-active .track-name,
+[data-skin="retro95"] .track-row.is-active .track-meta,
+[data-skin="retro95"] .track-row.is-active .track-index,
+[data-skin="retro95"] .track-row.is-active .track-right {
+  color: var(--accent-ink) !important;
+}
+
+[data-skin="retro95"] .range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 0;
+  border: 1px solid var(--bevel-lo);
+}
+
+[data-skin="retro95"] .range-input::-webkit-slider-thumb {
+  width: 11px;
+  height: 18px;
+  border-radius: 0;
+  margin-top: -6px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--bevel-lo);
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+
+/* =============================================================================
+   SKIN 6: arcade — Game Boy LCD (Light) / Neon Arcade Cabinet (Dark)
+   ============================================================================= */
+:root[data-skin="arcade"] {
+  --bg-canvas: #0f0a1e;
+  --bg-surface: #17102e;
+  --bg-surface-elevated: #231945;
+  --bg-surface-hover: #30225e;
+  --bg-inset: #090614;
+  --dropdown-bg: #181130;
+  --border-hairline: #49348a;
+  --border-strong: #42ff82;
+  --text-primary: #f2fff7;
+  --text-secondary: #b7ffcf;
+  --text-muted: #8a7ab8;
+  --accent: #3eff7f;
+  --accent-hover: #70ffa0;
+  --accent-soft: rgba(62, 255, 127, 0.2);
+  --accent-border: #3eff7f;
+  --accent-ink: #071c0e;
+  --gold: #ff47c2;
+  --gold-soft: rgba(255, 71, 194, 0.2);
+  --gold-border: #ff47c2;
+  --range-track: #261b4a;
+  --scroll-thumb: #4c3691;
+  --scroll-thumb-hover: #6c4ec7;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: 'JetBrains Mono', 'Courier New', 'Cairo', monospace;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --pixel-shadow: #05020d;
+}
+
+/* Authentic 4-Shade Game Boy Dot-Matrix Olive LCD (#9bbc0f / #8bac0f / #306230 / #0f380f) */
+:root[data-skin="arcade"][data-theme="light"] {
+  --bg-canvas: #9bbc0f;
+  --bg-surface: #b2cf2f;
+  --bg-surface-elevated: #8bac0f;
+  --bg-surface-hover: #79990d;
+  --bg-inset: #c4db58;
+  --dropdown-bg: #b2cf2f;
+  --border-hairline: #306230;
+  --border-strong: #0f380f;
+  --text-primary: #0f380f;
+  --text-secondary: #1e4d1e;
+  --text-muted: #306230;
+  --accent: #0f380f;
+  --accent-hover: #1d521d;
+  --accent-soft: rgba(15, 56, 15, 0.2);
+  --accent-border: #0f380f;
+  --accent-ink: #c4db58;
+  --gold: #306230;
+  --gold-soft: rgba(48, 98, 48, 0.22);
+  --gold-border: #0f380f;
+  --range-track: #7a990c;
+  --scroll-thumb: #306230;
+  --scroll-thumb-hover: #0f380f;
+  --pixel-shadow: #0f380f;
+}
+
+html[dir="rtl"][data-skin="arcade"] {
+  --font-ui: 'Cairo', 'JetBrains Mono', monospace;
+}
+
+[data-skin="arcade"][data-theme="light"] .stage-column {
+  background-color: var(--bg-canvas);
+  background-image:
+    linear-gradient(rgba(15, 56, 15, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 56, 15, 0.09) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+[data-skin="arcade"] .btn,
+[data-skin="arcade"] .lang-toggle-btn,
+[data-skin="arcade"] .sidebar-tab-btn,
+[data-skin="arcade"] .mode-tab,
+[data-skin="arcade"] .saved-pl-card,
+[data-skin="arcade"] .resume-banner,
+[data-skin="arcade"] .modal-card,
+[data-skin="arcade"] .menu-dropdown,
+[data-skin="arcade"] .menu-sub-panel,
+[data-skin="arcade"] .context-menu,
+[data-skin="arcade"] .btn-play {
+  border-radius: 0 !important;
+  border: 2.5px solid var(--border-strong) !important;
+  box-shadow: 4px 4px 0 0 var(--pixel-shadow) !important;
+}
+
+[data-skin="arcade"] .btn:active:not(:disabled),
+[data-skin="arcade"] .btn-play:active:not(:disabled) {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow) !important;
+}
+
+[data-skin="arcade"] .topbar {
+  border-bottom: 3px solid var(--border-strong);
+}
+
+[data-skin="arcade"] .transport-dock {
+  border-top: 3px solid var(--border-strong);
+}
+
+[data-skin="arcade"] .sidebar-pane {
+  border-inline-start: 3px solid var(--border-strong);
+}
+
+[data-skin="arcade"] .track-row,
+[data-skin="arcade"] .workspace-tab,
+[data-skin="arcade"] .search-input,
+[data-skin="arcade"] .p3-select {
+  border-radius: 0 !important;
+  border-width: 2px;
+}
+
+[data-skin="arcade"] .range-input::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 0;
+  border: 2px solid var(--border-strong);
+}
+
+[data-skin="arcade"] .range-input::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 0;
+  margin-top: -5px;
+  background: var(--accent);
+  border: 2px solid var(--pixel-shadow);
+}
+
+/* =============================================================================
+   SKIN 7: terminal — Phosphor CRT (Glowing Monitor Dark / Green-Bar Paper Light)
+   ============================================================================= */
+:root[data-skin="terminal"] {
+  --bg-canvas: #020804;
+  --bg-surface: #041008;
+  --bg-surface-elevated: #071c0e;
+  --bg-surface-hover: #0d2e17;
+  --bg-inset: #010502;
+  --dropdown-bg: #041108;
+  --border-hairline: #185c31;
+  --border-strong: #39ff7a;
+  --text-primary: #9effb8;
+  --text-secondary: #56db81;
+  --text-muted: #2d874b;
+  --accent: #39ff7a;
+  --accent-hover: #75ffa3;
+  --accent-soft: rgba(57, 255, 122, 0.16);
+  --accent-border: #39ff7a;
+  --accent-ink: #021408;
+  --gold: #b8ff42;
+  --range-track: #0c2c17;
+  --scroll-thumb: #1f6b3a;
+  --scroll-thumb-hover: #39ff7a;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: 'JetBrains Mono', Consolas, 'Cairo', monospace;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+}
+
+/* Light Mode = Vintage Green-Bar Tractor-Feed Computer Printout Paper */
+:root[data-skin="terminal"][data-theme="light"] {
+  --bg-canvas: #f2faf0;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ddf2db;
+  --bg-surface-hover: #c5e8c2;
+  --bg-inset: #e8f5e6;
+  --dropdown-bg: #ffffff;
+  --border-hairline: #6fae77;
+  --border-strong: #0c6e2f;
+  --text-primary: #072611;
+  --text-secondary: #154f28;
+  --text-muted: #39754d;
+  --accent: #0b8036;
+  --accent-hover: #076328;
+  --accent-soft: rgba(11, 128, 54, 0.16);
+  --accent-border: #0b8036;
+  --accent-ink: #ffffff;
+  --gold: #4c800e;
+  --range-track: #b4dbb6;
+  --scroll-thumb: #69ab72;
+  --scroll-thumb-hover: #2d7d45;
+}
+
+html[dir="rtl"][data-skin="terminal"] {
+  --font-ui: 'Cairo', 'JetBrains Mono', monospace;
+}
+
+[data-skin="terminal"]:not([data-theme="light"]) body {
+  text-shadow: 0 0 6px rgba(57, 255, 122, 0.22);
+}
+
+[data-skin="terminal"] .stage-column {
+  background-image:
+    radial-gradient(ellipse at center, rgba(57, 255, 122, 0.09) 0%, transparent 72%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(57, 255, 122, 0.06) 0px,
+      rgba(57, 255, 122, 0.06) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  background-color: var(--bg-canvas);
+}
+
+[data-skin="terminal"][data-theme="light"] .stage-column,
+[data-skin="terminal"][data-theme="light"] .sidebar-pane {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(11, 128, 54, 0.075) 0px,
+      rgba(11, 128, 54, 0.075) 18px,
+      transparent 18px,
+      transparent 36px
+    );
+}
+
+[data-skin="terminal"] .btn,
+[data-skin="terminal"] .btn-icon,
+[data-skin="terminal"] .lang-toggle-btn,
+[data-skin="terminal"] .modal-card,
+[data-skin="terminal"] .menu-dropdown,
+[data-skin="terminal"] .menu-sub-panel,
+[data-skin="terminal"] .context-menu,
+[data-skin="terminal"] .track-row,
+[data-skin="terminal"] .saved-pl-card,
+[data-skin="terminal"] .sidebar-tab-btn,
+[data-skin="terminal"] .mode-tab,
+[data-skin="terminal"] .workspace-tab,
+[data-skin="terminal"] .search-input,
+[data-skin="terminal"] .p3-select,
+[data-skin="terminal"] .btn-play {
+  border-radius: 0 !important;
+}
+
+[data-skin="terminal"]:not([data-theme="light"]) .btn-primary,
+[data-skin="terminal"]:not([data-theme="light"]) .btn-play,
+[data-skin="terminal"]:not([data-theme="light"]) .modal-card {
+  box-shadow: 0 0 18px rgba(57, 255, 122, 0.34);
+}
+
+[data-skin="terminal"] .range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 0;
+}
+
+[data-skin="terminal"] .range-input::-webkit-slider-thumb {
+  width: 9px;
+  height: 15px;
+  border-radius: 0;
+  margin-top: -5.5px;
+  background: var(--accent);
+}
+
+/* =============================================================================
+   SKIN 8: cyber — Cyber Tactical HUD (Obsidian Navy + Laser Emerald + Cyan Trim)
+   ============================================================================= */
+:root[data-skin="cyber"] {
+  --bg-canvas: #070b14;
+  --bg-surface: #0c1322;
+  --bg-surface-elevated: #131e33;
+  --bg-surface-hover: #1b2a47;
+  --bg-inset: #050810;
+  --dropdown-bg: #0d1526;
+  --border-hairline: #1d3a54;
+  --border-strong: #00f09a;
+  --text-primary: #e8fff8;
+  --text-secondary: #8dd6e8;
+  --text-muted: #5682a3;
+  --accent: #00f09a;
+  --accent-hover: #4dffbe;
+  --accent-soft: rgba(0, 240, 154, 0.16);
+  --accent-border: #00f09a;
+  --accent-ink: #031a12;
+  --gold: #00d4ff;
+  --gold-soft: rgba(0, 212, 255, 0.16);
+  --gold-border: #00d4ff;
+  --range-track: #16263d;
+  --scroll-thumb: #1f4c63;
+  --scroll-thumb-hover: #00d4ff;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: Bahnschrift, 'DIN Alternate', 'Plus Jakarta Sans', 'Cairo', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --hud-chamfer-sm: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  --hud-chamfer-md: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+:root[data-skin="cyber"][data-theme="light"] {
+  --bg-canvas: #e6eef7;
+  --bg-surface: #f4f8fc;
+  --bg-surface-elevated: #dce8f5;
+  --bg-surface-hover: #c9ddef;
+  --bg-inset: #d7e3f0;
+  --dropdown-bg: #f6fafe;
+  --border-hairline: #8cb2cf;
+  --border-strong: #008c5a;
+  --text-primary: #0b1929;
+  --text-secondary: #224666;
+  --text-muted: #4b6e8c;
+  --accent: #009960;
+  --accent-hover: #007d4e;
+  --accent-soft: rgba(0, 153, 96, 0.15);
+  --accent-border: #009960;
+  --accent-ink: #ffffff;
+  --gold: #0077b6;
+  --gold-soft: rgba(0, 119, 182, 0.14);
+  --gold-border: #0077b6;
+  --range-track: #b4cde0;
+  --scroll-thumb: #7ba6c7;
+  --scroll-thumb-hover: #008c5a;
+}
+
+html[dir="rtl"][data-skin="cyber"] {
+  --font-ui: 'Cairo', Bahnschrift, sans-serif;
+}
+
+[data-skin="cyber"] .stage-column {
+  background-image:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.05) 25%, transparent 25%),
+    linear-gradient(315deg, rgba(0, 240, 154, 0.05) 25%, transparent 25%);
+  background-size: 32px 32px;
+  background-color: var(--bg-canvas);
+}
+
+[data-skin="cyber"] .topbar {
+  border-bottom: 2px solid var(--accent);
+  box-shadow: 0 2px 14px rgba(0, 240, 154, 0.2);
+}
+
+[data-skin="cyber"] .transport-dock {
+  border-top: 2px solid var(--gold);
+}
+
+[data-skin="cyber"] .btn,
+[data-skin="cyber"] .lang-toggle-btn,
+[data-skin="cyber"] .btn-icon,
+[data-skin="cyber"] .sidebar-tab-btn,
+[data-skin="cyber"] .mode-tab,
+[data-skin="cyber"] .track-row,
+[data-skin="cyber"] .saved-pl-card,
+[data-skin="cyber"] .resume-banner,
+[data-skin="cyber"] .search-input {
+  border-radius: 0 !important;
+  clip-path: var(--hud-chamfer-sm);
+}
+
+[data-skin="cyber"] .btn-play {
+  border-radius: 0 !important;
+  clip-path: polygon(11px 0, calc(100% - 11px) 0, 100% 11px, 100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px), 0 11px);
+}
+
+[data-skin="cyber"] .modal-card {
+  border-radius: 0 !important;
+  clip-path: var(--hud-chamfer-md);
+  border: 2px solid var(--accent);
+}
+
+[data-skin="cyber"] .workspace-tab {
+  border-radius: 0 !important;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 8px);
+}
+
+[data-skin="cyber"] .range-input::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 0;
+  transform: rotate(45deg);
+  margin-top: -4.5px;
+  background: var(--gold);
+  border: 2px solid var(--accent);
+}
+
+/* =============================================================================
+   SKIN 9: brutalist — Neo-Brutalist Pop (Warm Cream + 3px Ink + 5px Shadow + Yellow)
+   ============================================================================= */
+:root[data-skin="brutalist"] {
+  --bg-canvas: #121214;
+  --bg-surface: #1b1c20;
+  --bg-surface-elevated: #26282e;
+  --bg-surface-hover: #32353d;
+  --bg-inset: #0b0b0d;
+  --dropdown-bg: #1b1c20;
+  --border-hairline: #494d59;
+  --border-strong: #3ef07b;
+  --text-primary: #ffffff;
+  --text-secondary: #e2e6ed;
+  --text-muted: #a1a8b5;
+  --accent: #3ef07b;
+  --accent-hover: #6eff9e;
+  --accent-soft: rgba(62, 240, 123, 0.22);
+  --accent-border: #3ef07b;
+  --accent-ink: #08140c;
+  --gold: #ffe135;
+  --gold-soft: rgba(255, 225, 53, 0.22);
+  --gold-border: #ffe135;
+  --range-track: #2b2e36;
+  --scroll-thumb: #3ef07b;
+  --scroll-thumb-hover: #ffe135;
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --radius-sm: 0px;
+  --font-ui: 'Franklin Gothic Medium', 'Arial Black', 'Plus Jakarta Sans', 'Cairo', sans-serif;
+  --brut-ink: #000000;
+  --brut-border: #3ef07b;
+  --brut-pop: #ffe135;
+}
+
+/* Iconic Neo-Brutalist Poster Light Mode: Warm Cream + Pure Black 3px + Electric Green + Yellow! */
+:root[data-skin="brutalist"][data-theme="light"] {
+  --bg-canvas: #fff9e6;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #fff3b8;
+  --bg-surface-hover: #d8fae2;
+  --bg-inset: #f5efd8;
+  --dropdown-bg: #ffffff;
+  --border-hairline: #000000;
+  --border-strong: #000000;
+  --text-primary: #000000;
+  --text-secondary: #1b1b1b;
+  --text-muted: #454545;
+  --accent: #12b850;
+  --accent-hover: #0d9941;
+  --accent-soft: rgba(18, 184, 80, 0.22);
+  --accent-border: #000000;
+  --accent-ink: #ffffff;
+  --gold: #ffcf00;
+  --gold-soft: rgba(255, 207, 0, 0.35);
+  --gold-border: #000000;
+  --range-track: #e6dfb8;
+  --scroll-thumb: #000000;
+  --scroll-thumb-hover: #12b850;
+  --brut-ink: #000000;
+  --brut-border: #000000;
+  --brut-pop: #ffcf00;
+}
+
+html[dir="rtl"][data-skin="brutalist"] {
+  --font-ui: 'Cairo', 'Franklin Gothic Medium', sans-serif;
+}
+
+[data-skin="brutalist"] .btn,
+[data-skin="brutalist"] .lang-toggle-btn,
+[data-skin="brutalist"] .sidebar-tab-btn,
+[data-skin="brutalist"] .saved-pl-card,
+[data-skin="brutalist"] .resume-banner,
+[data-skin="brutalist"] .modal-card,
+[data-skin="brutalist"] .menu-dropdown,
+[data-skin="brutalist"] .menu-sub-panel,
+[data-skin="brutalist"] .context-menu,
+[data-skin="brutalist"] .btn-play {
+  border-radius: 0 !important;
+  border: 2.5px solid var(--brut-border) !important;
+  box-shadow: 5px 5px 0 0 var(--brut-ink) !important;
+  font-weight: 800;
+}
+
+[data-skin="brutalist"] .btn:active:not(:disabled),
+[data-skin="brutalist"] .btn-play:active:not(:disabled) {
+  transform: translate(3px, 3px) !important;
+  box-shadow: 2px 2px 0 0 var(--brut-ink) !important;
+}
+
+[data-skin="brutalist"] .topbar {
+  border-bottom: 3px solid var(--brut-border);
+}
+
+[data-skin="brutalist"] .transport-dock {
+  border-top: 3px solid var(--brut-border);
+}
+
+[data-skin="brutalist"] .sidebar-pane {
+  border-inline-start: 3px solid var(--brut-border);
+}
+
+[data-skin="brutalist"] .sidebar-tab-btn.is-active {
+  background-color: var(--brut-pop) !important;
+  color: #000000 !important;
+}
+
+[data-skin="brutalist"] .range-input::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 0;
+  border: 2px solid var(--brut-border);
+}
+
+[data-skin="brutalist"] .range-input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  margin-top: -6px;
+  background: var(--brut-pop);
+  border: 2.5px solid var(--brut-ink);
+  box-shadow: 2px 2px 0 var(--brut-ink);
+}
+
+/* =============================================================================
+   SKIN 10: hifi — Hi-Fi Stereo Deck (Brushed Silver/Gunmetal + Walnut Trim + LCD)
+   ============================================================================= */
+:root[data-skin="hifi"] {
+  --bg-canvas: #15171a;
+  --bg-surface: #1e2126;
+  --bg-surface-elevated: #2a2e36;
+  --bg-surface-hover: #353a45;
+  --bg-inset: #08120c;
+  --dropdown-bg: #1e2126;
+  --border-hairline: #3c424d;
+  --border-strong: #626b7a;
+  --text-primary: #f0f4f7;
+  --text-secondary: #b7c2cc;
+  --text-muted: #7f8b96;
+  --accent: #22e378;
+  --accent-hover: #4ff599;
+  --accent-soft: rgba(34, 227, 120, 0.18);
+  --accent-border: #22e378;
+  --accent-ink: #051a0e;
+  --gold: #d49b54;
+  --gold-soft: rgba(212, 155, 84, 0.2);
+  --gold-border: #b87c38;
+  --range-track: #0b140f;
+  --scroll-thumb: #4a525e;
+  --scroll-thumb-hover: #6c7787;
+  --radius-panel: 4px;
+  --radius-control: 3px;
+  --radius-sm: 2px;
+  --font-ui: 'Plus Jakarta Sans', 'Segoe UI', 'Cairo', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --deck-metal:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #2d3138 0%, #1d2026 55%, #15181c 100%);
+  --deck-btn: linear-gradient(180deg, #3a404a 0%, #242830 100%);
+  --deck-wood: #8c5628;
+  --deck-lcd: #05140c;
+}
+
+/* Classic 1970s Silver Brushed Aluminum Stereo Receiver + Walnut Wood Trim! */
+:root[data-skin="hifi"][data-theme="light"] {
+  --bg-canvas: #cfd4d9;
+  --bg-surface: #dce0e5;
+  --bg-surface-elevated: #e8ecf0;
+  --bg-surface-hover: #f2f5f8;
+  --bg-inset: #bcc3ca;
+  --dropdown-bg: #e4e8ec;
+  --border-hairline: #9ba4ae;
+  --border-strong: #687380;
+  --text-primary: #14191f;
+  --text-secondary: #37414d;
+  --text-muted: #5d6a78;
+  --accent: #0f944b;
+  --accent-hover: #0a783b;
+  --accent-soft: rgba(15, 148, 75, 0.18);
+  --accent-border: #0f944b;
+  --accent-ink: #ffffff;
+  --gold: #9e6224;
+  --gold-soft: rgba(176, 114, 48, 0.18);
+  --gold-border: #9e6224;
+  --range-track: #a2acb5;
+  --scroll-thumb: #8d97a3;
+  --scroll-thumb-hover: #677380;
+  --deck-metal:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.25) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #eff2f5 0%, #d5dbe0 55%, #c4cbd1 100%);
+  --deck-btn: linear-gradient(180deg, #f8fafc 0%, #cbd2d9 100%);
+  --deck-wood: #8a5022;
+  --deck-lcd: #0b2416;
+}
+
+html[dir="rtl"][data-skin="hifi"] {
+  --font-ui: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+}
+
+[data-skin="hifi"] .topbar,
+[data-skin="hifi"] .transport-dock,
+[data-skin="hifi"] .tabstrip {
+  background: var(--deck-metal);
+}
+
+[data-skin="hifi"] .topbar {
+  border-bottom: 3px solid var(--deck-wood);
+}
+
+[data-skin="hifi"] .transport-dock {
+  border-top: 3px solid var(--deck-wood);
+}
+
+[data-skin="hifi"] .sidebar-pane {
+  border-inline-start: 4px solid var(--deck-wood);
+}
+
+[data-skin="hifi"] .btn,
+[data-skin="hifi"] .lang-toggle-btn,
+[data-skin="hifi"] .sidebar-tab-btn,
+[data-skin="hifi"] .mode-tab {
+  background: var(--deck-btn);
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 2px 3px rgba(0, 0, 0, 0.28);
+}
+
+[data-skin="hifi"] .btn-play {
+  border-radius: 50% !important;
+  background: radial-gradient(circle at 32% 28%, var(--accent-hover), var(--accent) 65%, #094f27 100%);
+  border: 2.5px solid var(--border-strong);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 2px 2px rgba(255, 255, 255, 0.4);
+}
+
+/* Recessed Glowing Green Stereo LCD Display Well */
+[data-skin="hifi"] .dock-now {
+  background-color: var(--deck-lcd);
+  border: 2px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 5px 10px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.75);
+}
+
+[data-skin="hifi"] .dock-now-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #66ffa8;
+  text-shadow: 0 0 8px rgba(64, 255, 146, 0.4);
+}
+
+[data-skin="hifi"] .dock-now-meta {
+  color: #36c976;
+}
+
+[data-skin="hifi"] .range-input::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 2px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+[data-skin="hifi"] .range-input::-webkit-slider-thumb {
+  width: 11px;
+  height: 17px;
+  border-radius: 2px;
+  margin-top: -5px;
+  background: var(--deck-btn);
+  border: 1.5px solid var(--accent);
+}
+
+/* =============================================================================
+   SKIN 11: glass — Aurora Frosted Glass (Luminous Emerald-Teal-Indigo Mesh)
+   ============================================================================= */
+:root[data-skin="glass"] {
+  --bg-canvas: #07121c;
+  --bg-surface: rgba(14, 34, 42, 0.62);
+  --bg-surface-elevated: rgba(24, 58, 66, 0.66);
+  --bg-surface-hover: rgba(36, 82, 88, 0.78);
+  --bg-inset: rgba(7, 20, 28, 0.56);
+  --dropdown-bg: rgba(12, 30, 38, 0.86);
+  --border-hairline: rgba(128, 240, 210, 0.24);
+  --border-strong: rgba(128, 240, 210, 0.46);
+  --text-primary: #f2fffc;
+  --text-secondary: #b5e6e0;
+  --text-muted: #7ab3b0;
+  --accent: #32eb94;
+  --accent-hover: #64ffb5;
+  --accent-soft: rgba(50, 235, 148, 0.2);
+  --accent-border: rgba(100, 255, 181, 0.52);
+  --accent-ink: #041d12;
+  --gold: #5ce1ff;
+  --range-track: rgba(128, 240, 210, 0.24);
+  --scroll-thumb: rgba(128, 240, 210, 0.32);
+  --scroll-thumb-hover: rgba(128, 240, 210, 0.52);
+  --radius-panel: 16px;
+  --radius-control: 12px;
+  --radius-sm: 9px;
+  --font-ui: 'Plus Jakarta Sans', 'Segoe UI', 'Cairo', sans-serif;
+}
+
+:root[data-skin="glass"][data-theme="light"] {
+  --bg-canvas: #dceff2;
+  --bg-surface: rgba(255, 255, 255, 0.66);
+  --bg-surface-elevated: rgba(240, 252, 250, 0.78);
+  --bg-surface-hover: rgba(220, 247, 240, 0.9);
+  --bg-inset: rgba(222, 242, 245, 0.6);
+  --dropdown-bg: rgba(248, 254, 253, 0.92);
+  --border-hairline: rgba(18, 128, 96, 0.22);
+  --border-strong: rgba(18, 128, 96, 0.42);
+  --text-primary: #0b2420;
+  --text-secondary: #26544c;
+  --text-muted: #507d76;
+  --accent: #0ea360;
+  --accent-hover: #0a854d;
+  --accent-soft: rgba(14, 163, 96, 0.16);
+  --accent-border: rgba(14, 163, 96, 0.45);
+  --accent-ink: #ffffff;
+  --gold: #0284c7;
+  --range-track: rgba(14, 163, 96, 0.22);
+  --scroll-thumb: rgba(14, 163, 96, 0.3);
+  --scroll-thumb-hover: rgba(14, 163, 96, 0.48);
+}
+
+html[dir="rtl"][data-skin="glass"] {
+  --font-ui: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+}
+
+[data-skin="glass"] body,
+[data-skin="glass"] .stage-column {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(50, 235, 148, 0.26), transparent 48%),
+    radial-gradient(circle at 82% 24%, rgba(56, 189, 248, 0.22), transparent 50%),
+    radial-gradient(circle at 52% 88%, rgba(16, 185, 129, 0.22), transparent 52%),
+    var(--bg-canvas);
+}
+
+[data-skin="glass"] .topbar,
+[data-skin="glass"] .sidebar-pane,
+[data-skin="glass"] .transport-dock,
+[data-skin="glass"] .modal-card,
+[data-skin="glass"] .menu-dropdown,
+[data-skin="glass"] .menu-sub-panel,
+[data-skin="glass"] .context-menu,
+[data-skin="glass"] .output-popover {
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 14px 36px rgba(0, 0, 0, 0.22);
+}
+
+[data-skin="glass"] .btn,
+[data-skin="glass"] .btn-icon,
+[data-skin="glass"] .lang-toggle-btn,
+[data-skin="glass"] .track-row,
+[data-skin="glass"] .saved-pl-card,
+[data-skin="glass"] .resume-banner {
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+[data-skin="glass"] .modal-card {
+  border-radius: 18px;
+}
+
+/* =============================================================================
+   SKIN 12: editorial — Royal Forest Editorial (Parchment & Gold + British Green)
+   ============================================================================= */
+:root[data-skin="editorial"] {
+  --bg-canvas: #0b1912;
+  --bg-surface: #11241b;
+  --bg-surface-elevated: #183226;
+  --bg-surface-hover: #214232;
+  --bg-inset: #07120c;
+  --dropdown-bg: #12261c;
+  --border-hairline: #3b5946;
+  --border-strong: #c8a253;
+  --text-primary: #faf5e8;
+  --text-secondary: #d8d2be;
+  --text-muted: #98a898;
+  --accent: #3dc479;
+  --accent-hover: #5ad992;
+  --accent-soft: rgba(61, 196, 121, 0.16);
+  --accent-border: #c8a253;
+  --accent-ink: #07170e;
+  --gold: #e3be68;
+  --gold-soft: rgba(227, 190, 104, 0.18);
+  --gold-border: #c8a253;
+  --range-track: #223d2f;
+  --scroll-thumb: #695a34;
+  --scroll-thumb-hover: #c8a253;
+  --radius-panel: 2px;
+  --radius-control: 2px;
+  --radius-sm: 1px;
+  --font-ui: Georgia, Cambria, 'Times New Roman', 'Cairo', serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+}
+
+/* Warm Ivory Parchment + Antique Gold + Deep British Racing Green! */
+:root[data-skin="editorial"][data-theme="light"] {
+  --bg-canvas: #f5efe0;
+  --bg-surface: #fcf9f0;
+  --bg-surface-elevated: #ede4cf;
+  --bg-surface-hover: #e2d7bc;
+  --bg-inset: #ebe2cc;
+  --dropdown-bg: #fcf9f0;
+  --border-hairline: #c9b993;
+  --border-strong: #9e7a31;
+  --text-primary: #14241a;
+  --text-secondary: #3b473c;
+  --text-muted: #6b6e5c;
+  --accent: #14693b;
+  --accent-hover: #0d522d;
+  --accent-soft: rgba(20, 105, 59, 0.13);
+  --accent-border: #9e7a31;
+  --accent-ink: #fcf9f0;
+  --gold: #9e7322;
+  --gold-soft: rgba(158, 115, 34, 0.16);
+  --gold-border: #9e7322;
+  --range-track: #d9cca9;
+  --scroll-thumb: #b59d67;
+  --scroll-thumb-hover: #8f7236;
+}
+
+html[dir="rtl"][data-skin="editorial"] {
+  --font-ui: 'Cairo', Georgia, 'Traditional Arabic', serif;
+}
+
+[data-skin="editorial"] .topbar {
+  border-bottom: 4px double var(--border-strong);
+}
+
+[data-skin="editorial"] .transport-dock {
+  border-top: 4px double var(--border-strong);
+}
+
+[data-skin="editorial"] .sidebar-pane {
+  border-inline-start: 3px double var(--border-strong);
+}
+
+[data-skin="editorial"] .modal-card {
+  border-radius: 2px;
+  border: 2px solid var(--border-strong);
+  outline: 1px solid var(--border-strong);
+  outline-offset: -6px;
+}
+
+[data-skin="editorial"] .btn-play {
+  border-radius: 50%;
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* =============================================================================
+   SKIN 13: clay — Soft Toy Clay 3D (Puffy Glossy Pillows + Coral/Amber Accents)
+   ============================================================================= */
+:root[data-skin="clay"] {
+  --bg-canvas: #192420;
+  --bg-surface: #202f2a;
+  --bg-surface-elevated: #283b35;
+  --bg-surface-hover: #324a42;
+  --bg-inset: #131c19;
+  --dropdown-bg: #22322c;
+  --border-hairline: rgba(178, 245, 214, 0.14);
+  --border-strong: rgba(178, 245, 214, 0.28);
+  --text-primary: #f2fbf6;
+  --text-secondary: #bce0cf;
+  --text-muted: #82ab99;
+  --accent: #36db84;
+  --accent-hover: #5cf0a0;
+  --accent-soft: rgba(54, 219, 132, 0.18);
+  --accent-border: rgba(54, 219, 132, 0.5);
+  --accent-ink: #072013;
+  --gold: #ff9c6e;
+  --gold-soft: rgba(255, 156, 110, 0.2);
+  --gold-border: rgba(255, 156, 110, 0.5);
+  --range-track: #121c18;
+  --scroll-thumb: #39544b;
+  --scroll-thumb-hover: #4e7367;
+  --radius-panel: 20px;
+  --radius-control: 15px;
+  --radius-sm: 12px;
+  --font-ui: 'Trebuchet MS', 'Plus Jakarta Sans', 'Cairo', sans-serif;
+  --clay-hi: rgba(190, 255, 224, 0.14);
+  --clay-lo: rgba(5, 12, 9, 0.65);
+}
+
+:root[data-skin="clay"][data-theme="light"] {
+  --bg-canvas: #e4f2e9;
+  --bg-surface: #eff9f2;
+  --bg-surface-elevated: #f8fdf9;
+  --bg-surface-hover: #ffffff;
+  --bg-inset: #d4e8dc;
+  --dropdown-bg: #f5fcf7;
+  --border-hairline: rgba(25, 110, 65, 0.12);
+  --border-strong: rgba(25, 110, 65, 0.24);
+  --text-primary: #13291d;
+  --text-secondary: #375c47;
+  --text-muted: #618571;
+  --accent: #18b05f;
+  --accent-hover: #12944f;
+  --accent-soft: rgba(24, 176, 95, 0.16);
+  --accent-border: rgba(24, 176, 95, 0.42);
+  --accent-ink: #ffffff;
+  --gold: #e67347;
+  --gold-soft: rgba(230, 115, 71, 0.18);
+  --gold-border: rgba(230, 115, 71, 0.45);
+  --range-track: #c9e0d2;
+  --scroll-thumb: #9ec2ac;
+  --scroll-thumb-hover: #7aa68b;
+  --clay-hi: rgba(255, 255, 255, 0.95);
+  --clay-lo: rgba(94, 135, 110, 0.34);
+}
+
+html[dir="rtl"][data-skin="clay"] {
+  --font-ui: 'Cairo', 'Trebuchet MS', sans-serif;
+}
+
+[data-skin="clay"] .btn,
+[data-skin="clay"] .lang-toggle-btn,
+[data-skin="clay"] .btn-icon,
+[data-skin="clay"] .sidebar-tab-btn,
+[data-skin="clay"] .saved-pl-card,
+[data-skin="clay"] .resume-banner {
+  border-radius: 16px;
+  border-color: transparent;
+  box-shadow:
+    inset 0 3px 4px var(--clay-hi),
+    5px 6px 12px var(--clay-lo),
+    -3px -3px 8px var(--clay-hi);
+}
+
+[data-skin="clay"] .btn-play {
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 4px 5px rgba(255, 255, 255, 0.38),
+    0 7px 16px var(--clay-lo);
+}
+
+[data-skin="clay"] .btn:active:not(:disabled),
+[data-skin="clay"] .btn-icon.is-active,
+[data-skin="clay"] .sidebar-tab-btn.is-active,
+[data-skin="clay"] .mode-tab.is-active {
+  box-shadow:
+    inset 4px 4px 8px var(--clay-lo),
+    inset -3px -3px 7px var(--clay-hi);
+}
+
+[data-skin="clay"] .search-input,
+[data-skin="clay"] .p3-select {
+  border-radius: 15px;
+  border-color: transparent;
+  box-shadow:
+    inset 4px 4px 8px var(--clay-lo),
+    inset -3px -3px 7px var(--clay-hi);
+}
+
+[data-skin="clay"] .modal-card {
+  border-radius: 24px;
+  box-shadow:
+    inset 0 4px 8px var(--clay-hi),
+    12px 14px 30px var(--clay-lo);
+}
+
+/* =============================================================================
+   SKIN 14: blueprint — Architectural CAD Blueprint (Blueprint Blue Grid + Emerald)
+   ============================================================================= */
+:root[data-skin="blueprint"] {
+  --bg-canvas: #0a2342;
+  --bg-surface: #0e2e57;
+  --bg-surface-elevated: #143c6e;
+  --bg-surface-hover: #1c4c87;
+  --bg-inset: #071930;
+  --dropdown-bg: #0f325e;
+  --border-hairline: rgba(173, 216, 255, 0.28);
+  --border-strong: rgba(191, 229, 255, 0.62);
+  --text-primary: #eef7ff;
+  --text-secondary: #b4d8f8;
+  --text-muted: #7aaad6;
+  --accent: #32f08e;
+  --accent-hover: #69ffaf;
+  --accent-soft: rgba(50, 240, 142, 0.18);
+  --accent-border: #32f08e;
+  --accent-ink: #041d10;
+  --gold: #80d8ff;
+  --range-track: #123966;
+  --scroll-thumb: #2b629e;
+  --scroll-thumb-hover: #32f08e;
+  --radius-panel: 2px;
+  --radius-control: 2px;
+  --radius-sm: 2px;
+  --font-ui: 'JetBrains Mono', Consolas, 'Cairo', monospace;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --grid-line: rgba(176, 222, 255, 0.11);
+  --grid-line-major: rgba(176, 222, 255, 0.22);
+}
+
+:root[data-skin="blueprint"][data-theme="light"] {
+  --bg-canvas: #ebf4fc;
+  --bg-surface: #f5faff;
+  --bg-surface-elevated: #dcebfb;
+  --bg-surface-hover: #c8e1f7;
+  --bg-inset: #e2effa;
+  --dropdown-bg: #f7fbff;
+  --border-hairline: #8ab8e0;
+  --border-strong: #1c5c96;
+  --text-primary: #0a2540;
+  --text-secondary: #224c75;
+  --text-muted: #4b749c;
+  --accent: #0c944e;
+  --accent-hover: #08753d;
+  --accent-soft: rgba(12, 148, 78, 0.15);
+  --accent-border: #0c944e;
+  --accent-ink: #ffffff;
+  --gold: #1c5c96;
+  --range-track: #b4d2ec;
+  --scroll-thumb: #7baad4;
+  --scroll-thumb-hover: #1c5c96;
+  --grid-line: rgba(28, 92, 150, 0.1);
+  --grid-line-major: rgba(28, 92, 150, 0.19);
+}
+
+html[dir="rtl"][data-skin="blueprint"] {
+  --font-ui: 'Cairo', 'JetBrains Mono', monospace;
+}
+
+[data-skin="blueprint"] .stage-column,
+[data-skin="blueprint"] .sidebar-pane {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(var(--grid-line-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px);
+  background-size: 16px 16px, 16px 16px, 80px 80px, 80px 80px;
+}
+
+[data-skin="blueprint"] .topbar {
+  border-bottom: 1.5px dashed var(--border-strong);
+}
+
+[data-skin="blueprint"] .transport-dock {
+  border-top: 1.5px dashed var(--border-strong);
+}
+
+[data-skin="blueprint"] .sidebar-pane {
+  border-inline-start: 1.5px dashed var(--border-strong);
+}
+
+[data-skin="blueprint"] .btn,
+[data-skin="blueprint"] .lang-toggle-btn,
+[data-skin="blueprint"] .sidebar-tab-btn,
+[data-skin="blueprint"] .mode-tab,
+[data-skin="blueprint"] .saved-pl-card,
+[data-skin="blueprint"] .resume-banner,
+[data-skin="blueprint"] .modal-card,
+[data-skin="blueprint"] .search-input,
+[data-skin="blueprint"] .p3-select {
+  border-radius: 2px;
+  border: 1.5px dashed var(--border-strong);
+}
+
+[data-skin="blueprint"] .btn-primary,
+[data-skin="blueprint"] .btn-play,
+[data-skin="blueprint"] .track-row.is-active,
+[data-skin="blueprint"] .sidebar-tab-btn.is-active {
+  border-style: solid;
+}
+
+[data-skin="blueprint"] .btn-play {
+  border-radius: 4px !important;
+}
+
+/* =============================================================================
+   SKIN 15: pebble — Botanical Pebble (Warm Sandstone/Espresso + Full Capsules)
+   ============================================================================= */
+:root[data-skin="pebble"] {
+  --bg-canvas: #161813;
+  --bg-surface: #1f221b;
+  --bg-surface-elevated: #2a2e24;
+  --bg-surface-hover: #353b2e;
+  --bg-inset: #10120e;
+  --dropdown-bg: #21241c;
+  --border-hairline: #3e4535;
+  --border-strong: #5c664f;
+  --text-primary: #f4f3eb;
+  --text-secondary: #c9cbbd;
+  --text-muted: #939884;
+  --accent: #4ad97c;
+  --accent-hover: #70eb9b;
+  --accent-soft: rgba(74, 217, 124, 0.18);
+  --accent-border: #4ad97c;
+  --accent-ink: #081e0f;
+  --gold: #e09152;
+  --gold-soft: rgba(224, 145, 82, 0.18);
+  --gold-border: #e09152;
+  --range-track: #2d3326;
+  --scroll-thumb: #4a543f;
+  --scroll-thumb-hover: #6c7a5c;
+  --radius-panel: 20px;
+  --radius-control: 999px;
+  --radius-sm: 16px;
+  --font-ui: Verdana, 'Plus Jakarta Sans', 'Cairo', sans-serif;
+}
+
+:root[data-skin="pebble"][data-theme="light"] {
+  --bg-canvas: #f2ede2;
+  --bg-surface: #faf7f0;
+  --bg-surface-elevated: #ebe4d5;
+  --bg-surface-hover: #dfd6c3;
+  --bg-inset: #e8e0cf;
+  --dropdown-bg: #fcfaf4;
+  --border-hairline: #cfc5b0;
+  --border-strong: #9c8f73;
+  --text-primary: #1c2419;
+  --text-secondary: #444f3f;
+  --text-muted: #707867;
+  --accent: #22994e;
+  --accent-hover: #197d3e;
+  --accent-soft: rgba(34, 153, 78, 0.16);
+  --accent-border: #22994e;
+  --accent-ink: #ffffff;
+  --gold: #c46b2d;
+  --gold-soft: rgba(196, 107, 45, 0.16);
+  --gold-border: #c46b2d;
+  --range-track: #d9cfb9;
+  --scroll-thumb: #b5a98f;
+  --scroll-thumb-hover: #8f8266;
+}
+
+html[dir="rtl"][data-skin="pebble"] {
+  --font-ui: 'Cairo', Verdana, sans-serif;
+}
+
+[data-skin="pebble"] .btn,
+[data-skin="pebble"] .lang-toggle-btn,
+[data-skin="pebble"] .btn-icon,
+[data-skin="pebble"] .sidebar-tab-btn,
+[data-skin="pebble"] .mode-tab,
+[data-skin="pebble"] .search-input,
+[data-skin="pebble"] .p3-select,
+[data-skin="pebble"] .menu-trigger {
+  border-radius: 999px;
+  border-width: 1.5px;
+}
+
+[data-skin="pebble"] .track-row,
+[data-skin="pebble"] .saved-pl-card,
+[data-skin="pebble"] .resume-banner,
+[data-skin="pebble"] .menu-dropdown,
+[data-skin="pebble"] .menu-sub-panel,
+[data-skin="pebble"] .context-menu,
+[data-skin="pebble"] .menu-action {
+  border-radius: 16px;
+}
+
+[data-skin="pebble"] .modal-card {
+  border-radius: 26px;
+  border-width: 2px;
+}
+
+[data-skin="pebble"] .workspace-tab {
+  border-radius: 16px 16px 0 0;
+}
+
+/* =============================================================================
+   THEME STUDIO GALLERY MODAL — 16 Bold Skins x Dark/Light Live Switcher
+   ============================================================================= */
+.theme-gallery-card {
+  max-width: 880px;
+  width: min(880px, 95vw);
+  max-height: 88vh;
+  overflow: hidden;
+}
+
+.theme-gallery-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+}
+
+.theme-mode-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  transition: background-color 140ms var(--ease-out), color 140ms var(--ease-out);
+}
+
+.theme-mode-pill:hover {
+  color: var(--text-primary);
+}
+
+.theme-mode-pill.is-active {
+  background-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.theme-gallery-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -4px;
+  line-height: 1.45;
+}
+
+.theme-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+  max-height: calc(88vh - 128px);
+}
+
+@media (max-width: 820px) {
+  .theme-gallery-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .theme-gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 440px) {
+  .theme-gallery-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  text-align: start;
+  background-color: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-hairline);
+  border-radius: var(--radius-panel);
+  cursor: pointer;
+  transition: border-color 140ms var(--ease-out), transform 140ms var(--ease-out), background-color 140ms var(--ease-out);
+}
+
+.theme-card:hover {
+  border-color: var(--border-strong);
+  background-color: var(--bg-surface-hover);
+  transform: translateY(-2px);
+}
+
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+  background-color: var(--accent-soft);
+}
+
+.theme-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.theme-card-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theme-card-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-hairline);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.theme-card-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Miniature Live Skin Previews (Immediately Recognizable in Both Dark & Light Modes) */
+.theme-mini-preview {
+  height: 74px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid #264030;
+  background-color: #0d1611;
+  color: #ebf5ee;
+  border-radius: 7px;
+  font-family: 'Plus Jakarta Sans', 'Cairo', sans-serif;
+}
+
+.theme-mini-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.theme-mini-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.theme-mini-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.theme-mini-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.theme-mini-mid {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 5px;
+  flex: 1;
+}
+
+.theme-mini-stage {
+  border-radius: 5px;
+  background: rgba(61, 196, 121, 0.14);
+  border: 1px solid rgba(61, 196, 121, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 5px;
+}
+
+.theme-mini-play {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3dc479;
+  color: #06180d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.theme-mini-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.theme-mini-bar i {
+  display: block;
+  width: 60%;
+  height: 100%;
+  background: #3dc479;
+}
+
+.theme-mini-side {
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.theme-mini-side span {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.28;
+}
+
+.theme-mini-side span:first-child {
+  background: #3dc479;
+  opacity: 0.95;
+}
+
+/* Foliage Light */
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="foliage"] {
+  background: #edf4ef;
+  border-color: #c2d6c8;
+  color: #112217;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="foliage"] .theme-mini-play,
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="foliage"] .theme-mini-bar i {
+  background: #178a4b;
+  color: #fff;
+}
+
+/* Minecraft Preview */
+.theme-mini-preview[data-preview-skin="minecraft"] {
+  border-radius: 0;
+  background: #28252b;
+  border: 2px solid #0b0a0c;
+  border-top: 5px solid #44dd55;
+  box-shadow: inset 0 3px 0 #5c3d24;
+  color: #f5f5f5;
+  font-family: 'JetBrains Mono', monospace;
+}
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-side,
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-play,
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-bar,
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-dots span {
+  border-radius: 0;
+}
+.theme-mini-preview[data-preview-skin="minecraft"] .theme-mini-play {
+  background: #44dd55;
+  border: 1.5px solid #0b0a0c;
+  box-shadow: inset 1.5px 1.5px 0 rgba(255, 255, 255, 0.5);
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="minecraft"] {
+  background: #c6c6c6;
+  border-color: #1b1b1b;
+  border-top-color: #4cb83b;
+  box-shadow: inset 0 3px 0 #7d5432;
+  color: #1a1a1a;
+}
+
+/* LEGO Preview */
+.theme-mini-preview[data-preview-skin="lego"] {
+  border-radius: 5px;
+  background-color: #1c2433;
+  background-image: radial-gradient(circle at 8px 8px, rgba(255, 255, 255, 0.14) 2.5px, transparent 3px);
+  background-size: 14px 14px;
+  border: 2px solid #22cf64;
+  border-bottom: 4px solid #ffd400;
+  color: #ffffff;
+}
+.theme-mini-preview[data-preview-skin="lego"] .theme-mini-play {
+  border-radius: 4px;
+  background: #22cf64;
+  box-shadow: 0 2px 0 #0f7836;
+}
+.theme-mini-preview[data-preview-skin="lego"] .theme-mini-dots span:nth-child(1) { background: #e3000b; opacity: 1; }
+.theme-mini-preview[data-preview-skin="lego"] .theme-mini-dots span:nth-child(2) { background: #ffd400; opacity: 1; }
+.theme-mini-preview[data-preview-skin="lego"] .theme-mini-dots span:nth-child(3) { background: #006cb7; opacity: 1; }
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="lego"] {
+  background-color: #f7f8f2;
+  background-image: radial-gradient(circle at 8px 8px, rgba(0, 156, 68, 0.16) 2.5px, transparent 3px);
+  border-color: #009c44;
+  color: #141c17;
+}
+
+/* Roblox Preview */
+.theme-mini-preview[data-preview-skin="roblox"] {
+  border-radius: 9px;
+  background: #1e2026;
+  border: 2px solid #363b47;
+  color: #ffffff;
+}
+.theme-mini-preview[data-preview-skin="roblox"] .theme-mini-play {
+  width: 22px;
+  border-radius: 5px;
+  background: #00c975;
+}
+.theme-mini-preview[data-preview-skin="roblox"] .theme-mini-side span:first-child {
+  background: #3388ff;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="roblox"] {
+  background: #ffffff;
+  border-color: #cfd5df;
+  color: #191b1f;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="roblox"] .theme-mini-play {
+  background: #00a862;
+  color: #ffffff;
+}
+
+/* Mario / Super Arcade 16-Bit Preview */
+.theme-mini-preview[data-preview-skin="mario"] {
+  border-radius: 10px;
+  background: #1b1f42;
+  border: 2.5px solid #ffd23f;
+  border-bottom: 4px solid #e83535;
+  color: #fffdf5;
+  font-family: 'Trebuchet MS', sans-serif;
+}
+.theme-mini-preview[data-preview-skin="mario"] .theme-mini-play {
+  background: #2ee05a;
+  border: 2px solid #070814;
+}
+.theme-mini-preview[data-preview-skin="mario"] .theme-mini-bar i {
+  background: #ffd23f;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="mario"] {
+  background: #dff2ff;
+  border-color: #1b2840;
+  border-bottom-color: #e02828;
+  color: #141c2e;
+}
+
+/* Retro 95 Preview */
+.theme-mini-preview[data-preview-skin="retro95"] {
+  border-radius: 0;
+  background: #0b3438;
+  border: 2px solid #5c6a6b;
+  box-shadow: inset 1px 1px 0 #6b7a7b;
+  font-family: Tahoma, sans-serif;
+}
+.theme-mini-preview[data-preview-skin="retro95"] .theme-mini-top {
+  background: #24c46b;
+  color: #051c0f;
+  padding: 1px 4px;
+  margin: -6px -6px 0;
+}
+.theme-mini-preview[data-preview-skin="retro95"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="retro95"] .theme-mini-side,
+.theme-mini-preview[data-preview-skin="retro95"] .theme-mini-play {
+  border-radius: 0;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="retro95"] {
+  background: #008080;
+  border-color: #404040;
+  color: #000000;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="retro95"] .theme-mini-top {
+  background: #0f7a3e;
+  color: #ffffff;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="retro95"] .theme-mini-stage,
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="retro95"] .theme-mini-side {
+  background: #c0c0c0;
+  border: 1.5px solid #404040;
+}
+
+/* Game Boy / Arcade Preview */
+.theme-mini-preview[data-preview-skin="arcade"] {
+  border-radius: 0;
+  background: #17102e;
+  border: 2px solid #3eff7f;
+  box-shadow: 3px 3px 0 #05020d;
+  color: #f2fff7;
+  font-family: 'JetBrains Mono', monospace;
+}
+.theme-mini-preview[data-preview-skin="arcade"] .theme-mini-play,
+.theme-mini-preview[data-preview-skin="arcade"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="arcade"] .theme-mini-side {
+  border-radius: 0;
+}
+.theme-mini-preview[data-preview-skin="arcade"] .theme-mini-side span:first-child {
+  background: #ff47c2;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="arcade"] {
+  background: #9bbc0f;
+  border-color: #0f380f;
+  box-shadow: 3px 3px 0 #0f380f;
+  color: #0f380f;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="arcade"] .theme-mini-play,
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="arcade"] .theme-mini-bar i {
+  background: #0f380f;
+  color: #c4db58;
+}
+
+/* Terminal CRT Preview */
+.theme-mini-preview[data-preview-skin="terminal"] {
+  border-radius: 0;
+  background: repeating-linear-gradient(0deg, rgba(57, 255, 122, 0.08) 0 1px, transparent 1px 4px), #020804;
+  border: 1.5px solid #39ff7a;
+  color: #9effb8;
+  font-family: 'JetBrains Mono', monospace;
+}
+.theme-mini-preview[data-preview-skin="terminal"] .theme-mini-play,
+.theme-mini-preview[data-preview-skin="terminal"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="terminal"] .theme-mini-side {
+  border-radius: 0;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="terminal"] {
+  background: repeating-linear-gradient(0deg, rgba(11, 128, 54, 0.1) 0 8px, transparent 8px 16px), #ffffff;
+  border-color: #0b8036;
+  color: #072611;
+}
+
+/* Cyber HUD Preview */
+.theme-mini-preview[data-preview-skin="cyber"] {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  background: #0c1322;
+  border: 1.5px solid #00f09a;
+  color: #e8fff8;
+  font-family: Bahnschrift, sans-serif;
+}
+.theme-mini-preview[data-preview-skin="cyber"] .theme-mini-bar i {
+  background: #00d4ff;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="cyber"] {
+  background: #e6eef7;
+  border-color: #009960;
+  color: #0b1929;
+}
+
+/* Neo-Brutalist Preview */
+.theme-mini-preview[data-preview-skin="brutalist"] {
+  border-radius: 0;
+  background: #1b1c20;
+  border: 2.5px solid #3ef07b;
+  box-shadow: 3px 3px 0 #000000;
+  color: #ffffff;
+}
+.theme-mini-preview[data-preview-skin="brutalist"] .theme-mini-play,
+.theme-mini-preview[data-preview-skin="brutalist"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="brutalist"] .theme-mini-side {
+  border-radius: 0;
+}
+.theme-mini-preview[data-preview-skin="brutalist"] .theme-mini-bar i {
+  background: #ffe135;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="brutalist"] {
+  background: #fff9e6;
+  border-color: #000000;
+  box-shadow: 3px 3px 0 #000000;
+  color: #000000;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="brutalist"] .theme-mini-play {
+  background: #12b850;
+  color: #ffffff;
+  border: 1.5px solid #000000;
+}
+
+/* Hi-Fi Stereo Preview */
+.theme-mini-preview[data-preview-skin="hifi"] {
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2d3138 0%, #171a1f 100%);
+  border: 1.5px solid #8c5628;
+  color: #66ffa8;
+  font-family: 'JetBrains Mono', monospace;
+}
+.theme-mini-preview[data-preview-skin="hifi"] .theme-mini-stage {
+  background: #05140c;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75);
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="hifi"] {
+  background: linear-gradient(180deg, #eff2f5 0%, #c4cbd1 100%);
+  border-color: #8a5022;
+  color: #14191f;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="hifi"] .theme-mini-stage {
+  background: #0b2416;
+}
+
+/* Aurora Glass Preview */
+.theme-mini-preview[data-preview-skin="glass"] {
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(50, 235, 148, 0.45), transparent 55%),
+    radial-gradient(circle at 85% 80%, rgba(56, 189, 248, 0.42), transparent 55%),
+    #0a1a26;
+  border: 1px solid rgba(128, 240, 210, 0.45);
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="glass"] {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(14, 163, 96, 0.25), transparent 55%),
+    radial-gradient(circle at 85% 80%, rgba(2, 132, 199, 0.25), transparent 55%),
+    #e6f5f7;
+  color: #0b2420;
+}
+
+/* Royal Editorial Preview */
+.theme-mini-preview[data-preview-skin="editorial"] {
+  border-radius: 2px;
+  background: #11241b;
+  border: 3px double #c8a253;
+  color: #faf5e8;
+  font-family: Georgia, serif;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="editorial"] {
+  background: #f5efe0;
+  border-color: #9e7a31;
+  color: #14241a;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="editorial"] .theme-mini-play {
+  background: #14693b;
+  color: #ffffff;
+}
+
+/* Clay 3D Preview */
+.theme-mini-preview[data-preview-skin="clay"] {
+  border-radius: 16px;
+  background: #202f2a;
+  border-color: transparent;
+  box-shadow: inset 2px 2px 5px rgba(5, 12, 9, 0.65), inset -2px -2px 5px rgba(190, 255, 224, 0.14);
+}
+.theme-mini-preview[data-preview-skin="clay"] .theme-mini-play {
+  border-radius: 7px;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="clay"] {
+  background: #e4f2e9;
+  color: #13291d;
+  box-shadow: inset 2px 2px 5px rgba(94, 135, 110, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.95);
+}
+
+/* Blueprint Preview */
+.theme-mini-preview[data-preview-skin="blueprint"] {
+  border-radius: 2px;
+  background-image:
+    linear-gradient(rgba(176, 222, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(176, 222, 255, 0.16) 1px, transparent 1px);
+  background-size: 10px 10px;
+  background-color: #0a2342;
+  border: 1.5px dashed #80d8ff;
+  color: #eef7ff;
+  font-family: 'JetBrains Mono', monospace;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="blueprint"] {
+  background-image:
+    linear-gradient(rgba(28, 92, 150, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 92, 150, 0.15) 1px, transparent 1px);
+  background-color: #ebf4fc;
+  border-color: #1c5c96;
+  color: #0a2540;
+}
+
+/* Pebble Preview */
+.theme-mini-preview[data-preview-skin="pebble"] {
+  border-radius: 18px;
+  background: #1f221b;
+  border: 1.5px solid #5c664f;
+  font-family: Verdana, sans-serif;
+}
+.theme-mini-preview[data-preview-skin="pebble"] .theme-mini-stage,
+.theme-mini-preview[data-preview-skin="pebble"] .theme-mini-side {
+  border-radius: 999px;
+}
+:root[data-theme="light"] .theme-mini-preview[data-preview-skin="pebble"] {
+  background: #f2ede2;
+  border-color: #9c8f73;
+  color: #1c2419;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-card,
+  .theme-mode-pill {
+    transition: none !important;
+    transform: none !important;
+  }
+}

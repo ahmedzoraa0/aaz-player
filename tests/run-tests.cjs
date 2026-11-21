@@ -63,6 +63,7 @@ async function main() {
   const errorHandlerMod = await import(pathToFileURL(path.join(ROOT, 'js/utils/error-handler.js')).href);
   const playlistIo = await import(pathToFileURL(path.join(ROOT, 'js/modules/playlist-io.js')).href);
   const storageMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/storage-manager.js')).href);
+  const themesCatalog = await import(pathToFileURL(path.join(ROOT, 'js/modules/themes-catalog.js')).href);
   const historyMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/history-manager.js')).href);
   const libraryMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/library-manager.js')).href);
   const shortcutsMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/shortcuts-manager.js')).href);
@@ -501,6 +502,71 @@ async function main() {
     const reloaded = sm.load();
     assert.equal(reloaded.trackFullPath, 'D:/Shows/ep1.mp4');
     assert.deepEqual(reloaded.nativeTrackPaths, ['D:/Shows/ep1.mp4', 'D:/Shows/ep2.mp4']);
+  });
+
+  // 14. 16-Theme Green-Identity Skin System (Dark + Light) & Release Version Sync
+  await runTest('Theme Studio & Release Sync: 16 skins (incl. Minecraft, LEGO, Roblox) with Dark/Light CSS pairs & synced versions', () => {
+    assert.ok(themesCatalog.SKINS.length >= 16, 'Theme Studio must define at least 16 distinct skins');
+    const seenIds = new Set();
+    for (const skin of themesCatalog.SKINS) {
+      assert.ok(skin.id && !seenIds.has(skin.id), `Duplicate or empty skin id: ${skin.id}`);
+      seenIds.add(skin.id);
+      assert.ok(skin.nameEn && skin.nameAr, `Skin ${skin.id} must have EN & AR names`);
+      assert.ok(skin.descEn && skin.descAr, `Skin ${skin.id} must have EN & AR descriptions`);
+    }
+    for (const requiredId of ['minecraft', 'lego', 'roblox', 'mario', 'retro95', 'arcade']) {
+      assert.ok(seenIds.has(requiredId), `Missing expected iconic theme: ${requiredId}`);
+    }
+
+    const themesCss = fs.readFileSync(path.join(ROOT, 'css/themes.css'), 'utf8');
+    assert.equal(/https?:\/\//i.test(themesCss), false, 'themes.css must not reference external URLs');
+    for (const skin of themesCatalog.SKINS) {
+      if (skin.id === themesCatalog.DEFAULT_SKIN) continue;
+      assert.ok(
+        themesCss.includes(`:root[data-skin="${skin.id}"]`),
+        `themes.css missing Dark Mode tokens for skin "${skin.id}"`
+      );
+      assert.ok(
+        themesCss.includes(`:root[data-skin="${skin.id}"][data-theme="light"]`),
+        `themes.css missing Light Mode tokens for skin "${skin.id}"`
+      );
+    }
+
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(html.includes('href="./css/themes.css"'), 'index.html must link ./css/themes.css');
+    assert.ok(html.includes('id="themeGalleryModal"'), 'index.html must include #themeGalleryModal');
+    assert.ok(html.includes('data-cmd="open-themes"'), 'View menu must include data-cmd="open-themes"');
+    assert.equal(html.includes('id="openThemesBtn"'), false, 'Topbar must not include separate #openThemesBtn icon');
+
+    // Messaging allowlist validation for skin
+    const validSync = messaging.validateTabToShellMessage(
+      { type: 'aaz-sync-prefs', tabId: 'tab_1', theme: 'light', skin: 'minecraft' },
+      'tab_1'
+    );
+    assert.equal(validSync?.skin, 'minecraft');
+    const badSync = messaging.validateTabToShellMessage(
+      { type: 'aaz-sync-prefs', tabId: 'tab_1', skin: 'malicious_skin' },
+      'tab_1'
+    );
+    assert.equal(badSync?.skin, undefined);
+    const validApply = messaging.validateShellToTabMessage({
+      type: 'aaz-apply-prefs',
+      skin: 'lego',
+      theme: 'dark',
+    });
+    assert.equal(validApply?.skin, 'lego');
+
+    // Release version sync across root, desktop, Tauri & Cargo manifests
+    const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const deskPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
+    const tauriConf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8'));
+    const cargoToml = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/Cargo.toml'), 'utf8');
+    assert.equal(rootPkg.version, deskPkg.version, 'Root package.json and desktop/package.json versions must match');
+    assert.equal(tauriConf.version, deskPkg.version, 'tauri.conf.json version must match desktop/package.json');
+    assert.ok(
+      cargoToml.includes(`version = "${deskPkg.version}"`),
+      'Cargo.toml version must match desktop/package.json'
+    );
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);

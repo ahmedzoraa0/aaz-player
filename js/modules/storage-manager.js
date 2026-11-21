@@ -427,6 +427,7 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
       state,
       prefs: {
         theme: extraPrefs.theme || safeGetItem('aaz_theme') || 'dark',
+        skin: extraPrefs.skin || safeGetItem('aaz_skin') || 'foliage',
         lang: extraPrefs.lang || safeGetItem('aaz_lang') || 'en',
         subtitleStyle: extraPrefs.subtitleStyle || null,
       },

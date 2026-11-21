@@ -9,6 +9,8 @@
  * - Strict tabId matching and payload schema validation
  */
 
+import { SKIN_IDS } from '../modules/themes-catalog.js';
+
 export const TAB_TO_SHELL_TYPES = Object.freeze(
   new Set([
     'aaz-tab-ready',
@@ -136,6 +138,7 @@ export function validateTabToShellMessage(data, expectedTabId) {
       const out = { type, tabId };
       if (ALLOWED_THEMES.has(data.theme)) out.theme = data.theme;
       if (ALLOWED_LANGS.has(data.lang)) out.lang = data.lang;
+      if (typeof data.skin === 'string' && SKIN_IDS.has(data.skin)) out.skin = data.skin;
       const subStyle = sanitizeSubtitleStyle(data.subtitleStyle);
       if (subStyle) out.subtitleStyle = subStyle;
       return out;
@@ -176,6 +179,7 @@ export function validateShellToTabMessage(data) {
       const out = { type };
       if (ALLOWED_THEMES.has(data.theme)) out.theme = data.theme;
       if (ALLOWED_LANGS.has(data.lang)) out.lang = data.lang;
+      if (typeof data.skin === 'string' && SKIN_IDS.has(data.skin)) out.skin = data.skin;
       const subStyle = sanitizeSubtitleStyle(data.subtitleStyle);
       if (subStyle) out.subtitleStyle = subStyle;
       return out;

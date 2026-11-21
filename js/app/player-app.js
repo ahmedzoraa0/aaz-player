@@ -7,6 +7,13 @@ import { createStorageManager, STORAGE_KEY, LEGACY_KEYS } from '../modules/stora
 import { appendQueryParam } from '../utils/file-utils.js';
 import { createErrorHandler, ErrorCategory } from '../utils/error-handler.js';
 import { createPhase3Controller } from '../ui/phase3-controller.js';
+import {
+  DEFAULT_SKIN,
+  SKIN_STORAGE_KEY,
+  SKINS,
+  sanitizeSkin,
+  getSkinMeta,
+} from '../modules/themes-catalog.js';
 
 export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
   const CURRENT_TAB_ID = currentTabId;
@@ -109,6 +116,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         themeToggleBtn: document.getElementById('themeToggleBtn'),
         themeSunIcon: document.getElementById('themeSunIcon'),
         themeMoonIcon: document.getElementById('themeMoonIcon'),
+        themeGalleryModal: document.getElementById('themeGalleryModal'),
+        closeThemeGalleryBtn: document.getElementById('closeThemeGalleryBtn'),
+        themeGalleryDarkBtn: document.getElementById('themeGalleryDarkBtn'),
+        themeGalleryLightBtn: document.getElementById('themeGalleryLightBtn'),
+        themeGalleryGrid: document.getElementById('themeGalleryGrid'),
+        setActiveSkinName: document.getElementById('setActiveSkinName'),
         pinWindowBtn: document.getElementById('pinWindowBtn'),
         openFolderBtn: document.getElementById('openFolderBtn'),
         openFilesBtn: document.getElementById('openFilesBtn'),
@@ -402,14 +415,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         systemFonts: [...FALLBACK_FONTS],
         systemFontsLoaded: false,
 
-        // Theme, Language, Visualizer & Per-Window Audio Output Channel
+        // Theme, Visual Skin, Language, Visualizer & Per-Window Audio Output Channel
         theme: 'dark',                // 'dark' | 'light'
+        skin: DEFAULT_SKIN,           // 12 green-identity visual skins
         lang: 'en',                   // 'en' | 'ar'
         vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
-        appVersion: '1.5.0',
+        appVersion: '1.6.0',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId
         audioSinkLabel: '',
@@ -479,6 +493,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           cmdPip: 'Picture-in-Picture',
           cmdFullscreen: 'Fullscreen',
           cmdToggleTheme: 'Switch Light / Dark Mode',
+          cmdThemes: 'Theme Styles (16)...',
+          themesBtnTitle: 'Theme Studio (16 Styles)',
+          themesModalTitle: 'Theme Studio (16 Styles)',
+          themesModalSub: 'Choose from 16 distinct visual styles — including Minecraft, LEGO, Roblox, Arcade, Retro 95 & more — every style keeps AAZ Player\'s signature green identity with Dark and Light modes.',
+          modeDark: 'Dark',
+          modeLight: 'Light',
+          setSkinLabel: 'Interface Style & Theme',
+          setSkinBtn: 'Choose Theme Style (16)...',
+          skinAppliedNotice: 'Theme style: {name}',
           cmdToggleLang: 'Switch Language (عربي / EN)',
           cmdToggleSidebar: 'Show / Hide Playlist Sidebar',
           cmdSavedLibrary: 'Saved Playlists Library',
@@ -988,7 +1011,16 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           castNoTrack: 'قم بتشغيل فيديو أو ملف صوتي أولاً قبل بدء البث.',
           castSentNotice: 'جاري بث "{title}" على {device}.',
           castFailedNotice: 'تعذر البث إلى {device}: {err}',
-          castBrowserUnsupported: 'بث المتصفح غير مدعوم هنا، استخدم اكتشاف الشاشات أو بث الواي فاي أو بث ويندوز اللاسلكي.'
+          castBrowserUnsupported: 'بث المتصفح غير مدعوم هنا، استخدم اكتشاف الشاشات أو بث الواي فاي أو بث ويندوز اللاسلكي.',
+          cmdThemes: 'أشكال الثيمات (16)...',
+          themesBtnTitle: 'معرض الثيمات (16 شكلاً)',
+          themesModalTitle: 'معرض الثيمات (16 شكلاً)',
+          themesModalSub: 'اختر من بين 16 شكلاً وتصميماً مميزاً تشمل ماينكرافت وليجو وروبلوكس وأركيد وويندوز 95 والمزيد — مع الحفاظ على الهوية الخضراء والوضعين الداكن والفاتح.',
+          modeDark: 'داكن',
+          modeLight: 'فاتح',
+          setSkinLabel: 'شكل وتصميم الواجهة',
+          setSkinBtn: 'اختيار شكل الثيم (16)...',
+          skinAppliedNotice: 'تم تفعيل الثيم: {name}'
         }
       };
 
@@ -1001,6 +1033,152 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return str;
       }
 
+      function syncThemeGalleryModeButtons() {
+        if (el.themeGalleryDarkBtn) {
+          el.themeGalleryDarkBtn.classList.toggle('is-active', state.theme !== 'light');
+          el.themeGalleryDarkBtn.setAttribute('aria-pressed', String(state.theme !== 'light'));
+        }
+        if (el.themeGalleryLightBtn) {
+          el.themeGalleryLightBtn.classList.toggle('is-active', state.theme === 'light');
+          el.themeGalleryLightBtn.setAttribute('aria-pressed', String(state.theme === 'light'));
+        }
+      }
+
+      function syncActiveSkinReadout() {
+        const meta = getSkinMeta(state.skin);
+        const label = state.lang === 'ar' ? meta.nameAr : meta.nameEn;
+        if (el.setActiveSkinName) el.setActiveSkinName.textContent = label;
+      }
+
+      function renderThemeGallery() {
+        if (!el.themeGalleryGrid) return;
+        const isAr = state.lang === 'ar';
+        const frag = document.createDocumentFragment();
+
+        for (const skin of SKINS) {
+          const isActive = state.skin === skin.id;
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = `theme-card${isActive ? ' is-active' : ''}`;
+          card.dataset.skinId = skin.id;
+          card.setAttribute('role', 'option');
+          card.setAttribute('aria-selected', String(isActive));
+
+          const preview = document.createElement('div');
+          preview.className = 'theme-mini-preview';
+          preview.setAttribute('data-preview-skin', skin.id);
+          preview.setAttribute('aria-hidden', 'true');
+
+          const miniTop = document.createElement('div');
+          miniTop.className = 'theme-mini-top';
+          const miniTitle = document.createElement('span');
+          miniTitle.className = 'theme-mini-title';
+          miniTitle.textContent = 'AAZ';
+          const miniDots = document.createElement('span');
+          miniDots.className = 'theme-mini-dots';
+          miniDots.append(
+            document.createElement('span'),
+            document.createElement('span'),
+            document.createElement('span')
+          );
+          miniTop.append(miniTitle, miniDots);
+
+          const miniMid = document.createElement('div');
+          miniMid.className = 'theme-mini-mid';
+
+          const miniStage = document.createElement('div');
+          miniStage.className = 'theme-mini-stage';
+          const miniPlay = document.createElement('span');
+          miniPlay.className = 'theme-mini-play';
+          miniPlay.textContent = '▶';
+          const miniBar = document.createElement('span');
+          miniBar.className = 'theme-mini-bar';
+          miniBar.appendChild(document.createElement('i'));
+          miniStage.append(miniPlay, miniBar);
+
+          const miniSide = document.createElement('div');
+          miniSide.className = 'theme-mini-side';
+          miniSide.append(
+            document.createElement('span'),
+            document.createElement('span'),
+            document.createElement('span')
+          );
+
+          miniMid.append(miniStage, miniSide);
+          preview.append(miniTop, miniMid);
+
+          const info = document.createElement('div');
+          info.className = 'theme-card-info';
+          const head = document.createElement('div');
+          head.className = 'theme-card-head';
+          const nameEl = document.createElement('span');
+          nameEl.className = 'theme-card-name';
+          nameEl.textContent = isAr ? skin.nameAr : skin.nameEn;
+          const tagEl = document.createElement('span');
+          tagEl.className = 'theme-card-tag';
+          tagEl.textContent = isAr ? skin.tagAr : skin.tagEn;
+          head.append(nameEl, tagEl);
+
+          const descEl = document.createElement('div');
+          descEl.className = 'theme-card-desc';
+          descEl.textContent = isAr ? skin.descAr : skin.descEn;
+
+          info.append(head, descEl);
+          card.append(preview, info);
+
+          card.addEventListener('click', () => {
+            applySkin(skin.id, true, true);
+            const chosenName = state.lang === 'ar' ? skin.nameAr : skin.nameEn;
+            showNotice(t('skinAppliedNotice', { name: chosenName }));
+          });
+
+          frag.appendChild(card);
+        }
+
+        el.themeGalleryGrid.replaceChildren(frag);
+      }
+
+      function openThemeGalleryModal() {
+        closeAllMenus();
+        syncThemeGalleryModeButtons();
+        renderThemeGallery();
+        if (el.themeGalleryModal) el.themeGalleryModal.hidden = false;
+      }
+
+      function closeThemeGalleryModal() {
+        if (el.themeGalleryModal) el.themeGalleryModal.hidden = true;
+      }
+
+      function applySkin(skinId, persist = true, broadcast = true) {
+        state.skin = sanitizeSkin(skinId);
+        if (state.skin !== DEFAULT_SKIN) {
+          document.documentElement.setAttribute('data-skin', state.skin);
+        } else {
+          document.documentElement.removeAttribute('data-skin');
+        }
+        if (persist) {
+          try {
+            localStorage.setItem(SKIN_STORAGE_KEY, state.skin);
+          } catch (err) {
+            errorHandler.log('storage.skin', err);
+          }
+        }
+        if (broadcast) {
+          postToShell('aaz-sync-prefs', { skin: state.skin });
+        }
+        syncActiveSkinReadout();
+        if (el.themeGalleryModal && !el.themeGalleryModal.hidden) {
+          el.themeGalleryGrid.querySelectorAll('.theme-card').forEach((card) => {
+            const active = card.dataset.skinId === state.skin;
+            card.classList.toggle('is-active', active);
+            card.setAttribute('aria-selected', String(active));
+          });
+        }
+        if (AudioStudio && el.audioStage && !el.audioStage.hidden) {
+          if (el.media.paused) AudioStudio.renderIdleFrame();
+        }
+      }
+
       function applyTheme(theme, persist = true, broadcast = true) {
         state.theme = theme === 'light' ? 'light' : 'dark';
         if (state.theme === 'light') {
@@ -1010,6 +1188,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
         el.themeSunIcon.style.display = state.theme === 'light' ? 'none' : 'block';
         el.themeMoonIcon.style.display = state.theme === 'light' ? 'block' : 'none';
+        syncThemeGalleryModeButtons();
         if (persist) {
           try {
             localStorage.setItem('aaz_theme', state.theme);
@@ -1054,6 +1233,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
 
         // Refresh dynamic strings immediately
+        syncActiveSkinReadout();
+        if (el.themeGalleryModal && !el.themeGalleryModal.hidden) renderThemeGallery();
         updateNowPlayingUI();
         updatePlaylistHeader();
         updateSortButtonUI();
@@ -5854,6 +6035,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           case 'toggle-pip': togglePictureInPicture(); break;
           case 'toggle-fullscreen': toggleFullscreen(); break;
           case 'toggle-theme': applyTheme(state.theme === 'dark' ? 'light' : 'dark', true); break;
+          case 'open-themes': openThemeGalleryModal(); break;
           case 'toggle-lang': applyLanguage(state.lang === 'ar' ? 'en' : 'ar', true); break;
           case 'toggle-sidebar': toggleSidebar(); break;
           case 'open-saved-tab':
@@ -6773,8 +6955,22 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.playlistImportInput.click();
       });
 
-      // Theme, Language, Visualizer Mode & Auto-Update Controls
+      // Theme, Visual Skin Studio, Language, Visualizer Mode & Auto-Update Controls
       el.themeToggleBtn.addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark', true));
+      if (el.closeThemeGalleryBtn) {
+        el.closeThemeGalleryBtn.addEventListener('click', () => closeThemeGalleryModal());
+      }
+      if (el.themeGalleryModal) {
+        el.themeGalleryModal.addEventListener('click', (e) => {
+          if (e.target === el.themeGalleryModal) closeThemeGalleryModal();
+        });
+      }
+      if (el.themeGalleryDarkBtn) {
+        el.themeGalleryDarkBtn.addEventListener('click', () => applyTheme('dark', true, true));
+      }
+      if (el.themeGalleryLightBtn) {
+        el.themeGalleryLightBtn.addEventListener('click', () => applyTheme('light', true, true));
+      }
       el.langToggleBtn.addEventListener('click', () => applyLanguage(state.lang === 'ar' ? 'en' : 'ar', true));
       el.vizModeBtns.forEach((btn) => btn.addEventListener('click', () => setVizMode(btn.dataset.viz, true)));
 
@@ -7250,6 +7446,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
           el.shortcutsModal.hidden = true;
           el.subtitleModal.hidden = true;
+          closeThemeGalleryModal();
           el.savePlBar.hidden = true;
           return;
         }
@@ -7488,6 +7685,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               handleUpdateStatus(msg.payload);
             } else if (msg.type === 'aaz-apply-prefs') {
               if (msg.theme) applyTheme(msg.theme, false, false);
+              if (msg.skin) applySkin(msg.skin, false, false);
               if (msg.lang) applyLanguage(msg.lang, false, false);
               if (msg.subtitleStyle) updateSubtitleStyle(msg.subtitleStyle, false, false);
             } else if (msg.type === 'aaz-shell-mini-state') {
@@ -7496,12 +7694,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           });
         }
 
-        // Apply saved Theme, Language (RTL/LTR), Visualizer Style & Subtitle Styling
+        // Apply saved Theme, Visual Skin, Language (RTL/LTR), Visualizer Style & Subtitle Styling
         let savedTheme = 'dark';
+        let savedSkin = DEFAULT_SKIN;
         let savedLang = 'en';
         let savedViz = 'spectrum';
         try {
           savedTheme = localStorage.getItem('aaz_theme') || 'dark';
+          savedSkin = sanitizeSkin(localStorage.getItem(SKIN_STORAGE_KEY));
           savedLang = localStorage.getItem('aaz_lang') || 'en';
           savedViz = localStorage.getItem('aaz_viz_mode') || 'spectrum';
           const savedSubRaw = localStorage.getItem(SUBTITLE_STYLE_KEY);
@@ -7518,6 +7718,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         applySubtitleStyleToDOM();
         syncSubtitleControlsUI();
         applyTheme(savedTheme, false, false);
+        applySkin(savedSkin, false, false);
         setVizMode(savedViz, false);
         applyLanguage(savedLang, false, false);
 
@@ -7582,6 +7783,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           normalizeFsPath,
           getLang: () => state.lang,
           getTheme: () => state.theme,
+          getSkin: () => state.skin,
           getSubtitleStyle: () => state.subtitleStyle,
           getSidebarTab: () => state.sidebarTab,
           getCurrentTrack,
@@ -7625,6 +7827,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           toggleAudioOutputPopover: () => toggleAudioOutputPopover(),
           openCastModal,
           openSubtitleModal: openSubtitleStyleModal,
+          openThemeGalleryModal,
           captureVideoSnapshot,
           cycleABLoop,
           addBookmarkAtCurrentTime,
@@ -7644,6 +7847,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (restoredState.progressByKey) state.progressByKey = restoredState.progressByKey;
             if (restoredState.bookmarksByKey) state.bookmarksByKey = restoredState.bookmarksByKey;
             if (prefs?.theme) applyTheme(prefs.theme, true, true);
+            if (prefs?.skin) applySkin(prefs.skin, true, true);
             if (prefs?.lang) applyLanguage(prefs.lang, true, true);
             if (prefs?.subtitleStyle) updateSubtitleStyle(prefs.subtitleStyle, true, true);
             renderSavedPlaylists();

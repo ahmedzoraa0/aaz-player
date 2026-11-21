@@ -183,7 +183,7 @@ jobs:
           $exists = ($LASTEXITCODE -eq 0)
           $global:LASTEXITCODE = 0
 
-          $notes = "AAZ Player $tag — Rust + Tauri v2 desktop media player with fail-closed SHA-256 + Minisign updater verification, offline bundled fonts, Mini Player, Watch History, Media Library, customizable shortcuts, and Playback Settings."
+          $notes = "AAZ Player $tag — 16-Theme Green-Identity Studio (32 Dark & Light modes including Minecraft, LEGO, Roblox, Super Arcade 16-Bit, Classic OS 95, Game Boy LCD & more), Media -> Open Recent Watch History, unified Library & Queue UI, automatic desktop session resume, Mini Player, offline bundled fonts, and fail-closed SHA-256 + Minisign auto-updater."
           if ($exists) {
             gh release upload $tag @uploadFiles --clobber
           } else {

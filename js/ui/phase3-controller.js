@@ -305,6 +305,7 @@ export function createPhase3Controller(api) {
     setResumeToggle: document.getElementById('setResumeToggle'),
     setSubtitleLang: document.getElementById('setSubtitleLang'),
     setOpenSubStyleBtn: document.getElementById('setOpenSubStyleBtn'),
+    setOpenThemesBtn: document.getElementById('setOpenThemesBtn'),
     setDefaultAspect: document.getElementById('setDefaultAspect'),
     setAudioDevice: document.getElementById('setAudioDevice'),
     setHistoryRecToggle: document.getElementById('setHistoryRecToggle'),
@@ -1277,6 +1278,12 @@ export function createPhase3Controller(api) {
         api.openSubtitleModal();
       });
     }
+    if (dom.setOpenThemesBtn) {
+      dom.setOpenThemesBtn.addEventListener('click', () => {
+        closeSettingsModal();
+        if (api.openThemeGalleryModal) api.openThemeGalleryModal();
+      });
+    }
     if (dom.setDefaultAspect) {
       dom.setDefaultAspect.addEventListener('change', (e) => {
         settingsManager.update({ defaultAspectRatio: e.target.value });
@@ -1316,6 +1323,7 @@ export function createPhase3Controller(api) {
       dom.setExportBackupBtn.addEventListener('click', () => {
         const json = api.storageManager.exportBackupJson({
           theme: api.getTheme(),
+          skin: api.getSkin ? api.getSkin() : 'foliage',
           lang: api.getLang(),
           subtitleStyle: api.getSubtitleStyle(),
         });

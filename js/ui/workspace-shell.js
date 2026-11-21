@@ -8,6 +8,7 @@ import {
 } from '../core/messaging.js';
 import { createStorageManager } from '../modules/storage-manager.js';
 import { createWindowLayoutManager } from '../modules/window-layout.js';
+import { DEFAULT_SKIN, SKIN_STORAGE_KEY, sanitizeSkin } from '../modules/themes-catalog.js';
 
 export function initWorkspaceShell() {
   document.documentElement.classList.add('is-tab-shell');
@@ -44,10 +45,12 @@ export function initWorkspaceShell() {
 
   let shellTheme = 'dark';
   let shellLang = 'en';
+  let shellSkin = DEFAULT_SKIN;
   let shellIsMaximized = false;
   try {
     shellTheme = localStorage.getItem('aaz_theme') || 'dark';
     shellLang = localStorage.getItem('aaz_lang') || 'en';
+    shellSkin = sanitizeSkin(localStorage.getItem(SKIN_STORAGE_KEY));
   } catch {}
 
   function syncWinMaxIcons(isMax) {
@@ -147,11 +150,14 @@ export function initWorkspaceShell() {
     tabStripTabs.replaceChildren(frag);
   }
 
-  function applyShellPrefs(theme, lang) {
+  function applyShellPrefs(theme, lang, skin = shellSkin) {
     shellTheme = theme === 'light' ? 'light' : 'dark';
     shellLang = lang === 'ar' ? 'ar' : 'en';
+    shellSkin = sanitizeSkin(skin);
     if (shellTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
+    if (shellSkin !== DEFAULT_SKIN) document.documentElement.setAttribute('data-skin', shellSkin);
+    else document.documentElement.removeAttribute('data-skin');
     document.documentElement.lang = shellLang;
     document.documentElement.dir = shellLang === 'ar' ? 'rtl' : 'ltr';
     if (newTabBtn) {
@@ -360,8 +366,8 @@ export function initWorkspaceShell() {
     }
 
     if (msg.type === 'aaz-sync-prefs') {
-      if (msg.theme || msg.lang) {
-        applyShellPrefs(msg.theme || shellTheme, msg.lang || shellLang);
+      if (msg.theme || msg.lang || msg.skin) {
+        applyShellPrefs(msg.theme || shellTheme, msg.lang || shellLang, msg.skin || shellSkin);
       }
       tabs.forEach((tb) => {
         if (tb.id !== tab.id && tb.iframe.contentWindow) {
@@ -369,6 +375,7 @@ export function initWorkspaceShell() {
             type: 'aaz-apply-prefs',
             theme: msg.theme,
             lang: msg.lang,
+            skin: msg.skin,
             subtitleStyle: msg.subtitleStyle,
           });
         }
@@ -547,6 +554,6 @@ export function initWorkspaceShell() {
     }
   }
 
-  applyShellPrefs(shellTheme, shellLang);
+  applyShellPrefs(shellTheme, shellLang, shellSkin);
   createTab({ initial: true });
 }
