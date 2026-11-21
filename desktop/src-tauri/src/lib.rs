@@ -565,6 +565,9 @@ fn verify_file_integrity(
     expected_sha256: Option<&str>,
     expected_size: Option<u64>,
 ) -> Result<String, String> {
+    let expected_sha256 = expected_sha256
+        .and_then(parse_sha256_hex)
+        .ok_or_else(|| "Update release is missing a valid SHA-256 checksum.".to_string())?;
     let mut file =
         File::open(path).map_err(|_| "Could not open downloaded update file.".to_string())?;
     let meta = file
@@ -608,12 +611,10 @@ fn verify_file_integrity(
         .map(|b| format!("{b:02x}"))
         .collect();
 
-    if let Some(expected) = expected_sha256 {
-        if !constant_time_eq(&digest, expected) {
-            return Err(
-                "Update checksum mismatch — file may be corrupted or tampered.".to_string(),
-            );
-        }
+    if !constant_time_eq(&digest, &expected_sha256) {
+        return Err(
+            "Update checksum mismatch — file may be corrupted or tampered.".to_string(),
+        );
     }
 
     Ok(digest)
@@ -2219,6 +2220,15 @@ async fn aaz_check_updates(
         }
     }
 
+    let Some(expected_sha256) = expected_sha256 else {
+        let message = "Update release is missing a SHA-256 checksum; refusing to install it.";
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": message }),
+        );
+        return Ok(serde_json::json!({ "status": "error", "message": message }));
+    };
+
     if let Ok(mut g) = state.pending_update_url.lock() {
         *g = Some(dl_url);
     }
@@ -2226,7 +2236,7 @@ async fn aaz_check_updates(
         *g = Some(remote_ver.clone());
     }
     if let Ok(mut g) = state.pending_update_sha256.lock() {
-        *g = expected_sha256;
+        *g = Some(expected_sha256);
     }
 
     let _ = app.emit(
@@ -3472,8 +3482,13 @@ mod tests {
         payload.extend_from_slice(&[0x90u8; 128]);
         fs::write(&good_exe, &payload).unwrap();
 
-        let digest = verify_file_integrity(&good_exe, None, Some(payload.len() as u64))
-            .expect("valid PE passes");
+        let digest: String = Sha256::digest(&payload)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+
+        // Missing checksum must fail closed, even for a structurally valid PE.
+        assert!(verify_file_integrity(&good_exe, None, Some(payload.len() as u64)).is_err());
         assert!(
             verify_file_integrity(&good_exe, Some(&digest), Some(payload.len() as u64)).is_ok()
         );
