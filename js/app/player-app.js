@@ -1009,7 +1009,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.themeSunIcon.style.display = state.theme === 'light' ? 'none' : 'block';
         el.themeMoonIcon.style.display = state.theme === 'light' ? 'block' : 'none';
         if (persist) {
-          try { localStorage.setItem('aaz_theme', state.theme); } catch {}
+          try {
+            localStorage.setItem('aaz_theme', state.theme);
+          } catch (err) {
+            errorHandler.log('storage.theme', err);
+          }
         }
         if (broadcast) {
           postToShell('aaz-sync-prefs', { theme: state.theme });
@@ -1037,7 +1041,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.subPreviewBox.textContent = t('subPreviewSample');
 
         if (persist) {
-          try { localStorage.setItem('aaz_lang', state.lang); } catch {}
+          try {
+            localStorage.setItem('aaz_lang', state.lang);
+          } catch (err) {
+            errorHandler.log('storage.lang', err);
+          }
         }
         if (broadcast) {
           postToShell('aaz-sync-prefs', { lang: state.lang });
@@ -1065,7 +1073,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           btn.classList.toggle('is-active', btn.dataset.viz === mode);
         });
         if (persist) {
-          try { localStorage.setItem('aaz_viz_mode', mode); } catch {}
+          try {
+            localStorage.setItem('aaz_viz_mode', mode);
+          } catch (err) {
+            errorHandler.log('storage.vizMode', err);
+          }
         }
         if (el.media.paused || el.media.ended) AudioStudio.renderIdleFrame();
       }
@@ -1111,7 +1123,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (!this.initialized && this.needsAudioGraph() && !el.media.paused) {
               this.ensureInit(true);
             } else if (this.ctx && this.ctx.state === 'suspended') {
-              this.ctx.resume().catch(() => {});
+              this.ctx.resume().catch((err) => errorHandler.log('audio.ctx.resumeGesture', err));
             }
           };
           document.addEventListener('pointerdown', unlock, true);
@@ -1122,7 +1134,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (this.failed) return false;
           if (this.initialized) {
             if (this.ctx && this.ctx.state === 'suspended') {
-              this.ctx.resume().catch(() => {});
+              this.ctx.resume().catch((err) => errorHandler.log('audio.ctx.resume', err));
             }
             return true;
           }
@@ -1144,8 +1156,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               if (effectiveSink) {
                 try {
                   this.ctx = new AudioCtx({ sinkId: effectiveSink });
-                } catch {
+                } catch (err) {
                   this.ctx = new AudioCtx();
+                  handleAudioSinkFallback('audio.ctx.constructorSinkId', err);
                 }
               } else {
                 this.ctx = new AudioCtx();
@@ -1190,10 +1203,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 // Bind concrete hardware audio sink if resolved (never call setSinkId('') redundantly on fresh AudioContext)
                 const targetSink = resolveEffectiveSinkId(state.audioSinkId);
                 if (targetSink && typeof this.ctx.setSinkId === 'function' && this.ctx.sinkId !== targetSink) {
-                  this.ctx.setSinkId(targetSink).catch(() => {});
+                  this.ctx.setSinkId(targetSink).catch((err) => {
+                    handleAudioSinkFallback('audio.ctx.setSinkId', err);
+                  });
                 }
                 return true;
-              } catch {
+              } catch (err) {
+                errorHandler.log('audio.finalizeGraph', err);
                 this.connecting = false;
                 this.failed = true;
                 return false;
@@ -1215,12 +1231,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                   this.bindGestureUnlock();
                 }
               })
-              .catch(() => {
+              .catch((err) => {
+                errorHandler.log('audio.ctx.resumeInit', err);
                 this.connecting = false;
                 this.bindGestureUnlock();
               });
             return false;
-          } catch {
+          } catch (err) {
+            errorHandler.log('audio.ensureInit', err);
             this.connecting = false;
             this.failed = true;
             return false;
@@ -1656,7 +1674,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
             db.close();
             return true;
-          } catch {
+          } catch (err) {
+            errorHandler.log('idb.putHandle', err);
             return false;
           }
         },
@@ -1672,7 +1691,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
             db.close();
             return handle;
-          } catch {
+          } catch (err) {
+            errorHandler.log('idb.getHandle', err);
             return null;
           }
         },
@@ -1687,8 +1707,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               tx.onerror = () => reject(tx.error);
             });
             db.close();
-          } catch {
-            // Non-fatal
+          } catch (err) {
+            errorHandler.log('idb.deleteHandle', err);
           }
         }
       };
@@ -1697,7 +1717,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         load() {
           try {
             return storageManager.load();
-          } catch {
+          } catch (err) {
+            errorHandler.log('storage.load', err);
             return null;
           }
         },
@@ -1706,7 +1727,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           try {
             const existing = storageManager.load();
             return storageManager.save({ ...existing, ...payload });
-          } catch {
+          } catch (err) {
+            errorHandler.log('storage.save', err);
             return false;
           }
         },
@@ -1917,7 +1939,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               const val = (n.textContent || '').trim();
               if (val) locations.push(val);
             });
-          } catch {
+          } catch (err) {
+            errorHandler.log('playlist.xspfDomParse', err);
             // Fallback regex if XML has minor syntax quirks
             const matches = text.matchAll(/<location>([\s\S]*?)<\/location>/gi);
             for (const m of matches) {
@@ -1969,7 +1992,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
           for (const loc of locations) {
             let decoded = loc;
-            try { decoded = decodeURIComponent(loc); } catch {}
+            try {
+              decoded = decodeURIComponent(loc);
+            } catch (err) {
+              errorHandler.log('playlist.decodeUri', err);
+            }
             const norm = decoded.replace(/\\/g, '/');
             const base = norm.split('/').pop().toLowerCase();
             const found = byKey.get(norm.toLowerCase()) || byName.get(base);
@@ -2267,7 +2294,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                   return;
                 }
               }
-            } catch {
+            } catch (err) {
+              errorHandler.log('savedPlaylist.fsaOpen', err);
               // Fall through to folder prompt
             }
           }
@@ -3022,7 +3050,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             try {
               const nested = await scanDirectoryHandle(entry, `${relativePrefix}${name}/`, subMap);
               collected.push(...nested);
-            } catch {}
+            } catch (err) {
+              errorHandler.log('fs.scanNestedDir', err);
+            }
           }
         }
         return collected;
@@ -3209,7 +3239,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
             if (ok) el.resumeBanner.hidden = true;
             return;
-          } catch {
+          } catch (err) {
+            errorHandler.log('session.resumeDir', err);
             showNotice('The saved folder could not be accessed. Please re-select it.', true);
           }
         }
@@ -3353,7 +3384,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         applySubtitleStyleToDOM();
         syncSubtitleControlsUI();
         if (persist) {
-          try { localStorage.setItem(SUBTITLE_STYLE_KEY, JSON.stringify(state.subtitleStyle)); } catch {}
+          try {
+            localStorage.setItem(SUBTITLE_STYLE_KEY, JSON.stringify(state.subtitleStyle));
+          } catch (err) {
+            errorHandler.log('storage.subtitleStyle', err);
+          }
         }
         if (broadcast) {
           postToShell('aaz-sync-prefs', { subtitleStyle: state.subtitleStyle });
@@ -3421,7 +3456,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               state.systemFontsLoaded = true;
             }
           }
-        } catch {
+        } catch (err) {
+          errorHandler.log('fonts.loadSystem', err);
           if (userTriggered) {
             showNotice(state.lang === 'ar' ? 'تم عرض الخطوط الأساسية المتاحة.' : 'Showing standard system fonts.');
           }
@@ -3483,14 +3519,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
           try {
             return new TextDecoder('utf-8', { fatal: true }).decode(buf);
-          } catch {
+          } catch (utf8Err) {
+            errorHandler.log('subtitle.decodeUtf8Fallback', utf8Err);
             try {
               return new TextDecoder('windows-1256').decode(buf);
-            } catch {
+            } catch (win1256Err) {
+              errorHandler.log('subtitle.decodeWin1256Fallback', win1256Err);
               return await file.text();
             }
           }
-        } catch {
+        } catch (err) {
+          errorHandler.log('subtitle.readSmart', err);
           return await file.text();
         }
       }
@@ -3706,7 +3745,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               attachSubtitleVttText(text, subEntry.name);
               return;
             }
-          } catch {}
+          } catch (err) {
+            errorHandler.log('subtitle.autoLoadEntry', err);
+          }
         }
 
         // 2. Desktop native nearby folder / fuzzy subtitle scan (works even when double-clicking a single video from Explorer!)
@@ -3717,7 +3758,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               attachSubtitleVttText(found.text, found.name || 'Subtitles');
               showNotice(t('subAutoLoaded', { name: found.name || '' }));
             }
-          } catch {}
+          } catch (err) {
+            errorHandler.log('subtitle.findNearby', err);
+          }
         }
       }
 
@@ -3784,7 +3827,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
           // If Cast LAN Server is running, automatically sync the newly selected track + subtitle to the TV!
           if (state.castServerInfo && track.fullPath && desktopBridge && desktopBridge.castStartServer) {
-            syncActiveCastTrack(track).catch(() => {});
+            syncActiveCastTrack(track).catch((err) => errorHandler.log('cast.syncActiveTrack', err));
           }
 
           if (startTime > 0 && el.media.readyState < 1) {
@@ -3863,7 +3906,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (!nextKey) return false;
         if (nextKey === state.currentKey && isAutoAdvance) {
           seekToSeconds(0);
-          el.media.play().catch(() => {});
+          el.media.play().catch((err) => errorHandler.log('playback.repeatOnePlay', err));
           return true;
         }
         loadTrackByKey(nextKey, { autoPlay, startTime: 0 });
@@ -4143,7 +4186,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             a.remove();
             showNotice(t('snapshotSaved', { name: fileName }));
           }
-        } catch {
+        } catch (err) {
+          errorHandler.log('video.snapshot', err);
           showNotice(t('snapshotFailed'), true);
         }
       }
@@ -4426,7 +4470,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 el.mediaStage.webkitRequestFullscreen();
                 entered = true;
               }
-            } catch {
+            } catch (err) {
+              errorHandler.log('ui.requestFullscreen', err);
               entered = false;
             }
             // Fallback to Desktop native window fullscreen + full-bleed stage if DOM fullscreen was restricted
@@ -4440,7 +4485,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               await el.media.requestFullscreen();
             }
           }
-        } catch {}
+        } catch (err) {
+          errorHandler.log('ui.toggleFullscreen', err);
+        }
       }
 
       async function togglePictureInPicture() {
@@ -4456,7 +4503,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (state.videoDisplayMode === 'audio') setVideoDisplayMode('video', true);
             await el.media.requestPictureInPicture();
           }
-        } catch {
+        } catch (err) {
+          errorHandler.log('video.pictureInPicture', err);
           showNotice('Could not enter Picture-in-Picture mode.');
         }
       }
@@ -5091,7 +5139,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
               navigator.clipboard.writeText(track.name).then(() => {
                 showNotice(t('plCopiedName', { name: track.name }));
-              }).catch(() => {});
+              }).catch((err) => errorHandler.log('clipboard.copyTrackName', err));
             }
             break;
           case 'remove':
@@ -5833,7 +5881,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       async function toggleCastLanServer() {
         if (state.castServerInfo) {
           if (desktopBridge && desktopBridge.castStopServer) {
-            await desktopBridge.castStopServer().catch(() => {});
+            await desktopBridge.castStopServer().catch((err) => errorHandler.log('cast.stopServer', err));
           }
           state.castServerInfo = null;
           state.activeCastDevice = null;
@@ -5849,7 +5897,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         try {
           await ensureCastLanServer(track);
         } catch (err) {
-          showNotice(String(err || 'Could not start Wi-Fi stream.'), true);
+          errorHandler.notify(ErrorCategory.NETWORK_DLNA, err);
         }
       }
 
@@ -5926,7 +5974,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         try {
           const devices = await desktopBridge.castDiscoverDevices();
           state.castDevices = Array.isArray(devices) ? devices : [];
-        } catch {
+        } catch (err) {
+          errorHandler.log('cast.discoverDevices', err);
           state.castDevices = [];
         } finally {
           state.castScanning = false;
@@ -5974,13 +6023,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             renderCastDevices();
           }
         } catch (err) {
-          showNotice(String(err || 'TV control failed'), true);
+          errorHandler.notify(ErrorCategory.NETWORK_DLNA, err);
         }
       }
 
       async function triggerWindowsMiracast() {
         if (desktopBridge && desktopBridge.castOpenWindowsCast) {
-          await desktopBridge.castOpenWindowsCast().catch(() => {});
+          await desktopBridge.castOpenWindowsCast().catch((err) => errorHandler.log('cast.openWindowsCast', err));
         } else {
           showNotice(t('castDesktopOnly'), true);
         }
@@ -5998,6 +6047,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             return;
           } catch (err) {
             if (err && err.name === 'AbortError') return;
+            errorHandler.log('cast.remotePrompt', err);
           }
         }
         showNotice(t('castBrowserUnsupported'), true);
@@ -6055,7 +6105,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         } else if (status === 'not-available') {
           showNotice(t('updateLatest'));
         } else if (status === 'error') {
-          showNotice(message ? `${t('updateError')} (${message})` : t('updateError'), true);
+          errorHandler.notify(ErrorCategory.UPDATE, message || t('updateError'));
         }
       }
 
@@ -6069,7 +6119,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (res?.status === 'dev-mode') {
           showNotice(t('updateDevHint'));
         } else if (res?.status === 'error') {
-          showNotice(res.message ? `${t('updateError')} (${res.message})` : t('updateError'), true);
+          errorHandler.notify(ErrorCategory.UPDATE, res.message || t('updateError'));
         }
       }
 
@@ -6117,6 +6167,56 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return '';
       }
 
+      let lastAudioSinkErrorToastTs = 0;
+
+      async function handleAudioSinkFallback(context, err, options = {}) {
+        const { silent = false, persistFallback = true } = options;
+        errorHandler.log(context, err);
+
+        if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function' && AudioStudio.ctx.sinkId) {
+          try {
+            await AudioStudio.ctx.setSinkId('');
+          } catch (resetErr) {
+            errorHandler.log('audio.ctx.resetDefaultSink', resetErr);
+          }
+        }
+        if (typeof el.media.setSinkId === 'function' && el.media.sinkId) {
+          try {
+            await el.media.setSinkId('');
+          } catch (resetErr) {
+            errorHandler.log('audio.media.resetDefaultSink', resetErr);
+          }
+        }
+
+        state.audioSinkId = '';
+        state.audioSinkLabel = '';
+        if (persistFallback) {
+          const fallbackPayload = JSON.stringify({ id: '', label: '' });
+          try {
+            sessionStorage.setItem(SESSION_SINK_KEY, fallbackPayload);
+          } catch (storeErr) {
+            errorHandler.log('storage.audioSinkSessionFallback', storeErr);
+          }
+          try {
+            localStorage.setItem(LOCAL_SINK_KEY, fallbackPayload);
+          } catch (storeErr) {
+            errorHandler.log('storage.audioSinkLocalFallback', storeErr);
+          }
+        }
+
+        updateAudioOutputButtonUI();
+        renderAudioOutputList();
+        notifyShellTabState();
+
+        if (!silent) {
+          const now = Date.now();
+          if (now - lastAudioSinkErrorToastTs >= 2500) {
+            lastAudioSinkErrorToastTs = now;
+            errorHandler.notify(ErrorCategory.AUDIO_OUTPUT, err);
+          }
+        }
+      }
+
       async function ensureAudioOutputBound() {
         if (!canSwitchAudioOutput()) return;
         if (!state.audioDevicesLoaded) {
@@ -6126,16 +6226,28 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (effectiveId) {
           if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
             if (AudioStudio.ctx.sinkId !== effectiveId) {
-              try { await AudioStudio.ctx.setSinkId(effectiveId); } catch {}
+              try {
+                await AudioStudio.ctx.setSinkId(effectiveId);
+              } catch (err) {
+                await handleAudioSinkFallback('audio.ensureBound.ctx', err);
+              }
             }
           } else if (typeof el.media.setSinkId === 'function') {
             if (el.media.sinkId !== effectiveId) {
-              try { await el.media.setSinkId(effectiveId); } catch {}
+              try {
+                await el.media.setSinkId(effectiveId);
+              } catch (err) {
+                await handleAudioSinkFallback('audio.ensureBound.media', err);
+              }
             }
           }
         }
         if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
-          try { await AudioStudio.ctx.resume(); } catch {}
+          try {
+            await AudioStudio.ctx.resume();
+          } catch (err) {
+            errorHandler.log('audio.ensureBound.resume', err);
+          }
         }
       }
 
@@ -6164,21 +6276,25 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         const effectiveId = resolveEffectiveSinkId(logicalId);
         const applyTarget = effectiveId || logicalId;
 
+        const ctxAttempted = Boolean(AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function');
+        const mediaAttempted = typeof el.media.setSinkId === 'function';
         let ctxApplied = false;
         let mediaApplied = false;
         let lastErr = null;
 
         // 1. Primary path when Web Audio EQ/Visualizer is active: route AudioContext sink
-        if (AudioStudio.initialized && AudioStudio.ctx && typeof AudioStudio.ctx.setSinkId === 'function') {
+        if (ctxAttempted) {
           try {
             await AudioStudio.ctx.setSinkId(applyTarget);
             ctxApplied = true;
           } catch (err) {
+            errorHandler.log('audio.ctx.setSinkId', err);
             if (applyTarget !== logicalId) {
               try {
                 await AudioStudio.ctx.setSinkId(logicalId);
                 ctxApplied = true;
               } catch (err2) {
+                errorHandler.log('audio.ctx.setSinkIdLogical', err2);
                 lastErr = err2;
               }
             } else {
@@ -6188,16 +6304,18 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
 
         // 2. Media element sink: primary before AudioContext init; best-effort fallback afterwards
-        if (typeof el.media.setSinkId === 'function') {
+        if (mediaAttempted) {
           try {
             await el.media.setSinkId(applyTarget);
             mediaApplied = true;
           } catch (err) {
+            errorHandler.log('audio.media.setSinkId', err);
             if (applyTarget !== logicalId) {
               try {
                 await el.media.setSinkId(logicalId);
                 mediaApplied = true;
               } catch (err2) {
+                errorHandler.log('audio.media.setSinkIdLogical', err2);
                 if (!ctxApplied && !AudioStudio.initialized) lastErr = err2;
               }
             } else if (!ctxApplied && !AudioStudio.initialized) {
@@ -6206,9 +6324,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
-        const applied = ctxApplied || mediaApplied || (!AudioStudio.initialized && window.AudioContext && typeof AudioContext.prototype.setSinkId === 'function');
+        const primaryFailed = (ctxAttempted && !ctxApplied) || (!ctxAttempted && mediaAttempted && !mediaApplied);
+        const applied = !primaryFailed && (ctxApplied || mediaApplied || (!AudioStudio.initialized && window.AudioContext && typeof AudioContext.prototype.setSinkId === 'function'));
         if (!applied) {
-          if (!silent) showNotice(`${t('outputFailed')}${lastErr?.message ? ` (${lastErr.message})` : ''}`, true);
+          await handleAudioSinkFallback('audio.applyOutputDevice', lastErr || new Error('setSinkId failed'), {
+            silent,
+            persistFallback: persistGlobal,
+          });
           return false;
         }
 
@@ -6218,9 +6340,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           id: state.audioSinkId,
           label: state.audioSinkLabel
         });
-        try { sessionStorage.setItem(SESSION_SINK_KEY, savedPayload); } catch {}
+        try {
+          sessionStorage.setItem(SESSION_SINK_KEY, savedPayload);
+        } catch (err) {
+          errorHandler.log('storage.audioSinkSession', err);
+        }
         if (persistGlobal) {
-          try { localStorage.setItem(LOCAL_SINK_KEY, savedPayload); } catch {}
+          try {
+            localStorage.setItem(LOCAL_SINK_KEY, savedPayload);
+          } catch (err) {
+            errorHandler.log('storage.audioSinkLocal', err);
+          }
         }
 
         updateAudioOutputButtonUI();
@@ -6277,7 +6407,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
           const comms = outputs.find((d) => d.deviceId === 'communications' && d.label);
           state.audioDevices = comms ? [...concrete, comms] : concrete;
-        } catch {
+        } catch (err) {
+          errorHandler.log('audio.enumerateDevices', err);
           state.audioDevices = [];
           state.defaultAudioDevice = null;
         }
@@ -6356,6 +6487,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             }
           } catch (err) {
             if (err && err.name === 'NotAllowedError') return;
+            errorHandler.log('audio.selectAudioOutput', err);
           }
         }
         // Fallback: brief mic permission probe unlocks full Windows audiooutput device labels in Chromium
@@ -6364,7 +6496,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach((tr) => tr.stop());
             await refreshAudioOutputDevices();
-          } catch {
+          } catch (err) {
+            errorHandler.log('audio.unlockDevices', err);
             showNotice(t('outputNoExtra'));
           }
         }
@@ -6427,7 +6560,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       el.media.addEventListener('play', () => {
         if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
         else if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
-          AudioStudio.ctx.resume().catch(() => {});
+          AudioStudio.ctx.resume().catch((err) => errorHandler.log('audio.ctx.resumeOnPlay', err));
         }
         updatePlayButtonUI();
         startAutosaveTimer();
@@ -6436,7 +6569,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
       el.media.addEventListener('playing', () => {
         if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
-          AudioStudio.ctx.resume().catch(() => {});
+          AudioStudio.ctx.resume().catch((err) => errorHandler.log('audio.ctx.resumeOnPlaying', err));
         }
       });
 
@@ -6588,8 +6721,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (!isAppend && files.length === 1 && PLAYLIST_EXTENSIONS.has(getExtension(files[0].name))) {
           try {
             await handleImportedPlaylistContent(files[0].name, await files[0].text());
-          } catch {
-            showNotice('Could not read the playlist file.', true);
+          } catch (err) {
+            errorHandler.notify(ErrorCategory.PLAYLIST, err);
           }
           return;
         }
@@ -6613,8 +6746,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         try {
           const text = await file.text();
           await handleImportedPlaylistContent(file.name, text);
-        } catch {
-          showNotice('Could not read the playlist file.', true);
+        } catch (err) {
+          errorHandler.notify(ErrorCategory.PLAYLIST, err);
         }
       });
 
@@ -6672,8 +6805,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (!file) return;
         try {
           attachSubtitleVttText(await readSubtitleFileSmart(file), file.name);
-        } catch {
-          showNotice('Could not read subtitle file.', true);
+        } catch (err) {
+          errorHandler.notify(ErrorCategory.SUBTITLE, err);
         }
       });
 
@@ -6790,7 +6923,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         const clamped = Math.max(240, Math.min(maxW, Math.round(widthPx)));
         el.workspace.style.setProperty('--sidebar-w', `${clamped}px`);
         if (persist) {
-          try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped)); } catch {}
+          try {
+            localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+          } catch (err) {
+            errorHandler.log('storage.sidebarWidth', err);
+          }
         }
         if (el.audioStage && !el.audioStage.hidden) {
           requestAnimationFrame(() => AudioStudio.renderIdleFrame());
@@ -6852,7 +6989,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(state.castServerInfo.receiverUrl).then(() => {
               showNotice(t('castUrlCopied'));
-            }).catch(() => {});
+            }).catch((err) => errorHandler.log('clipboard.copyCastUrl', err));
           }
         });
       }
@@ -7104,7 +7241,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               await loadFromDirectoryHandle(handle, { saveHandle: true, restoreSavedPosition: true, autoPlay: false });
               return;
             }
-          } catch {}
+          } catch (err) {
+            errorHandler.log('drop.fileSystemHandle', err);
+          }
         }
 
         const droppedFiles = Array.from(e.dataTransfer?.files || []);
@@ -7212,7 +7351,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 state.appVersion = ver;
                 el.menuVersionLabel.textContent = `AAZ Player v${ver}`;
               }
-            } catch {}
+            } catch (err) {
+              errorHandler.log('desktop.getAppVersion', err);
+            }
           }
           if (!IS_TAB_FRAME) {
             if (desktopBridge.onUpdateStatus) desktopBridge.onUpdateStatus(handleUpdateStatus);
@@ -7253,7 +7394,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               state.subtitleStyle = { ...SUBTITLE_STYLE_DEFAULTS, ...parsedSub };
             }
           }
-        } catch {}
+        } catch (err) {
+          errorHandler.log('storage.loadPrefs', err);
+        }
 
         applySubtitleStyleToDOM();
         syncSubtitleControlsUI();
@@ -7267,7 +7410,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (Number.isFinite(savedW) && savedW >= 240) {
             applySidebarWidth(savedW, false);
           }
-        } catch {}
+        } catch (err) {
+          errorHandler.log('storage.loadSidebarWidth', err);
+        }
 
         // Enumerate real hardware audio outputs FIRST, then bind preferred output OR concrete Windows Default!
         await refreshAudioOutputDevices();
@@ -7284,7 +7429,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               }
             }
           }
-        } catch {}
+        } catch (err) {
+          errorHandler.log('storage.loadAudioSink', err);
+        }
         if (!restoredAudioSink) {
           state.audioSinkId = '';
           state.audioSinkLabel = '';

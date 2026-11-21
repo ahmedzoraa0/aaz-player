@@ -1,14 +1,16 @@
 use base64::Engine as _;
+use minisign_verify::{PublicKey, Signature};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::cmp::Ordering as CmpOrdering;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::http::{header, Method, Response, StatusCode};
@@ -26,6 +28,7 @@ const MAX_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024; // 16 MB max subtitle/playlis
 const MAX_DLNA_XML_BYTES: u64 = 256 * 1024; // 256 KB max UPnP XML description
 const MAX_HTTP_HEADERS: usize = 32;
 const MAX_HTTP_HEADER_BYTES: usize = 8192;
+const MAX_CAST_CONCURRENT_CONNECTIONS: usize = 8;
 
 const AUDIO_EXTS: &[&str] = &[
     "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac", "opus", "wma", "aiff", "aif", "aifc", "alac",
@@ -125,8 +128,10 @@ struct AppState {
     pending_update_url: Mutex<Option<String>>,
     pending_update_version: Mutex<Option<String>>,
     pending_update_sha256: Mutex<Option<String>>,
+    pending_update_signature: Mutex<Option<String>>,
     downloaded_installer: Mutex<Option<PathBuf>>,
     downloaded_installer_sha256: Mutex<Option<String>>,
+    downloaded_installer_signature: Mutex<Option<String>>,
     cast_server: Mutex<Option<CastServerState>>,
     authorized_files: Mutex<HashSet<PathBuf>>,
     authorized_dirs: Mutex<HashSet<PathBuf>>,
@@ -134,8 +139,11 @@ struct AppState {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RepoConfig {
     repo: String,
+    #[serde(default)]
+    updater_public_key: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -560,11 +568,28 @@ fn find_checksum_in_sums_text(content: &str, asset_name: &str) -> Option<String>
     None
 }
 
+fn parse_minisign_public_key(raw: &str) -> Result<PublicKey, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Update signing public key is not configured in this build.".to_string());
+    }
+    if trimmed.contains('\n') {
+        PublicKey::decode(trimmed)
+            .map_err(|_| "Configured update signing public key is invalid.".to_string())
+    } else {
+        PublicKey::from_base64(trimmed)
+            .map_err(|_| "Configured update signing public key is invalid.".to_string())
+    }
+}
+
 fn verify_file_integrity(
     path: &Path,
-    expected_sha256: Option<&str>,
+    expected_sha256: &str,
     expected_size: Option<u64>,
 ) -> Result<String, String> {
+    let expected_norm = parse_sha256_hex(expected_sha256).ok_or_else(|| {
+        "Update refused: missing or malformed expected SHA-256 checksum.".to_string()
+    })?;
     let mut file =
         File::open(path).map_err(|_| "Could not open downloaded update file.".to_string())?;
     let meta = file
@@ -608,15 +633,60 @@ fn verify_file_integrity(
         .map(|b| format!("{b:02x}"))
         .collect();
 
-    if let Some(expected) = expected_sha256 {
-        if !constant_time_eq(&digest, expected) {
-            return Err(
-                "Update checksum mismatch — file may be corrupted or tampered.".to_string(),
-            );
-        }
+    if !constant_time_eq(&digest, &expected_norm) {
+        return Err("Update checksum mismatch — file may be corrupted or tampered.".to_string());
     }
 
     Ok(digest)
+}
+
+fn verify_file_minisign(
+    path: &Path,
+    signature_text: &str,
+    public_key: &PublicKey,
+) -> Result<(), String> {
+    let trimmed_sig = signature_text.trim();
+    if trimmed_sig.is_empty() {
+        return Err("Update refused: missing cryptographic signature.".to_string());
+    }
+    let signature = Signature::decode(trimmed_sig)
+        .map_err(|_| "Update refused: malformed cryptographic signature.".to_string())?;
+    let mut verifier = public_key
+        .verify_stream(&signature)
+        .map_err(|_| "Update refused: unsupported or invalid signature algorithm.".to_string())?;
+    let mut file = File::open(path)
+        .map_err(|_| "Could not open update file for signature check.".to_string())?;
+    let mut buf = [0u8; 32768];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|_| "Failed reading update file during signature verification.".to_string())?;
+        if n == 0 {
+            break;
+        }
+        verifier.update(&buf[..n]);
+    }
+    verifier.finalize().map_err(|_| {
+        "Update cryptographic signature verification failed — file may be untrusted.".to_string()
+    })
+}
+
+fn is_cgnat_ipv4(ip: Ipv4Addr) -> bool {
+    let o = ip.octets();
+    o[0] == 100 && (o[1] & 0xC0) == 64
+}
+
+fn is_allowed_lan_ipv4(ip: Ipv4Addr) -> bool {
+    if ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+    {
+        return false;
+    }
+    ip.is_private() || is_cgnat_ipv4(ip)
 }
 
 fn validate_lan_http_url(raw_url: &str) -> Result<String, String> {
@@ -661,13 +731,7 @@ fn validate_lan_http_url(raw_url: &str) -> Result<String, String> {
         .parse()
         .map_err(|_| "DLNA target host must be a direct private LAN IPv4 address.".to_string())?;
 
-    if !ip.is_private()
-        || ip.is_loopback()
-        || ip.is_link_local()
-        || ip.is_unspecified()
-        || ip.is_multicast()
-        || ip.is_broadcast()
-    {
+    if !is_allowed_lan_ipv4(ip) {
         return Err("DLNA target IP is outside private LAN ranges.".to_string());
     }
 
@@ -1100,23 +1164,91 @@ fn score_subtitle_candidate(
     (score - distance_penalty).max(1)
 }
 
-fn parse_semver(ver: &str) -> (u32, u32, u32) {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PreReleaseId {
+    Numeric(u64),
+    AlphaNumeric(String),
+}
+
+impl Ord for PreReleaseId {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        match (self, other) {
+            (PreReleaseId::Numeric(a), PreReleaseId::Numeric(b)) => a.cmp(b),
+            (PreReleaseId::Numeric(_), PreReleaseId::AlphaNumeric(_)) => CmpOrdering::Less,
+            (PreReleaseId::AlphaNumeric(_), PreReleaseId::Numeric(_)) => CmpOrdering::Greater,
+            (PreReleaseId::AlphaNumeric(a), PreReleaseId::AlphaNumeric(b)) => a.cmp(b),
+        }
+    }
+}
+
+impl PartialOrd for PreReleaseId {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SemVer {
+    major: u32,
+    minor: u32,
+    patch: u32,
+    pre: Vec<PreReleaseId>,
+}
+
+impl Ord for SemVer {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        (self.major, self.minor, self.patch)
+            .cmp(&(other.major, other.minor, other.patch))
+            .then_with(|| match (self.pre.is_empty(), other.pre.is_empty()) {
+                (true, true) => CmpOrdering::Equal,
+                (true, false) => CmpOrdering::Greater,
+                (false, true) => CmpOrdering::Less,
+                (false, false) => self.pre.cmp(&other.pre),
+            })
+    }
+}
+
+impl PartialOrd for SemVer {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn parse_semver(ver: &str) -> SemVer {
     let cleaned = ver.trim().trim_start_matches('v').trim_start_matches('V');
-    let parts: Vec<u32> = cleaned
+    // Ignore SemVer build metadata (+...) when comparing precedence
+    let without_build = cleaned.split('+').next().unwrap_or("");
+    let (core, pre_str) = match without_build.split_once('-') {
+        Some((c, p)) => (c, Some(p)),
+        None => (without_build, None),
+    };
+    let parts: Vec<u32> = core
         .split('.')
-        .map(|p| {
-            p.chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect::<String>()
-                .parse::<u32>()
-                .unwrap_or(0)
-        })
+        .map(|p| p.trim().parse::<u32>().unwrap_or(0))
         .collect();
-    (
-        parts.first().copied().unwrap_or(0),
-        parts.get(1).copied().unwrap_or(0),
-        parts.get(2).copied().unwrap_or(0),
-    )
+    let pre = pre_str
+        .map(|p| {
+            p.split('.')
+                .filter(|id| !id.is_empty())
+                .map(|id| {
+                    if id.chars().all(|c| c.is_ascii_digit()) {
+                        match id.parse::<u64>() {
+                            Ok(n) => PreReleaseId::Numeric(n),
+                            Err(_) => PreReleaseId::AlphaNumeric(id.to_string()),
+                        }
+                    } else {
+                        PreReleaseId::AlphaNumeric(id.to_string())
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    SemVer {
+        major: parts.first().copied().unwrap_or(0),
+        minor: parts.get(1).copied().unwrap_or(0),
+        patch: parts.get(2).copied().unwrap_or(0),
+        pre,
+    }
 }
 
 fn get_configured_repo() -> Option<String> {
@@ -1127,6 +1259,12 @@ fn get_configured_repo() -> Option<String> {
     } else {
         None
     }
+}
+
+fn get_configured_updater_pubkey() -> Result<PublicKey, String> {
+    let parsed: RepoConfig = serde_json::from_str(REPO_CONFIG_JSON)
+        .map_err(|_| "Updater configuration could not be parsed.".to_string())?;
+    parse_minisign_public_key(&parsed.updater_public_key)
 }
 
 fn handle_aazmedia_protocol(
@@ -2060,11 +2198,27 @@ fn read_bounded_string(resp: ureq::Response, max_bytes: u64) -> Result<String, S
     String::from_utf8(buf).map_err(|_| "HTTP response was not valid UTF-8.".to_string())
 }
 
+fn clear_pending_update_state(state: &AppState) {
+    if let Ok(mut g) = state.pending_update_url.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = state.pending_update_version.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = state.pending_update_sha256.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = state.pending_update_signature.lock() {
+        *g = None;
+    }
+}
+
 #[tauri::command]
 async fn aaz_check_updates(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
+    clear_pending_update_state(&state);
     let current_ver = app.package_info().version.to_string();
     let repo = match get_configured_repo() {
         Some(r) => r,
@@ -2075,6 +2229,14 @@ async fn aaz_check_updates(
             }));
         }
     };
+
+    if let Err(err_msg) = get_configured_updater_pubkey() {
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(serde_json::json!({ "status": "error", "message": err_msg }));
+    }
 
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let fetch_res = tauri::async_runtime::spawn_blocking(move || {
@@ -2219,6 +2381,69 @@ async fn aaz_check_updates(
         }
     }
 
+    // Fail closed: refuse any release missing a valid SHA-256 digest
+    let Some(verified_expected_sha256) = expected_sha256 else {
+        let err_msg =
+            "Update refused: release does not include a valid SHA-256 checksum.".to_string();
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(serde_json::json!({ "status": "error", "message": err_msg }));
+    };
+
+    // Fail closed: require a companion Minisign signature asset (.minisig or .sig)
+    let sig_asset_url = assets.iter().find_map(|a| {
+        let n = a.get("name")?.as_str()?.to_lowercase();
+        let lower_asset = asset_name.to_lowercase();
+        if n == format!("{lower_asset}.minisig") || n == format!("{lower_asset}.sig") {
+            let u = a.get("browser_download_url")?.as_str()?;
+            if validate_update_download_url(u, &repo).is_ok() {
+                return Some(u.to_string());
+            }
+        }
+        None
+    });
+
+    let Some(sig_url) = sig_asset_url else {
+        let err_msg =
+            "Update refused: release does not include a required cryptographic signature (.minisig)."
+                .to_string();
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(serde_json::json!({ "status": "error", "message": err_msg }));
+    };
+
+    let repo_clone = repo.clone();
+    let sig_fetch = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let agent = build_secure_http_agent(10, 15);
+        let resp = agent
+            .get(&sig_url)
+            .set("User-Agent", "AAZ-Player-Updater")
+            .call()
+            .map_err(|_| "Failed to fetch update signature file.".to_string())?;
+        validate_update_download_url(resp.get_url(), &repo_clone)?;
+        let text = read_bounded_string(resp, 16 * 1024)?;
+        Signature::decode(text.trim())
+            .map_err(|_| "Update refused: signature file is malformed.".to_string())?;
+        Ok(text)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let verified_sig_text = match sig_fetch {
+        Ok(s) => s,
+        Err(err_msg) => {
+            let _ = app.emit(
+                "aaz:update-status",
+                serde_json::json!({ "status": "error", "message": err_msg }),
+            );
+            return Ok(serde_json::json!({ "status": "error", "message": err_msg }));
+        }
+    };
+
     if let Ok(mut g) = state.pending_update_url.lock() {
         *g = Some(dl_url);
     }
@@ -2226,7 +2451,10 @@ async fn aaz_check_updates(
         *g = Some(remote_ver.clone());
     }
     if let Ok(mut g) = state.pending_update_sha256.lock() {
-        *g = expected_sha256;
+        *g = Some(verified_expected_sha256);
+    }
+    if let Ok(mut g) = state.pending_update_signature.lock() {
+        *g = Some(verified_sig_text);
     }
 
     let _ = app.emit(
@@ -2247,6 +2475,16 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
         Some(r) => r,
         None => return Ok(false),
     };
+    let pubkey = match get_configured_updater_pubkey() {
+        Ok(k) => k,
+        Err(err_msg) => {
+            let _ = app.emit(
+                "aaz:update-status",
+                serde_json::json!({ "status": "error", "message": err_msg }),
+            );
+            return Ok(false);
+        }
+    };
     let dl_url = state
         .pending_update_url
         .lock()
@@ -2263,8 +2501,33 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
         .lock()
         .map_err(|e| e.to_string())?
         .clone();
+    let expected_sig = state
+        .pending_update_signature
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
 
     let Some(url) = dl_url else {
+        return Ok(false);
+    };
+
+    let Some(sha256_str) = expected_sha256.as_deref().and_then(parse_sha256_hex) else {
+        let err_msg =
+            "Update refused: missing required SHA-256 checksum before download.".to_string();
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(false);
+    };
+
+    let Some(sig_text) = expected_sig else {
+        let err_msg =
+            "Update refused: missing required cryptographic signature before download.".to_string();
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
         return Ok(false);
     };
 
@@ -2284,7 +2547,8 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
     let final_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{safe_ver}.exe"));
     let part_clone = part_path.clone();
     let final_clone = final_path.clone();
-    let expected_clone = expected_sha256.clone();
+    let sha_clone = sha256_str.clone();
+    let sig_clone = sig_text.clone();
     let app_clone = app.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
@@ -2351,7 +2615,7 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
 
         let verified_digest = match verify_file_integrity(
             &part_clone,
-            expected_clone.as_deref(),
+            &sha_clone,
             if total > 0 { Some(total) } else { None },
         ) {
             Ok(d) => d,
@@ -2360,6 +2624,11 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
                 return Err(err_msg);
             }
         };
+
+        if let Err(err_msg) = verify_file_minisign(&part_clone, &sig_clone, &pubkey) {
+            let _ = fs::remove_file(&part_clone);
+            return Err(err_msg);
+        }
 
         let _ = fs::remove_file(&final_clone);
         if fs::rename(&part_clone, &final_clone).is_err() {
@@ -2380,6 +2649,9 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
             if let Ok(mut g) = state.downloaded_installer_sha256.lock() {
                 *g = Some(verified_digest);
             }
+            if let Ok(mut g) = state.downloaded_installer_signature.lock() {
+                *g = Some(sig_text);
+            }
             let _ = app.emit(
                 "aaz:update-status",
                 serde_json::json!({ "status": "downloaded", "version": raw_ver }),
@@ -2399,6 +2671,9 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
 
 #[tauri::command]
 fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
+    let Ok(pubkey) = get_configured_updater_pubkey() else {
+        return false;
+    };
     let installer = state
         .downloaded_installer
         .lock()
@@ -2409,15 +2684,25 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
         .lock()
         .ok()
         .and_then(|g| g.clone());
+    let expected_sig = state
+        .downloaded_installer_signature
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
     let Some(path) = installer else {
         return false;
     };
     let Some(digest) = expected_digest else {
         return false;
     };
+    let Some(signature) = expected_sig else {
+        return false;
+    };
 
-    // Re-verify integrity immediately prior to execution to guard against temp-dir tampering
-    if verify_file_integrity(&path, Some(&digest), None).is_err() {
+    // Re-verify both SHA-256 and Minisign signature immediately prior to execution
+    if verify_file_integrity(&path, &digest, None).is_err()
+        || verify_file_minisign(&path, &signature, &pubkey).is_err()
+    {
         let _ = fs::remove_file(&path);
         return false;
     }
@@ -2435,19 +2720,32 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
 Native LAN Cast Server & UPnP / DLNA Smart TV Casting Engine
 ============================================================================ */
 
-fn detect_local_lan_ip() -> String {
-    if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
-        if sock.connect("8.8.8.8:80").is_ok() {
-            if let Ok(addr) = sock.local_addr() {
-                if let std::net::IpAddr::V4(v4) = addr.ip() {
-                    if v4.is_private() && !v4.is_loopback() {
-                        return v4.to_string();
+fn detect_local_lan_ip() -> Result<String, String> {
+    // Probe both internet-routed and local private/hotspot gateways so offline LANs work too
+    let probes = [
+        "1.1.1.1:80",
+        "192.168.1.1:80",
+        "10.0.0.1:80",
+        "172.16.0.1:80",
+        "100.64.0.1:80",
+    ];
+    for target in probes {
+        if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+            if sock.connect(target).is_ok() {
+                if let Ok(addr) = sock.local_addr() {
+                    if let std::net::IpAddr::V4(v4) = addr.ip() {
+                        if is_allowed_lan_ipv4(v4) {
+                            return Ok(v4.to_string());
+                        }
                     }
                 }
             }
         }
     }
-    "127.0.0.1".to_string()
+    Err(
+        "NO_LAN_IP: No private local network (Wi-Fi/LAN) IPv4 address was detected. Connect to a local Wi-Fi or LAN network to cast."
+            .to_string(),
+    )
 }
 
 fn xml_escape(input: &str) -> String {
@@ -2589,8 +2887,71 @@ fn build_cast_receiver_html(title: &str, has_sub: bool, token: &str) -> String {
     )
 }
 
+struct CastConnectionGuard {
+    active: Arc<AtomicUsize>,
+}
+
+impl Drop for CastConnectionGuard {
+    fn drop(&mut self) {
+        self.active.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+fn try_acquire_cast_slot(active: &Arc<AtomicUsize>, limit: usize) -> Option<CastConnectionGuard> {
+    let mut current = active.load(Ordering::SeqCst);
+    loop {
+        if current >= limit {
+            return None;
+        }
+        match active.compare_exchange_weak(
+            current,
+            current + 1,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => {
+                return Some(CastConnectionGuard {
+                    active: active.clone(),
+                });
+            }
+            Err(next) => current = next,
+        }
+    }
+}
+
+fn resolve_allowed_cast_origin(
+    origin_header: Option<&str>,
+    bound_ip: &str,
+    port: u16,
+) -> Option<String> {
+    let raw = origin_header?.trim();
+    if raw.is_empty() || raw.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return None;
+    }
+    let self_origin = format!("http://{bound_ip}:{port}");
+    if raw == self_origin
+        || raw == "http://tauri.localhost"
+        || raw == "https://tauri.localhost"
+        || raw == "tauri://localhost"
+    {
+        Some(raw.to_string())
+    } else {
+        None
+    }
+}
+
+fn format_cors_headers(allowed_origin: Option<&str>) -> String {
+    match allowed_origin {
+        Some(origin) => format!("Access-Control-Allow-Origin: {origin}\r\nVary: Origin\r\n"),
+        None => String::new(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn handle_cast_http_client(
     mut stream: TcpStream,
+    bound_ip: String,
+    bound_port: u16,
     session_token: Arc<Mutex<String>>,
     media_path: Arc<Mutex<Option<PathBuf>>>,
     media_title: Arc<Mutex<String>>,
@@ -2654,6 +3015,7 @@ fn handle_cast_http_client(
 
     let mut range_header: Option<String> = None;
     let mut header_token: Option<String> = None;
+    let mut origin_header: Option<String> = None;
     let mut header_count: usize = 0;
     let mut total_header_bytes: usize = request_line.len();
     loop {
@@ -2681,12 +3043,26 @@ fn handle_cast_http_client(
                 range_header = Some(v.trim().to_string());
             } else if key.eq_ignore_ascii_case("x-aaz-token") {
                 header_token = Some(v.trim().to_string());
+            } else if key.eq_ignore_ascii_case("origin") {
+                origin_header = Some(v.trim().to_string());
             }
         }
     }
 
+    let allowed_origin =
+        resolve_allowed_cast_origin(origin_header.as_deref(), &bound_ip, bound_port);
+    let cors_headers = format_cors_headers(allowed_origin.as_deref());
+
     if method == "OPTIONS" {
-        let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AAZ-Token\r\nConnection: close\r\n\r\n";
+        if origin_header.is_some() && allowed_origin.is_none() {
+            let _ = stream.write_all(
+                b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+        let resp = format!(
+            "HTTP/1.1 204 No Content\r\n{cors_headers}Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AAZ-Token\r\nConnection: close\r\n\r\n"
+        );
         let _ = stream.write_all(resp.as_bytes());
         return;
     }
@@ -2718,7 +3094,7 @@ fn handle_cast_http_client(
         let sub_opt = subtitle_vtt.lock().ok().and_then(|g| g.clone());
         if let Some(vtt) = sub_opt {
             let header = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/vtt; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/vtt; charset=utf-8\r\nContent-Length: {}\r\n{cors_headers}Cache-Control: no-store\r\nConnection: close\r\n\r\n",
                 vtt.len()
             );
             let _ = stream.write_all(header.as_bytes());
@@ -2738,7 +3114,7 @@ fn handle_cast_http_client(
         let has_sub = subtitle_vtt.lock().map(|g| g.is_some()).unwrap_or(false);
         let json = serde_json::json!({ "title": title, "hasSubtitle": has_sub }).to_string();
         let header = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{cors_headers}Cache-Control: no-store\r\nConnection: close\r\n\r\n",
             json.len()
         );
         let _ = stream.write_all(header.as_bytes());
@@ -2808,7 +3184,7 @@ fn handle_cast_http_client(
         };
 
         let headers = format!(
-            "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {content_len}\r\n{range_line}Accept-Ranges: bytes\r\nAccess-Control-Allow-Origin: *\r\ntransferMode.dlna.org: Streaming\r\ncontentFeatures.dlna.org: DLNA.ORG_OP=01;DLNA.ORG_CI=0\r\nConnection: close\r\n\r\n"
+            "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {content_len}\r\n{range_line}Accept-Ranges: bytes\r\n{cors_headers}transferMode.dlna.org: Streaming\r\ncontentFeatures.dlna.org: DLNA.ORG_OP=01;DLNA.ORG_CI=0\r\nConnection: close\r\n\r\n"
         );
         if stream.write_all(headers.as_bytes()).is_err() {
             return;
@@ -2907,15 +3283,11 @@ fn aaz_cast_start_server(
         }
     }
 
-    let detected_ip = detect_local_lan_ip();
-    let (listener, bound_ip) = match TcpListener::bind(format!("{detected_ip}:0")) {
-        Ok(l) => (l, detected_ip),
-        Err(_) => {
-            let l = TcpListener::bind("127.0.0.1:0")
-                .map_err(|_| "Could not start local streaming listener.".to_string())?;
-            (l, "127.0.0.1".to_string())
-        }
-    };
+    let bound_ip = detect_local_lan_ip()?;
+    let listener = TcpListener::bind(format!("{bound_ip}:0")).map_err(|_| {
+        "LAN_BIND_FAILED: Could not bind local streaming server to the detected LAN adapter."
+            .to_string()
+    })?;
     let port = listener
         .local_addr()
         .map_err(|_| "Could not determine listener port.".to_string())?
@@ -2924,6 +3296,7 @@ fn aaz_cast_start_server(
 
     let token = generate_session_token()?;
     let running = Arc::new(AtomicBool::new(true));
+    let active_connections = Arc::new(AtomicUsize::new(0));
     let token_arc = Arc::new(Mutex::new(token.clone()));
     let path_arc = Arc::new(Mutex::new(Some(canon_media)));
     let title_arc = Arc::new(Mutex::new(title));
@@ -2934,17 +3307,30 @@ fn aaz_cast_start_server(
     let p_clone = path_arc.clone();
     let t_clone = title_arc.clone();
     let s_clone = sub_arc.clone();
+    let ip_clone = bound_ip.clone();
 
     std::thread::spawn(move || {
         while r_flag.load(Ordering::SeqCst) {
             match listener.accept() {
-                Ok((stream, _addr)) => {
+                Ok((mut stream, _addr)) => {
                     let _ = stream.set_nonblocking(false);
+                    let Some(conn_guard) =
+                        try_acquire_cast_slot(&active_connections, MAX_CAST_CONCURRENT_CONNECTIONS)
+                    else {
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                        continue;
+                    };
                     let tk = tok_clone.clone();
                     let mp = p_clone.clone();
                     let mt = t_clone.clone();
                     let sv = s_clone.clone();
-                    std::thread::spawn(move || handle_cast_http_client(stream, tk, mp, mt, sv));
+                    let ip = ip_clone.clone();
+                    std::thread::spawn(move || {
+                        let _guard = conn_guard;
+                        handle_cast_http_client(stream, ip, port, tk, mp, mt, sv);
+                    });
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(35));
@@ -3465,36 +3851,96 @@ mod tests {
     }
 
     #[test]
-    fn update_file_integrity_detects_corruption_and_hash_mismatch() {
+    fn update_file_integrity_fails_closed_and_detects_hash_mismatch() {
         let dir = make_temp_test_dir("updater");
         let good_exe = dir.join("good.exe");
         let mut payload = vec![b'M', b'Z'];
         payload.extend_from_slice(&[0x90u8; 128]);
         fs::write(&good_exe, &payload).unwrap();
 
-        let digest = verify_file_integrity(&good_exe, None, Some(payload.len() as u64))
-            .expect("valid PE passes");
-        assert!(
-            verify_file_integrity(&good_exe, Some(&digest), Some(payload.len() as u64)).is_ok()
+        let expected_digest: String = Sha256::digest(&payload)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+
+        // Valid PE + exact SHA-256 passes
+        assert_eq!(
+            verify_file_integrity(&good_exe, &expected_digest, Some(payload.len() as u64)),
+            Ok(expected_digest.clone())
         );
 
-        // Wrong checksum fails
+        // Missing / empty / malformed checksum fails closed
+        assert!(verify_file_integrity(&good_exe, "", None).is_err());
+        assert!(verify_file_integrity(&good_exe, "not-a-sha256", None).is_err());
+
+        // Wrong checksum fails closed
         let bad_hash = "0".repeat(64);
-        assert!(verify_file_integrity(&good_exe, Some(&bad_hash), None).is_err());
+        assert!(verify_file_integrity(&good_exe, &bad_hash, None).is_err());
 
         // Truncated Content-Length fails
-        assert!(verify_file_integrity(&good_exe, Some(&digest), Some(9999)).is_err());
+        assert!(verify_file_integrity(&good_exe, &expected_digest, Some(9999)).is_err());
 
-        // Non-PE payload fails
+        // Non-PE payload fails even with matching SHA-256
         let bad_file = dir.join("not_pe.exe");
-        fs::write(&bad_file, vec![b'X'; 128]).unwrap();
-        assert!(verify_file_integrity(&bad_file, None, None).is_err());
+        let non_pe = vec![b'X'; 128];
+        fs::write(&bad_file, &non_pe).unwrap();
+        let non_pe_hash: String = Sha256::digest(&non_pe)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert!(verify_file_integrity(&bad_file, &non_pe_hash, None).is_err());
 
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn dlna_url_validation_restricts_to_private_lan_ipv4() {
+    fn update_minisign_signature_verifies_valid_and_rejects_tampered() {
+        let dir = make_temp_test_dir("minisign");
+        let target = dir.join("payload.bin");
+        fs::write(&target, b"test").unwrap();
+
+        let pubkey =
+            parse_minisign_public_key("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
+                .expect("valid minisign public key");
+        let valid_sig = concat!(
+            "untrusted comment: signature from minisign secret key\n",
+            "RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/",
+            "z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=\n",
+            "trusted comment: timestamp:1556193335\tfile:test\n",
+            "y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg=="
+        );
+
+        assert!(verify_file_minisign(&target, valid_sig, &pubkey).is_ok());
+
+        // Empty or malformed signature fails closed
+        assert!(verify_file_minisign(&target, "", &pubkey).is_err());
+        assert!(verify_file_minisign(&target, "not a signature", &pubkey).is_err());
+
+        // Empty or invalid public key fails closed
+        assert!(parse_minisign_public_key("").is_err());
+        assert!(parse_minisign_public_key("invalid-key").is_err());
+
+        // Tampered file fails cryptographic verification
+        fs::write(&target, b"tampered").unwrap();
+        assert!(verify_file_minisign(&target, valid_sig, &pubkey).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dlna_and_lan_ipv4_validation_allows_rfc1918_and_cgnat_only() {
+        assert!(is_allowed_lan_ipv4(Ipv4Addr::new(192, 168, 1, 50)));
+        assert!(is_allowed_lan_ipv4(Ipv4Addr::new(10, 0, 0, 15)));
+        assert!(is_allowed_lan_ipv4(Ipv4Addr::new(172, 16, 5, 20)));
+        assert!(is_allowed_lan_ipv4(Ipv4Addr::new(100, 64, 0, 1)));
+        assert!(is_allowed_lan_ipv4(Ipv4Addr::new(100, 127, 255, 254)));
+
+        assert!(!is_allowed_lan_ipv4(Ipv4Addr::new(100, 63, 255, 255)));
+        assert!(!is_allowed_lan_ipv4(Ipv4Addr::new(100, 128, 0, 1)));
+        assert!(!is_allowed_lan_ipv4(Ipv4Addr::new(127, 0, 0, 1)));
+        assert!(!is_allowed_lan_ipv4(Ipv4Addr::new(169, 254, 169, 254)));
+        assert!(!is_allowed_lan_ipv4(Ipv4Addr::new(8, 8, 8, 8)));
+
         assert!(
             validate_lan_http_url("http://192.168.1.50:9197/upnp/control/AVTransport1").is_ok()
         );
@@ -3503,6 +3949,7 @@ mod tests {
                 .is_ok()
         );
         assert!(validate_lan_http_url("http://172.16.5.20:8080/ctl").is_ok());
+        assert!(validate_lan_http_url("http://100.64.10.2:8080/ctl").is_ok());
 
         // Loopback, link-local metadata, public IPs, DNS hosts, file://, and userinfo blocked
         assert!(validate_lan_http_url("http://127.0.0.1:8080/admin").is_err());
@@ -3511,6 +3958,58 @@ mod tests {
         assert!(validate_lan_http_url("http://evil.example.com/ctl").is_err());
         assert!(validate_lan_http_url("file:///etc/passwd").is_err());
         assert!(validate_lan_http_url("http://user:pass@192.168.1.50/ctl").is_err());
+    }
+
+    #[test]
+    fn cast_cors_and_connection_cap_enforce_strict_limits() {
+        assert_eq!(
+            resolve_allowed_cast_origin(Some("http://192.168.1.10:5555"), "192.168.1.10", 5555),
+            Some("http://192.168.1.10:5555".to_string())
+        );
+        assert_eq!(
+            resolve_allowed_cast_origin(Some("http://tauri.localhost"), "192.168.1.10", 5555),
+            Some("http://tauri.localhost".to_string())
+        );
+        assert_eq!(
+            resolve_allowed_cast_origin(Some("https://evil.example"), "192.168.1.10", 5555),
+            None
+        );
+        assert_eq!(
+            resolve_allowed_cast_origin(Some("http://192.168.1.10:9999"), "192.168.1.10", 5555),
+            None
+        );
+        assert_eq!(
+            resolve_allowed_cast_origin(Some("*"), "192.168.1.10", 5555),
+            None
+        );
+        assert_eq!(format_cors_headers(None), "");
+
+        // Connection limiter enforces exact cap and releases on Drop
+        let active = Arc::new(AtomicUsize::new(0));
+        let g1 = try_acquire_cast_slot(&active, 2).expect("slot 1");
+        let g2 = try_acquire_cast_slot(&active, 2).expect("slot 2");
+        assert!(try_acquire_cast_slot(&active, 2).is_none());
+        drop(g1);
+        let g3 = try_acquire_cast_slot(&active, 2).expect("slot freed after drop");
+        drop(g2);
+        drop(g3);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn parse_semver_handles_prerelease_and_build_metadata_precedence() {
+        assert!(parse_semver("1.5.0-alpha") < parse_semver("1.5.0-alpha.1"));
+        assert!(parse_semver("1.5.0-alpha.1") < parse_semver("1.5.0-alpha.beta"));
+        assert!(parse_semver("1.5.0-beta") < parse_semver("1.5.0-beta.2"));
+        assert!(parse_semver("1.5.0-beta.2") < parse_semver("1.5.0-beta.11"));
+        assert!(parse_semver("1.5.0-beta.11") < parse_semver("1.5.0-rc.1"));
+        assert!(parse_semver("1.5.0-rc.1") < parse_semver("1.5.0"));
+        assert!(parse_semver("v1.5.0") < parse_semver("v1.5.1-alpha.1"));
+        assert_eq!(
+            parse_semver("1.5.0+build.123"),
+            parse_semver("1.5.0+build.999")
+        );
+        assert_eq!(parse_semver("v1.5.0-rc.1+abc"), parse_semver("1.5.0-rc.1"));
     }
 
     #[test]

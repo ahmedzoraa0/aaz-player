@@ -15,12 +15,13 @@ function copyDirClean(src, dest) {
   fs.cpSync(src, dest, { recursive: true, force: true });
 }
 
-// 1. Copy modular frontend (index.html + css/ + js/) into desktop/app/
+// 1. Copy modular frontend (index.html + css/ + js/ + public/fonts/) into desktop/app/
 fs.mkdirSync(appDir, { recursive: true });
 fs.copyFileSync(path.join(rootDir, 'index.html'), path.join(appDir, 'index.html'));
 copyDirClean(path.join(rootDir, 'css'), path.join(appDir, 'css'));
 copyDirClean(path.join(rootDir, 'js'), path.join(appDir, 'js'));
-console.log('[prepare-ci] Synced index.html, css/, and js/ -> desktop/app/');
+copyDirClean(path.join(rootDir, 'public', 'fonts'), path.join(appDir, 'fonts'));
+console.log('[prepare-ci] Synced index.html, css/, js/, and fonts/ -> desktop/app/');
 
 // 2. Sync version from desktop/package.json -> tauri.conf.json & Cargo.toml
 const pkgPath = path.join(desktopDir, 'package.json');
@@ -49,12 +50,28 @@ if (fs.existsSync(srcPng)) {
   fs.copyFileSync(srcPng, path.join(tauriIconsDir, 'icon.png'));
 }
 
-// 4. Bind GitHub repository into compile-time Rust repo_config.json for auto-updater
+// 4. Bind GitHub repository & Minisign public key into compile-time Rust repo_config.json
 const repoSlug = process.env.GITHUB_REPOSITORY || '';
 const repoCfgPath = path.join(tauriDir, 'src', 'repo_config.json');
-fs.writeFileSync(repoCfgPath, JSON.stringify({ repo: repoSlug }, null, 2) + '\n', 'utf8');
+let existingPubKey = '';
+if (fs.existsSync(repoCfgPath)) {
+  try {
+    const existing = JSON.parse(fs.readFileSync(repoCfgPath, 'utf8'));
+    if (typeof existing.updaterPublicKey === 'string') {
+      existingPubKey = existing.updaterPublicKey.trim();
+    }
+  } catch {
+    existingPubKey = '';
+  }
+}
+const updaterPublicKey = (process.env.AAZ_UPDATER_PUBLIC_KEY || existingPubKey || '').trim();
+fs.writeFileSync(
+  repoCfgPath,
+  JSON.stringify({ repo: repoSlug, updaterPublicKey }, null, 2) + '\n',
+  'utf8'
+);
 console.log(
   repoSlug
-    ? `[prepare-ci] Bound Rust auto-updater to GitHub repo ${repoSlug}`
+    ? `[prepare-ci] Bound Rust auto-updater to GitHub repo ${repoSlug} (minisign pubkey: ${updaterPublicKey ? 'configured' : 'not set'})`
     : '[prepare-ci] GITHUB_REPOSITORY not set; local dev mode.'
 );

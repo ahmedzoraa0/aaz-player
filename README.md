@@ -28,7 +28,7 @@
 - البث المباشر للشاشات والتلفزيون الذكي (DLNA / Wi-Fi) مع حماية الجلسة برمز أمان
 - اكتشاف تلقائي للترجمة وتخصيص الخطوط والتوقيت
 - تحكم كامل بالفيديو (الأبعاد، التكبير، القص، التنقل إطاراً بإطار، لقطات الشاشة، ملء الشاشة)
-- معادل صوت 5 نطاقات و4 أنماط عرض صوتي، واجهة عربي/إنجليزي، وضع داكن وفاتح، وتحديثات موثّقة ببصمة SHA-256
+- معادل صوت 5 نطاقات و4 أنماط عرض صوتي، واجهة عربي/إنجليزي، خطوط مدمجة محلياً بدون اتصال خارجي، وضع داكن وفاتح، وتحديثات محمية ببصمة SHA-256 وتوقيع Minisign (تُرفض تلقائياً عند غياب التوقيع)
 
 ### التحميل
 - **[تحميل أحدث إصدار لويندوز](../../releases/latest)**
@@ -52,15 +52,30 @@
 - Token-protected LAN streaming & private-network DLNA Smart TV casting
 - Auto-detected subtitles with custom system fonts, styling studio & timing sync
 - Full video controls (aspect ratio, zoom, crop, frame stepping, HD snapshots, fullscreen)
-- 5-band audio equalizer, 4 live visualizers, Arabic/English UI, Dark/Light Foliage themes & SHA-256 verified auto-updates
+- 5-band audio equalizer, 4 live visualizers, Arabic/English UI, offline bundled fonts, Dark/Light Foliage themes & fail-closed SHA-256 + Minisign updater verification
+
+### Updater Signing & Key Handling
+The desktop updater enforces **fail-closed verification**: every release installer must provide both a valid SHA-256 checksum (`SHA256SUMS.txt` or GitHub asset digest) and a valid **Minisign** Ed25519 signature (`.minisig`) matching the public key compiled into the app. Unsigned releases or builds without a configured public key are refused automatically.
+
+To enable signed releases in your repository:
+1. Generate a Minisign keypair locally:
+   ```bash
+   minisign -G -p aaz-updater.pub -s aaz-updater.key
+   ```
+2. Keep `aaz-updater.key` private (never commit it). Add these GitHub Actions Secrets:
+   - `AAZ_UPDATER_SIGNING_KEY`: full contents of `aaz-updater.key`
+   - `AAZ_UPDATER_SIGNING_KEY_PASSWORD`: passphrase used when generating the key
+3. Add the base64 public key line (from `aaz-updater.pub`, starting with `RW...`) as a GitHub Repository Variable or Secret named `AAZ_UPDATER_PUBLIC_KEY`.
+4. `.github/workflows/release.yml` embeds `AAZ_UPDATER_PUBLIC_KEY` into the compiled binary at build time and signs `AAZ-Player-Setup-*.exe`, `AAZ-Player-Portable-*.exe`, and `SHA256SUMS.txt` with `.minisig` signatures before publishing.
+5. **Key rotation**: publish a transitional release signed with the old key whose binary embeds the new public key before retiring the old secret key.
 
 ### Project Structure
 - `index.html` — Semantic application shell and modals
-- `css/styles.css` — Foliage Green Dark & Light theme stylesheets
+- `css/styles.css` & `public/fonts/` — Foliage Green Dark & Light theme stylesheets and locally bundled WOFF2 fonts
 - `js/core/` — Hardened cross-window messaging, Tauri desktop bridge, event bus
 - `js/modules/` — Versioned storage (`v4`), playlist I/O, watch history, media library, shortcuts, settings, window layout
 - `js/ui/` & `js/app/` — Multi-tab workspace shell, Phase 3 feature controller, core playback engine
-- `desktop/src-tauri/` — Native Rust + Tauri v2 backend (media protocol, Cast/DLNA, verified updater, window management)
+- `desktop/src-tauri/` — Native Rust + Tauri v2 backend (media protocol, Cast/DLNA, fail-closed Minisign/SHA-256 updater, window management)
 - `tests/` — Automated Node.js test suite (`node tests/run-tests.cjs`)
 
 ### Download

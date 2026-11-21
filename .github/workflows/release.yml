@@ -7,6 +7,7 @@ on:
       - 'index.html'
       - 'css/**'
       - 'js/**'
+      - 'public/fonts/**'
       - 'desktop/**'
       - '.github/workflows/release.yml'
   workflow_dispatch:
@@ -70,6 +71,8 @@ jobs:
 
       - name: Prepare modular frontend, version & GitHub repo for Rust auto-updater
         if: steps.version_check.outputs.should_release == 'true'
+        env:
+          AAZ_UPDATER_PUBLIC_KEY: ${{ secrets.AAZ_UPDATER_PUBLIC_KEY || vars.AAZ_UPDATER_PUBLIC_KEY }}
         run: node desktop/scripts/prepare-ci.cjs
 
       - name: Run automated JavaScript tests
@@ -96,11 +99,14 @@ jobs:
         working-directory: desktop
         run: npx @tauri-apps/cli build --bundles nsis
 
-      - name: Collect artifacts, generate SHA256SUMS.txt & publish GitHub Release
+      - name: Collect artifacts, generate SHA256SUMS.txt, sign with Minisign & publish GitHub Release
         if: steps.version_check.outputs.should_release == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AAZ_UPDATER_SIGNING_KEY: ${{ secrets.AAZ_UPDATER_SIGNING_KEY }}
+          AAZ_UPDATER_SIGNING_KEY_PASSWORD: ${{ secrets.AAZ_UPDATER_SIGNING_KEY_PASSWORD }}
+          AAZ_UPDATER_PUBLIC_KEY: ${{ secrets.AAZ_UPDATER_PUBLIC_KEY || vars.AAZ_UPDATER_PUBLIC_KEY }}
         run: |
           $ver = "${{ steps.version_check.outputs.version }}"
           $tag = "${{ steps.version_check.outputs.tag }}"
@@ -122,7 +128,7 @@ jobs:
           $portableDest = "release-out/AAZ-Player-Portable-$ver.exe"
           Copy-Item $portableBin -Destination $portableDest -Force
 
-          # Generate SHA256SUMS.txt for cryptographic auto-updater verification
+          # Generate SHA256SUMS.txt for fail-closed integrity verification
           $setupHash = (Get-FileHash -Path $setupDest -Algorithm SHA256).Hash.ToLower()
           $portableHash = (Get-FileHash -Path $portableDest -Algorithm SHA256).Hash.ToLower()
           $sumsPath = "release-out/SHA256SUMS.txt"
@@ -130,6 +136,43 @@ jobs:
             "$setupHash  AAZ-Player-Setup-$ver.exe",
             "$portableHash  AAZ-Player-Portable-$ver.exe"
           ) | Set-Content -Path $sumsPath -Encoding UTF8
+
+          $uploadFiles = @($setupDest, $portableDest, $sumsPath)
+
+          if (-not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_SIGNING_KEY)) {
+            if (-not (Get-Command minisign -ErrorAction SilentlyContinue)) {
+              choco install minisign -y --no-progress | Out-Null
+            }
+            $keyFile = Join-Path $env:RUNNER_TEMP "aaz-updater.key"
+            try {
+              Set-Content -Path $keyFile -Value $env:AAZ_UPDATER_SIGNING_KEY -NoNewline -Encoding UTF8
+              foreach ($targetFile in @($setupDest, $portableDest, $sumsPath)) {
+                $pw = if ($null -ne $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD) { $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD } else { "" }
+                $pw | minisign -S -s $keyFile -m $targetFile
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Minisign signing failed for $targetFile"
+                  exit 1
+                }
+                $sigPath = "$targetFile.minisig"
+                if (-not (Test-Path $sigPath)) {
+                  Write-Error "Expected signature file missing: $sigPath"
+                  exit 1
+                }
+                if (-not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_PUBLIC_KEY)) {
+                  minisign -V -P $env:AAZ_UPDATER_PUBLIC_KEY -m $targetFile -x $sigPath
+                  if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Minisign self-verification failed for $targetFile"
+                    exit 1
+                  }
+                }
+                $uploadFiles += $sigPath
+              }
+            } finally {
+              if (Test-Path $keyFile) { Remove-Item -Path $keyFile -Force }
+            }
+          } else {
+            Write-Host "::warning::AAZ_UPDATER_SIGNING_KEY secret is not configured. Release artifacts are unsigned; the in-app updater refuses unsigned updates (fail closed) until signing keys are configured."
+          }
 
           Write-Host "Built artifacts & checksums:"
           Get-ChildItem "release-out" | ForEach-Object { Write-Host " - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)" }
@@ -140,10 +183,10 @@ jobs:
           $exists = ($LASTEXITCODE -eq 0)
           $global:LASTEXITCODE = 0
 
-          $notes = "AAZ Player $tag — Rust + Tauri v2 desktop media player with SHA-256 verified updates, Mini Player, Watch History, Media Library, customizable shortcuts, and Playback Settings."
+          $notes = "AAZ Player $tag — Rust + Tauri v2 desktop media player with fail-closed SHA-256 + Minisign updater verification, offline bundled fonts, Mini Player, Watch History, Media Library, customizable shortcuts, and Playback Settings."
           if ($exists) {
-            gh release upload $tag $setupDest $portableDest $sumsPath --clobber
+            gh release upload $tag @uploadFiles --clobber
           } else {
-            gh release create $tag $setupDest $portableDest $sumsPath --title "AAZ Player $tag" --notes $notes
+            gh release create $tag @uploadFiles --title "AAZ Player $tag" --notes $notes
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

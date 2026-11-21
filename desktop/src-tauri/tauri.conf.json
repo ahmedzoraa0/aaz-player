@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' http://tauri.localhost https://tauri.localhost; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' blob: data:; media-src 'self' http://aazmedia.localhost https://aazmedia.localhost aazmedia: blob: data:; connect-src 'self' http://aazmedia.localhost https://aazmedia.localhost http://ipc.localhost ipc:; frame-src 'self' http://tauri.localhost https://tauri.localhost; object-src 'none'; base-uri 'self'; form-action 'none'"
+      "csp": "default-src 'self' http://tauri.localhost https://tauri.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' blob: data:; media-src 'self' http://aazmedia.localhost https://aazmedia.localhost aazmedia: blob: data:; connect-src 'self' http://aazmedia.localhost https://aazmedia.localhost http://ipc.localhost ipc:; frame-src 'self' http://tauri.localhost https://tauri.localhost; object-src 'none'; base-uri 'self'; form-action 'none'"
     }
   },
   "bundle": {
@@ -72,8 +72,7 @@
           "mkv",
           "mov",
           "m4v",
-          "avi",
-          "ts"
+          "avi"
         ],
         "name": "AAZ Video File",
         "description": "Video Media File"

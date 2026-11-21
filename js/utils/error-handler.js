@@ -15,6 +15,7 @@ export const ErrorCategory = Object.freeze({
   FILE_ACCESS: 'file_access',
   UPDATE: 'update',
   STORAGE: 'storage',
+  AUDIO_OUTPUT: 'audio_output',
 });
 
 const MESSAGES = {
@@ -27,6 +28,7 @@ const MESSAGES = {
     [ErrorCategory.FILE_ACCESS]: 'Could not access the selected file or folder. Please check permissions or re-open it.',
     [ErrorCategory.UPDATE]: 'Update check or installation failed. Please verify your internet connection and try again.',
     [ErrorCategory.STORAGE]: 'Could not save settings locally. Browser storage may be full or restricted.',
+    [ErrorCategory.AUDIO_OUTPUT]: 'Selected audio output device is unavailable. Switched back to System Default Output.',
     mediaAborted: 'Media loading was interrupted before completion.',
     mediaNetwork: 'A network or local stream error interrupted playback.',
     mediaDecode: 'Could not decode this media file. The codec or file structure may be damaged.',
@@ -43,6 +45,7 @@ const MESSAGES = {
     [ErrorCategory.FILE_ACCESS]: 'تعذر الوصول إلى الملف أو المجلد المحدد. تحقق من الصلاحيات أو أعد فتحه.',
     [ErrorCategory.UPDATE]: 'تعذر التحقق من التحديثات أو تثبيتها. تحقق من الاتصال بالإنترنت وحاول مجدداً.',
     [ErrorCategory.STORAGE]: 'تعذر حفظ الإعدادات محلياً. ربما امتلأت مساحة التخزين أو تم تقييدها.',
+    [ErrorCategory.AUDIO_OUTPUT]: 'جهاز إخراج الصوت المحدد غير متاح حالياً. تم الرجوع تلقائياً إلى مخرج النظام الافتراضي.',
     mediaAborted: 'تم إيقاف تحميل الوسائط قبل اكتماله.',
     mediaNetwork: 'حدث خطأ في البث أو الشبكة أثناء التشغيل.',
     mediaDecode: 'تعذر فك ترميز هذا الملف. قد يكون الترميز غير مدعوم أو الملف تالفاً.',
@@ -81,6 +84,16 @@ export function formatUserError(category, error, lang = 'en', detail = '') {
   // Map well-known safe backend errors without leaking internal stack traces
   const lower = raw.toLowerCase();
   if (category === ErrorCategory.NETWORK_DLNA) {
+    if (lower.includes('no_lan_ip') || lower.includes('no private local network')) {
+      return lang === 'ar'
+        ? 'لم يتم العثور على عنوان شبكة محلية (واي فاي أو LAN). اتصل بشبكة محلية أولاً لبدء البث.'
+        : 'No local Wi-Fi or LAN IPv4 address was detected. Connect to a local network to cast.';
+    }
+    if (lower.includes('lan_bind_failed') || lower.includes('bind local streaming')) {
+      return lang === 'ar'
+        ? 'تعذر بدء خادم البث على محوّل الشبكة المحلية. تحقق من إعدادات الشبكة وجدار الحماية.'
+        : 'Could not bind the local streaming server to your LAN adapter. Check network or firewall settings.';
+    }
     if (lower.includes('private') || lower.includes('local lan') || lower.includes('not a discovered')) {
       return lang === 'ar'
         ? 'تم حظر عنوان البث لأسباب أمنية — يُسمح فقط بأجهزة الشبكة المحلية.'
@@ -94,10 +107,15 @@ export function formatUserError(category, error, lang = 'en', detail = '') {
   }
 
   if (category === ErrorCategory.UPDATE) {
+    if (lower.includes('signature') || lower.includes('minisig') || lower.includes('signing public key')) {
+      return lang === 'ar'
+        ? 'تم رفض التحديث لعدم وجود توقيع رقمي موثوق أو فشله في التحقق. تم إلغاء التثبيت لحمايتك.'
+        : 'Update refused: missing or invalid cryptographic signature. Installation was aborted for your safety.';
+    }
     if (lower.includes('checksum') || lower.includes('sha-256') || lower.includes('digest')) {
       return lang === 'ar'
-        ? 'فشل التحقق الأمني من ملف التحديث (عدم تطابق SHA-256). تم إلغاء التثبيت لحمايتك.'
-        : 'Update integrity check failed (SHA-256 mismatch). Installation was aborted for your safety.';
+        ? 'فشل التحقق الأمني من ملف التحديث (غياب أو عدم تطابق SHA-256). تم إلغاء التثبيت لحمايتك.'
+        : 'Update integrity check failed (missing or mismatched SHA-256). Installation was aborted for your safety.';
     }
     if (lower.includes('https') || lower.includes('untrusted') || lower.includes('host')) {
       return lang === 'ar'
@@ -124,6 +142,14 @@ export function formatUserError(category, error, lang = 'en', detail = '') {
 
 export function createErrorHandler({ showToast, getLang }) {
   return {
+    log(context, error) {
+      const label = context ? `[AAZ:${context}]` : '[AAZ]';
+      if (error !== undefined && error !== null) {
+        console.warn(label, error);
+      } else {
+        console.warn(label);
+      }
+    },
     notify(category, error, detail = '') {
       const lang = typeof getLang === 'function' ? getLang() : 'en';
       const userMsg = formatUserError(category, error, lang, detail);

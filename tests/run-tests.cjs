@@ -377,6 +377,105 @@ async function main() {
     );
     assert.ok(enErr.includes('SHA-256'));
     assert.ok(arErr.includes('الشبكة المحلية'));
+
+    // Bilingual NO_LAN_IP, Minisign signature refusal, and AUDIO_OUTPUT fallback notices
+    const noLanEn = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.NETWORK_DLNA,
+      new Error('NO_LAN_IP: No private local network IPv4 address was detected'),
+      'en'
+    );
+    const noLanAr = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.NETWORK_DLNA,
+      new Error('NO_LAN_IP: No private local network IPv4 address was detected'),
+      'ar'
+    );
+    assert.ok(noLanEn.toLowerCase().includes('local network'));
+    assert.ok(noLanAr.includes('شبكة محلية'));
+
+    const sigEn = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.UPDATE,
+      new Error('Update refused: missing cryptographic signature (.minisig)'),
+      'en'
+    );
+    const sigAr = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.UPDATE,
+      new Error('Update refused: missing cryptographic signature (.minisig)'),
+      'ar'
+    );
+    assert.ok(sigEn.toLowerCase().includes('signature'));
+    assert.ok(sigAr.includes('توقيع رقمي'));
+
+    const audioOutEn = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.AUDIO_OUTPUT,
+      new Error('NotFoundError'),
+      'en'
+    );
+    const audioOutAr = errorHandlerMod.formatUserError(
+      errorHandlerMod.ErrorCategory.AUDIO_OUTPUT,
+      new Error('NotFoundError'),
+      'ar'
+    );
+    assert.ok(audioOutEn.includes('System Default Output'));
+    assert.ok(audioOutAr.includes('النظام الافتراضي'));
+
+    const logged = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => logged.push(args);
+    try {
+      const eh = errorHandlerMod.createErrorHandler({ showToast: () => {}, getLang: () => 'en' });
+      eh.log('audio.ctx.setSinkId', new Error('sink unavailable'));
+    } finally {
+      console.warn = origWarn;
+    }
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0][0], '[AAZ:audio.ctx.setSinkId]');
+  });
+
+  // 11. Offline Bundled Fonts, CSP & File Associations (.ts excluded)
+  await runTest('Packaging & Privacy: local WOFF2 fonts bundled, zero Google Fonts in HTML/CSP & .ts removed from associations', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.equal(/fonts\.googleapis\.com|fonts\.gstatic\.com/i.test(html), false, 'index.html must not reference Google Fonts');
+    assert.ok(html.includes('href="./fonts/fonts.css"'), 'index.html must link local ./fonts/fonts.css');
+
+    const fontsCssPath = path.join(ROOT, 'public/fonts/fonts.css');
+    assert.ok(fs.existsSync(fontsCssPath), 'public/fonts/fonts.css must exist');
+    const fontsCss = fs.readFileSync(fontsCssPath, 'utf8');
+    assert.equal(/https?:\/\//i.test(fontsCss), false, 'fonts.css must not contain external URLs');
+    assert.ok(fontsCss.includes("'Cairo'"), 'fonts.css must declare Cairo');
+    assert.ok(fontsCss.includes("'JetBrains Mono'"), 'fonts.css must declare JetBrains Mono');
+    assert.ok(fontsCss.includes("'Plus Jakarta Sans'"), 'fonts.css must declare Plus Jakarta Sans');
+
+    const woffMatches = [...fontsCss.matchAll(/url\(\.\/([^)]+\.woff2)\)/g)];
+    assert.ok(woffMatches.length >= 6, 'fonts.css must reference bundled local .woff2 files');
+    for (const m of woffMatches) {
+      assert.ok(
+        fs.existsSync(path.join(ROOT, 'public/fonts', m[1])),
+        `Missing bundled font file public/fonts/${m[1]}`
+      );
+    }
+
+    const tauriConf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8'));
+    const csp = tauriConf.app?.security?.csp || '';
+    assert.equal(/googleapis|gstatic/i.test(csp), false, 'CSP must not allow googleapis or gstatic');
+
+    const videoAssoc = (tauriConf.bundle?.fileAssociations || []).find((a) => a.name === 'AAZ Video File');
+    assert.ok(videoAssoc, 'AAZ Video File association must exist');
+    assert.equal(videoAssoc.ext.includes('ts'), false, 'ts extension must be removed from Windows file associations');
+  });
+
+  // 12. No Silent Catch Blocks in player-app.js & Updater Fail-Closed Invariants
+  await runTest('Reliability & Security: zero silent catches in player-app.js & fail-closed updater/LAN checks in Rust', () => {
+    const appCode = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.equal(/catch\s*\{\s*\}/.test(appCode), false, 'player-app.js must have zero empty catch {} blocks');
+    assert.equal(/\.catch\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/.test(appCode), false, 'player-app.js must have zero silent .catch(() => {}) blocks');
+    assert.ok(appCode.includes('handleAudioSinkFallback('), 'player-app.js must handle setSinkId failures with fallback');
+    assert.ok(appCode.includes('ErrorCategory.AUDIO_OUTPUT'), 'player-app.js must notify bilingual AUDIO_OUTPUT fallback errors');
+
+    const libRs = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/src/lib.rs'), 'utf8');
+    assert.ok(libRs.includes('expected_sha256: &str'), 'verify_file_integrity must require non-optional expected_sha256');
+    assert.ok(libRs.includes('fn verify_file_minisign('), 'Rust updater must verify Minisign signatures');
+    assert.ok(libRs.includes('fn detect_local_lan_ip() -> Result<String, String>'), 'detect_local_lan_ip must return Result and refuse 127.0.0.1 fallback');
+    assert.ok(libRs.includes('NO_LAN_IP'), 'detect_local_lan_ip must return NO_LAN_IP error when offline');
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);

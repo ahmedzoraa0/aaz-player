@@ -24,6 +24,7 @@ base64 = "0.22"
 ureq = { version = "2.12", features = ["json"] }
 sha2 = "0.10"
 getrandom = "0.2"
+minisign-verify = "0.2"
 
 [profile.release]
 panic = "abort"
