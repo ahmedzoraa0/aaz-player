@@ -4,7 +4,7 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
-## [Unreleased]
+## [1.5.0] - 2026-11-21
 
 ### Security Hardening (Phase 1)
 - **Custom Media Protocol (`aazmedia://`)**: Added canonical path resolution, user-authorized media path allowlisting, extension & regular-file enforcement, and strict HTTP Range parsing.

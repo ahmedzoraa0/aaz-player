@@ -411,7 +411,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
-        appVersion: '1.4.2',
+        appVersion: '1.5.0',
         updateState: 'idle',          // 'idle' | 'available' | 'downloading' | 'downloaded'
         audioSinkId: '',              // '' = System Default, or specific audiooutput deviceId
         audioSinkLabel: '',

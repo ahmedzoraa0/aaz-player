@@ -87,7 +87,15 @@ async function main() {
     const tauriConf = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8')
     );
-    assert.equal(tauriConf.version, '1.4.2', 'Version must stay 1.4.2');
+    const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const desktopPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
+    const cargoToml = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/Cargo.toml'), 'utf8');
+    const cargoVerMatch = cargoToml.match(/^version\s*=\s*"([^"]+)"/m);
+    assert.ok(cargoVerMatch, 'Cargo.toml must declare a version');
+    assert.match(desktopPkg.version, /^\d+\.\d+\.\d+$/, 'Version must follow semver');
+    assert.equal(rootPkg.version, desktopPkg.version, 'Root package.json version must match desktop/package.json');
+    assert.equal(tauriConf.version, desktopPkg.version, 'tauri.conf.json version must match desktop/package.json');
+    assert.equal(cargoVerMatch[1], desktopPkg.version, 'Cargo.toml version must match desktop/package.json');
     const csp = tauriConf.app?.security?.csp;
     assert.equal(typeof csp, 'string', 'CSP must be a non-null string');
     assert.ok(csp.includes("script-src 'self'"), 'CSP must enforce script-src self');
