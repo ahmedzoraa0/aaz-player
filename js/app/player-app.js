@@ -222,9 +222,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         tabQueueBtn: document.getElementById('tabQueueBtn'),
         tabSavedBtn: document.getElementById('tabSavedBtn'),
         tabLibraryBtn: document.getElementById('tabLibraryBtn'),
-        tabHistoryBtn: document.getElementById('tabHistoryBtn'),
         panelLibrary: document.getElementById('panelLibrary'),
-        panelHistory: document.getElementById('panelHistory'),
         queueTabCount: document.getElementById('queueTabCount'),
         savedTabCount: document.getElementById('savedTabCount'),
         panelQueue: document.getElementById('panelQueue'),
@@ -503,6 +501,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           vizLed: 'Studio LED',
           tabQueue: 'Queue',
           tabSaved: 'Saved Playlists',
+          tabSavedShort: 'Saved',
+          resumeFilesMissing: 'Could not find the previous session files on disk. They may have been moved or deleted.',
           currentQueue: 'Current Queue',
           btnSavePl: '+ Save',
           btnClear: 'Clear',
@@ -783,6 +783,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           vizLed: 'أعمدة استوديو',
           tabQueue: 'قائمة التشغيل',
           tabSaved: 'القوائم المحفوظة',
+          tabSavedShort: 'المحفوظة',
+          resumeFilesMissing: 'تعذّر العثور على ملفات الجلسة السابقة على القرص. ربما تم نقلها أو حذفها.',
           currentQueue: 'قائمة التشغيل الحالية',
           btnSavePl: '+ حفظ القائمة',
           btnClear: 'مسح',
@@ -2975,12 +2977,32 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
+        const hasActiveTracks = state.allTracks.length > 0;
+        let persistedNativeTrackPaths = [];
+        if (hasActiveTracks) {
+          if (!state.nativeFolderPath) {
+            const seen = new Set();
+            for (const tr of state.allTracks) {
+              if (!tr.fullPath) continue;
+              const norm = normalizeFsPath(tr.fullPath);
+              if (seen.has(norm)) continue;
+              seen.add(norm);
+              persistedNativeTrackPaths.push(tr.fullPath);
+              if (persistedNativeTrackPaths.length >= 500) break;
+            }
+          }
+        } else if (Array.isArray(state.savedSession?.nativeTrackPaths)) {
+          persistedNativeTrackPaths = state.savedSession.nativeTrackPaths;
+        }
+
         const payload = {
           trackKey: track ? track.key : (state.savedSession?.trackKey || ''),
           trackName: track ? track.name : (state.savedSession?.trackName || ''),
+          trackFullPath: track?.fullPath || (!hasActiveTracks ? (state.savedSession?.trackFullPath || '') : ''),
           folderName: state.folderName || (state.savedSession?.folderName || ''),
-          nativeFolderPath: state.nativeFolderPath || (state.savedSession?.nativeFolderPath || ''),
-          activeSavedPlaylistId: state.activeSavedPlaylistId,
+          nativeFolderPath: hasActiveTracks ? (state.nativeFolderPath || '') : (state.savedSession?.nativeFolderPath || ''),
+          nativeTrackPaths: persistedNativeTrackPaths,
+          activeSavedPlaylistId: hasActiveTracks ? state.activeSavedPlaylistId : (state.savedSession?.activeSavedPlaylistId || null),
           currentTime: cleanTime,
           duration: Number.isFinite(el.media.duration) ? el.media.duration : 0,
           volume: el.media.volume,
@@ -3206,26 +3228,118 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return true;
       }
 
+      function findLegacyHistoryFullPath(saved) {
+        if (!saved || !phase3 || !phase3.historyManager) return '';
+        const entries = phase3.historyManager.getEntries();
+        if (!Array.isArray(entries) || entries.length === 0) return '';
+        const match = entries.find((h) =>
+          h && h.fullPath && (
+            (saved.trackKey && h.relPath && String(h.relPath).toLowerCase() === String(saved.trackKey).toLowerCase()) ||
+            (saved.trackName && h.name === saved.trackName)
+          )
+        );
+        return match ? match.fullPath : '';
+      }
+
       async function handleResumeLastSession() {
         hideNotice();
         const saved = state.savedSession;
+        const latestPlaylists = StateStore.loadSavedPlaylists();
+        if (latestPlaylists.length > 0) state.savedPlaylists = latestPlaylists;
 
+        // 1. If the previous session was a Saved Playlist, reopen & auto-play it directly
         if (saved?.activeSavedPlaylistId && state.savedPlaylists.some((p) => p.id === saved.activeSavedPlaylistId)) {
           await openSavedPlaylist(saved.activeSavedPlaylistId);
+          el.resumeBanner.hidden = true;
           return;
         }
 
+        // 2. Desktop: restore saved folder directly without opening Windows Explorer
         if (desktopBridge && saved?.nativeFolderPath) {
-          const res = await desktopBridge.readFolder(saved.nativeFolderPath);
-          if (res && res.entries?.length) {
-            const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
-            await applyLoadedTracks(tracks, subMap, res.folderName, 'electron', {
-              restoreSavedPosition: true, autoPlay: true, nativeFolderPath: res.folderPath
-            });
-            return;
+          try {
+            const res = await desktopBridge.readFolder(saved.nativeFolderPath);
+            if (res && res.entries?.length) {
+              const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
+              if (tracks.length > 0) {
+                await applyLoadedTracks(tracks, subMap, res.folderName, 'electron', {
+                  restoreSavedPosition: true, autoPlay: true, nativeFolderPath: res.folderPath
+                });
+                el.resumeBanner.hidden = true;
+                return;
+              }
+            }
+          } catch (err) {
+            errorHandler.log('session.resumeNativeFolder', err);
           }
         }
 
+        // 3. Desktop: restore saved file paths / trackFullPath / legacy Watch History path directly
+        if (desktopBridge && desktopBridge.inspectPaths) {
+          const candidatePaths = [];
+          const seen = new Set();
+          const addCandidate = (fp) => {
+            if (!fp || typeof fp !== 'string') return;
+            const norm = normalizeFsPath(fp);
+            if (!norm || seen.has(norm)) return;
+            seen.add(norm);
+            candidatePaths.push(fp);
+          };
+          if (Array.isArray(saved?.nativeTrackPaths)) {
+            for (const fp of saved.nativeTrackPaths) addCandidate(fp);
+          }
+          if (saved?.trackFullPath) addCandidate(saved.trackFullPath);
+          if (candidatePaths.length === 0) {
+            const legacyPath = findLegacyHistoryFullPath(saved);
+            if (legacyPath) addCandidate(legacyPath);
+          }
+
+          if (candidatePaths.length > 0) {
+            try {
+              const res = await desktopBridge.inspectPaths(candidatePaths);
+              if (res && res.entries?.length) {
+                const { tracks: rawTracks, subMap } = buildTracksFromElectronEntries(res.entries);
+                const byNorm = new Map();
+                for (const tr of rawTracks) {
+                  if (tr.fullPath) byNorm.set(normalizeFsPath(tr.fullPath), tr);
+                }
+                const orderedTracks = [];
+                const addedNorms = new Set();
+                for (const fp of candidatePaths) {
+                  const norm = normalizeFsPath(fp);
+                  const found = byNorm.get(norm);
+                  if (found && !addedNorms.has(norm)) {
+                    addedNorms.add(norm);
+                    orderedTracks.push(found);
+                  }
+                }
+                for (const tr of rawTracks) {
+                  const norm = tr.fullPath ? normalizeFsPath(tr.fullPath) : '';
+                  if (!norm || !addedNorms.has(norm)) orderedTracks.push(tr);
+                }
+
+                if (orderedTracks.length > 0) {
+                  await applyLoadedTracks(
+                    orderedTracks,
+                    subMap,
+                    saved?.folderName || res.folderName || t('currentQueue'),
+                    'electron',
+                    { restoreSavedPosition: true, autoPlay: true, nativeFolderPath: '' }
+                  );
+                  el.resumeBanner.hidden = true;
+                  return;
+                }
+              }
+            } catch (err) {
+              errorHandler.log('session.resumeNativePaths', err);
+            }
+          }
+
+          // Desktop guard: never unexpectedly pop open Windows Explorer if files were moved/deleted
+          showNotice(t('resumeFilesMissing'), true);
+          return;
+        }
+
+        // 4. Browser mode: stored FileSystemDirectoryHandle
         if (state.savedDirHandle) {
           try {
             let perm = await state.savedDirHandle.queryPermission({ mode: 'read' });
@@ -3286,8 +3400,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         renderPlaylist();
 
         const saved = restoreSavedPosition ? state.savedSession : null;
+        const savedNormPath = saved?.trackFullPath ? normalizeFsPath(saved.trackFullPath) : '';
         const matched = saved
-          ? tracks.find((t) => (saved.trackKey && t.key === saved.trackKey) || (saved.trackName && t.name === saved.trackName))
+          ? tracks.find((t) =>
+              (savedNormPath && t.fullPath && normalizeFsPath(t.fullPath) === savedNormPath) ||
+              (saved.trackKey && t.key === saved.trackKey) ||
+              (saved.trackName && t.name === saved.trackName)
+            )
           : null;
 
         if (matched) {
@@ -4377,12 +4496,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
          13. UI Views, Fullscreen, PiP & Sidebar Management
          ======================================================================= */
       function switchSidebarTab(tab) {
-        const valid = ['queue', 'saved', 'library', 'history'];
+        const valid = ['queue', 'saved', 'library'];
         state.sidebarTab = valid.includes(tab) ? tab : 'queue';
         const isQueue = state.sidebarTab === 'queue';
         const isSaved = state.sidebarTab === 'saved';
         const isLibrary = state.sidebarTab === 'library';
-        const isHistory = state.sidebarTab === 'history';
 
         el.tabQueueBtn.classList.toggle('is-active', isQueue);
         el.tabQueueBtn.setAttribute('aria-selected', String(isQueue));
@@ -4392,19 +4510,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.tabLibraryBtn.classList.toggle('is-active', isLibrary);
           el.tabLibraryBtn.setAttribute('aria-selected', String(isLibrary));
         }
-        if (el.tabHistoryBtn) {
-          el.tabHistoryBtn.classList.toggle('is-active', isHistory);
-          el.tabHistoryBtn.setAttribute('aria-selected', String(isHistory));
-        }
 
         el.panelQueue.hidden = !isQueue;
         el.panelSaved.hidden = !isSaved;
         if (el.panelLibrary) el.panelLibrary.hidden = !isLibrary;
-        if (el.panelHistory) el.panelHistory.hidden = !isHistory;
 
         if (isSaved) renderSavedPlaylists();
         if (isLibrary && phase3) phase3.renderLibrary();
-        if (isHistory && phase3) phase3.renderHistory();
       }
 
       function toggleSidebar() {
@@ -5484,7 +5596,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
       function refreshResumeBanner() {
         const saved = state.savedSession;
-        const hasNative = Boolean(desktopBridge && saved?.nativeFolderPath);
+        const hasSavedPl = Boolean(
+          saved?.activeSavedPlaylistId && state.savedPlaylists.some((p) => p.id === saved.activeSavedPlaylistId)
+        );
+        const hasNativeFolder = Boolean(desktopBridge && saved?.nativeFolderPath);
+        const hasNativeFiles = Boolean(
+          desktopBridge && (saved?.trackFullPath || (Array.isArray(saved?.nativeTrackPaths) && saved.nativeTrackPaths.length > 0))
+        );
+        const hasLegacyHistory = Boolean(desktopBridge && findLegacyHistoryFullPath(saved));
+        const hasNative = hasSavedPl || hasNativeFolder || hasNativeFiles || hasLegacyHistory;
         const hasHandle = Boolean(state.savedDirHandle);
         const hasInfo = Boolean(saved && saved.trackName);
 
@@ -5492,12 +5612,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.resumeBanner.hidden = true;
           return;
         }
-        const folderLabel = state.savedDirHandle?.name || saved?.folderName || 'Previous Folder';
+        const folderLabel = state.savedDirHandle?.name || saved?.folderName || t('currentQueue');
         el.resumeTrackLabel.textContent = saved?.trackName ? stripExtension(saved.trackName) : `Folder: ${folderLabel}`;
         const timeStr = Number.isFinite(saved?.currentTime) ? formatTime(saved.currentTime) : '00:00';
-        el.resumeDetailLabel.textContent = (hasNative || hasHandle)
+        el.resumeDetailLabel.textContent = (hasNative || hasHandle || desktopBridge)
           ? `${folderLabel} · ${timeStr}`
-          : `${folderLabel} · ${timeStr} · Re-select folder to resume`;
+          : `${folderLabel} · ${timeStr} · ${t('reselectHint')}`;
         el.resumeBanner.hidden = false;
       }
 
@@ -5582,6 +5702,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           const wasOpen = item.classList.contains('is-open');
           closeAllMenus();
           if (!wasOpen) {
+            if (phase3 && item.querySelector('#mediaRecentSubmenu')) phase3.renderHistory();
             item.classList.add('is-open');
             trigger.setAttribute('aria-expanded', 'true');
           }
@@ -5589,6 +5710,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         trigger.addEventListener('mouseenter', () => {
           if (el.menuBar.querySelector('.menu-item.is-open') && !item.classList.contains('is-open')) {
             closeAllMenus();
+            if (phase3 && item.querySelector('#mediaRecentSubmenu')) phase3.renderHistory();
             item.classList.add('is-open');
             trigger.setAttribute('aria-expanded', 'true');
           }
@@ -5741,10 +5863,6 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           case 'open-library-tab':
             if (state.sidebarHidden) toggleSidebar();
             switchSidebarTab('library');
-            break;
-          case 'open-history-tab':
-            if (state.sidebarHidden) toggleSidebar();
-            switchSidebarTab('history');
             break;
           case 'toggle-mini-player':
             if (phase3) phase3.toggleMiniPlayer();
@@ -6836,7 +6954,6 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       el.tabQueueBtn.addEventListener('click', () => switchSidebarTab('queue'));
       el.tabSavedBtn.addEventListener('click', () => switchSidebarTab('saved'));
       if (el.tabLibraryBtn) el.tabLibraryBtn.addEventListener('click', () => switchSidebarTab('library'));
-      if (el.tabHistoryBtn) el.tabHistoryBtn.addEventListener('click', () => switchSidebarTab('history'));
       el.openSavePlBarBtn.addEventListener('click', openSavePlaylistPrompt);
       el.confirmSavePlBtn.addEventListener('click', () => saveCurrentQueueToLibrary(el.savePlNameInput.value));
       el.cancelSavePlBtn.addEventListener('click', () => { el.savePlBar.hidden = true; });
@@ -7461,6 +7578,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           media: el.media,
           postToShell,
           showNotice,
+          closeAllMenus,
+          normalizeFsPath,
           getLang: () => state.lang,
           getTheme: () => state.theme,
           getSubtitleStyle: () => state.subtitleStyle,

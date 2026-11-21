@@ -65,8 +65,10 @@ export function createEmptyState() {
     // Optional active session fields
     trackKey: undefined,
     trackName: undefined,
+    trackFullPath: undefined,
     folderName: undefined,
     nativeFolderPath: undefined,
+    nativeTrackPaths: [],
     currentTime: undefined,
     activeSavedPlaylistId: undefined,
     // New v4 feature fields
@@ -206,10 +208,23 @@ export function sanitizeState(raw) {
   else delete out.trackKey;
   if (typeof raw.trackName === 'string') out.trackName = raw.trackName;
   else delete out.trackName;
+  if (typeof raw.trackFullPath === 'string' && raw.trackFullPath.trim()) {
+    out.trackFullPath = raw.trackFullPath.slice(0, 1024);
+  } else {
+    delete out.trackFullPath;
+  }
   if (typeof raw.folderName === 'string') out.folderName = raw.folderName;
   else delete out.folderName;
   if (typeof raw.nativeFolderPath === 'string') out.nativeFolderPath = raw.nativeFolderPath;
   else delete out.nativeFolderPath;
+  if (Array.isArray(raw.nativeTrackPaths)) {
+    out.nativeTrackPaths = raw.nativeTrackPaths
+      .filter((p) => typeof p === 'string' && p.trim())
+      .map((p) => p.slice(0, 1024))
+      .slice(0, 500);
+  } else {
+    out.nativeTrackPaths = [];
+  }
   if (typeof raw.currentTime === 'number' && Number.isFinite(raw.currentTime)) {
     out.currentTime = Math.max(0, raw.currentTime);
   } else {

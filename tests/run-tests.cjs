@@ -478,6 +478,31 @@ async function main() {
     assert.ok(libRs.includes('NO_LAN_IP'), 'detect_local_lan_ip must return NO_LAN_IP error when offline');
   });
 
+  // 13. UI Consistency & Desktop Auto-Resume Session Persistence
+  await runTest('UI & Session Resume: 3 sidebar tabs, Media Open Recent submenu, unified Library & nativeTrackPaths persistence', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.equal(html.includes('id="tabHistoryBtn"'), false, 'History tab button must be removed from sidebar');
+    assert.equal(html.includes('id="panelHistory"'), false, 'History sidebar panel must be removed');
+    assert.ok(html.includes('id="mediaRecentSubmenu"'), 'Watch History must be placed in Media Open Recent submenu');
+    assert.ok(html.includes('id="recentHistoryList"'), 'Recent History submenu list must exist');
+    assert.ok(html.includes('lib-mode-tabs'), 'Library panel must use unified segmented mode-tabs');
+    assert.ok(html.includes('id="libSortBtn"'), 'Library panel must use unified sort cycle button');
+    assert.ok(html.includes('id="libMeta"'), 'Library panel header must include unified meta subtitle');
+
+    const mem = createMemoryStorage();
+    const sm = storageMod.createStorageManager(mem);
+    sm.save({
+      trackKey: 'ep1.mp4',
+      trackName: 'ep1.mp4',
+      trackFullPath: 'D:/Shows/ep1.mp4',
+      nativeTrackPaths: ['D:/Shows/ep1.mp4', 'D:/Shows/ep2.mp4'],
+      currentTime: 128.5,
+    });
+    const reloaded = sm.load();
+    assert.equal(reloaded.trackFullPath, 'D:/Shows/ep1.mp4');
+    assert.deepEqual(reloaded.nativeTrackPaths, ['D:/Shows/ep1.mp4', 'D:/Shows/ep2.mp4']);
+  });
+
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 }

@@ -29,7 +29,7 @@ import { ErrorCategory } from '../utils/error-handler.js';
 const P3_I18N = {
   en: {
     tabLibrary: 'Library',
-    tabHistory: 'History',
+    menuOpenRecent: 'Open Recent / History',
     miniBtnTitle: 'Mini Player Mode (Ctrl+Shift+M)',
     settingsBtnTitle: 'Playback Settings (Ctrl+,)',
     miniReturn: 'Full Player',
@@ -40,34 +40,36 @@ const P3_I18N = {
     savedDuplicated: 'Duplicated playlist "{name}".',
     savedNoMatch: 'No saved playlists match your search.',
     histTitle: 'Watch History',
-    histSearchPh: 'Search watch history...',
-    histFilterAll: 'All',
-    histFilterProgress: 'In Progress',
-    histFilterDone: 'Completed',
     histPauseOn: 'History Recording: On',
-    histPauseOff: 'History Paused',
-    histClearAll: 'Clear All',
+    histPauseOff: 'History Recording: Paused',
+    histClearAll: 'Clear Watch History',
     histCleared: 'Watch history cleared.',
     histRemoved: 'Removed from history.',
-    histEmptyTitle: 'No watch history yet',
-    histEmptyDesc: 'Tracks you play will appear here so you can resume where you left off.',
+    histEmptyTitle: 'No recent items yet',
+    histEmptyDesc: 'Recently played tracks will appear here so you can resume where you left off.',
     histPausedNote: 'Watch history recording is paused in privacy mode.',
     histCompleted: 'Completed',
-    histMarkDone: 'Mark Completed',
-    histMarkUndone: 'Mark Incomplete',
     histResumeAt: 'Resume at',
     histCannotReopenWeb: 'Open the original folder again in browser mode to replay this item.',
     libTitle: 'Media Library',
-    libAddFolder: '+ Add Folder',
+    libEmptyMeta: 'No folders added yet',
+    libMetaSummary: '{folders} {folderWord} · {items} {itemWord}',
+    libFolderOne: 'folder',
+    libFolderMany: 'folders',
+    libItemOne: 'item',
+    libItemMany: 'items',
+    libAddFolder: '+ Folder',
+    libAddFolderFull: '+ Add Folder',
     libRescan: 'Rescan',
     libRemoveFolder: 'Remove folder',
     libAllFolders: 'All Folders',
-    libSearchPh: 'Search library files...',
+    libSearchPh: 'Filter library files...',
     libSortName: 'Name',
     libSortDate: 'Date',
     libSortDur: 'Duration',
+    libNoMatch: 'No library files match your filter.',
     libEmptyTitle: 'Your Media Library is empty',
-    libEmptyDesc: 'Add your favorite media folders to browse, search, filter, and play instantly. AAZ Player only scans folders you choose.',
+    libEmptyDesc: 'Add your favorite media folders to browse, search, filter, and play instantly.',
     libFolderAdded: 'Added "{name}" ({count} items) to Media Library.',
     libFolderRescanned: 'Rescanned "{name}" ({count} items).',
     libFolderRemoved: 'Removed "{name}" from Media Library.',
@@ -108,7 +110,7 @@ const P3_I18N = {
   },
   ar: {
     tabLibrary: 'المكتبة',
-    tabHistory: 'السجل',
+    menuOpenRecent: 'الملفات الأخيرة / السجل',
     miniBtnTitle: 'المشغل المصغر (Ctrl+Shift+M)',
     settingsBtnTitle: 'إعدادات التشغيل (Ctrl+,)',
     miniReturn: 'الوضع الكامل',
@@ -119,34 +121,36 @@ const P3_I18N = {
     savedDuplicated: 'تم تكرار القائمة "{name}".',
     savedNoMatch: 'لا توجد قوائم محفوظة تطابق البحث.',
     histTitle: 'سجل المشاهدة',
-    histSearchPh: 'ابحث في سجل المشاهدة...',
-    histFilterAll: 'الكل',
-    histFilterProgress: 'قيد المشاهدة',
-    histFilterDone: 'مكتمل',
     histPauseOn: 'تسجيل السجل: مفعّل',
-    histPauseOff: 'السجل متوقف مؤقتاً',
-    histClearAll: 'مسح السجل',
+    histPauseOff: 'تسجيل السجل: متوقف',
+    histClearAll: 'مسح سجل المشاهدة',
     histCleared: 'تم مسح سجل المشاهدة.',
     histRemoved: 'تمت الإزالة من السجل.',
-    histEmptyTitle: 'سجل المشاهدة فارغ',
+    histEmptyTitle: 'لا توجد ملفات أخيرة بعد',
     histEmptyDesc: 'ستظهر المقاطع التي تشغلها هنا لمتابعة المشاهدة من حيث توقفت.',
     histPausedNote: 'تسجيل سجل المشاهدة متوقف مؤقتاً في وضع الخصوصية.',
     histCompleted: 'مكتمل',
-    histMarkDone: 'تحديد كمكتمل',
-    histMarkUndone: 'إلغاء الاكتمال',
     histResumeAt: 'استئناف عند',
     histCannotReopenWeb: 'أعد فتح المجلد الأصلي في وضع المتصفح لتشغيل هذا الملف.',
     libTitle: 'مكتبة الوسائط',
-    libAddFolder: '+ إضافة مجلد',
+    libEmptyMeta: 'لم تتم إضافة مجلدات بعد',
+    libMetaSummary: '{folders} {folderWord} · {items} {itemWord}',
+    libFolderOne: 'مجلد',
+    libFolderMany: 'مجلدات',
+    libItemOne: 'عنصر',
+    libItemMany: 'عنصر',
+    libAddFolder: '+ مجلد',
+    libAddFolderFull: '+ إضافة مجلد',
     libRescan: 'تحديث',
     libRemoveFolder: 'إزالة المجلد',
     libAllFolders: 'كل المجلدات',
-    libSearchPh: 'ابحث في ملفات المكتبة...',
+    libSearchPh: 'ابحث داخل المكتبة...',
     libSortName: 'الاسم',
     libSortDate: 'التاريخ',
     libSortDur: 'المدة',
+    libNoMatch: 'لا توجد ملفات في المكتبة تطابق الفلتر.',
     libEmptyTitle: 'مكتبة الوسائط فارغة',
-    libEmptyDesc: 'أضف مجلدات الوسائط المفضلة لديك للتصفح والبحث والتشغيل الفوري. يقوم البرنامج بفحص المجلدات التي تختارها فقط.',
+    libEmptyDesc: 'أضف مجلدات الوسائط المفضلة لديك للتصفح والبحث والتشغيل الفوري.',
     libFolderAdded: 'تمت إضافة "{name}" ({count} ملف) إلى المكتبة.',
     libFolderRescanned: 'تم تحديث "{name}" ({count} ملف).',
     libFolderRemoved: 'تمت إزالة "{name}" من المكتبة.',
@@ -246,26 +250,27 @@ export function createPhase3Controller(api) {
   const dom = {
     // Sidebar tabs & panels
     tabLibraryBtn: document.getElementById('tabLibraryBtn'),
-    tabHistoryBtn: document.getElementById('tabHistoryBtn'),
     libraryTabCount: document.getElementById('libraryTabCount'),
-    historyTabCount: document.getElementById('historyTabCount'),
     panelLibrary: document.getElementById('panelLibrary'),
-    panelHistory: document.getElementById('panelHistory'),
     // Saved search
     savedSearchInput: document.getElementById('savedSearchInput'),
-    // History UI
-    historySearchInput: document.getElementById('historySearchInput'),
-    historyFilterBtns: document.querySelectorAll('[data-hist-filter]'),
-    historyPauseBtn: document.getElementById('historyPauseBtn'),
-    historyClearBtn: document.getElementById('historyClearBtn'),
-    historyList: document.getElementById('historyList'),
-    // Library UI
+    // Media -> Open Recent / Watch History cascading submenu
+    recentHistoryCount: document.getElementById('recentHistoryCount'),
+    recentHistoryList: document.getElementById('recentHistoryList'),
+    historyPauseMenuBtn: document.getElementById('historyPauseMenuBtn'),
+    historyPauseMenuLabel: document.getElementById('historyPauseMenuLabel'),
+    historyClearMenuBtn: document.getElementById('historyClearMenuBtn'),
+    // Library UI (unified with Queue)
+    libMeta: document.getElementById('libMeta'),
     libAddFolderBtn: document.getElementById('libAddFolderBtn'),
     libRescanAllBtn: document.getElementById('libRescanAllBtn'),
     libFolderChips: document.getElementById('libFolderChips'),
     libSearchInput: document.getElementById('libSearchInput'),
     libTypeBtns: document.querySelectorAll('[data-lib-type]'),
-    libSortSelect: document.getElementById('libSortSelect'),
+    libCountAll: document.getElementById('libCountAll'),
+    libCountAudio: document.getElementById('libCountAudio'),
+    libCountVideo: document.getElementById('libCountVideo'),
+    libSortBtn: document.getElementById('libSortBtn'),
     libList: document.getElementById('libList'),
     // Mini player HUD & triggers
     miniPlayerBtn: document.getElementById('miniPlayerBtn'),
@@ -320,7 +325,6 @@ export function createPhase3Controller(api) {
       if (key) node.textContent = p3t(key);
     });
     if (dom.savedSearchInput) dom.savedSearchInput.placeholder = p3t('savedSearchPh');
-    if (dom.historySearchInput) dom.historySearchInput.placeholder = p3t('histSearchPh');
     if (dom.libSearchInput) dom.libSearchInput.placeholder = p3t('libSearchPh');
     if (dom.miniPlayerBtn) dom.miniPlayerBtn.title = p3t('miniBtnTitle');
     if (dom.openSettingsBtn) dom.openSettingsBtn.title = p3t('settingsBtnTitle');
@@ -328,6 +332,7 @@ export function createPhase3Controller(api) {
     if (dom.miniExpandBtn) dom.miniExpandBtn.title = p3t('miniReturn');
     if (dom.stageBufferingText) dom.stageBufferingText.textContent = p3t('bufferingLabel');
 
+    updateLibSortButtonUI();
     updateCounts();
     renderHistory();
     renderLibrary();
@@ -336,8 +341,10 @@ export function createPhase3Controller(api) {
   }
 
   function updateCounts() {
-    if (dom.historyTabCount) {
-      dom.historyTabCount.textContent = String(historyManager.getEntries().length);
+    const histCount = historyManager.getEntries().length;
+    if (dom.recentHistoryCount) {
+      dom.recentHistoryCount.textContent = String(histCount);
+      dom.recentHistoryCount.hidden = histCount === 0;
     }
     if (dom.libraryTabCount) {
       const total = libraryManager.getFolders().reduce((acc, f) => acc + (f.items?.length || 0), 0);
@@ -345,44 +352,50 @@ export function createPhase3Controller(api) {
     }
   }
 
+  function updateLibSortButtonUI() {
+    if (!dom.libSortBtn) return;
+    const labels = {
+      name: p3t('libSortName'),
+      date: p3t('libSortDate'),
+      duration: p3t('libSortDur'),
+    };
+    dom.libSortBtn.textContent = labels[uiState.librarySort] || p3t('libSortName');
+  }
+
   /* -------------------------------------------------------------------------
-     2. Watch History Rendering & Playback
+     2. Watch History Cascading Submenu (Media -> Open Recent / History)
      ------------------------------------------------------------------------- */
   function renderHistory() {
-    if (!dom.historyList) return;
+    if (!dom.recentHistoryList) return;
     const isRec = settingsManager.get().recordWatchHistory;
-    if (dom.historyPauseBtn) {
-      dom.historyPauseBtn.textContent = isRec ? p3t('histPauseOn') : p3t('histPauseOff');
-      dom.historyPauseBtn.classList.toggle('is-active', !isRec);
-      dom.historyPauseBtn.setAttribute('aria-pressed', String(!isRec));
+    if (dom.historyPauseMenuLabel) {
+      dom.historyPauseMenuLabel.textContent = isRec ? p3t('histPauseOn') : p3t('histPauseOff');
+    }
+    if (dom.historyPauseMenuBtn) {
+      dom.historyPauseMenuBtn.classList.toggle('is-checked', !isRec);
+      dom.historyPauseMenuBtn.setAttribute('aria-pressed', String(!isRec));
     }
 
-    const entries = historyManager.query({
-      search: uiState.historySearch,
-      filter: uiState.historyFilter,
-    });
+    const entries = historyManager.getEntries().slice(0, 20);
+    if (dom.historyClearMenuBtn) {
+      dom.historyClearMenuBtn.disabled = entries.length === 0;
+    }
 
     const frag = document.createDocumentFragment();
 
     if (!isRec) {
-      const banner = document.createElement('div');
-      banner.className = 'p3-inline-note';
-      banner.textContent = p3t('histPausedNote');
-      frag.appendChild(banner);
+      const note = document.createElement('div');
+      note.className = 'menu-recent-note';
+      note.textContent = p3t('histPausedNote');
+      frag.appendChild(note);
     }
 
     if (entries.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'empty-state p3-empty';
-      const title = document.createElement('div');
-      title.className = 'empty-title';
-      title.textContent = p3t('histEmptyTitle');
-      const desc = document.createElement('div');
-      desc.className = 'empty-desc';
-      desc.textContent = p3t('histEmptyDesc');
-      empty.append(title, desc);
+      empty.className = 'menu-recent-empty';
+      empty.textContent = p3t('histEmptyTitle');
       frag.appendChild(empty);
-      dom.historyList.replaceChildren(frag);
+      dom.recentHistoryList.replaceChildren(frag);
       updateCounts();
       return;
     }
@@ -390,81 +403,75 @@ export function createPhase3Controller(api) {
     const lang = api.getLang();
     for (const item of entries) {
       const row = document.createElement('div');
-      row.className = `p3-card${item.completed ? ' is-completed' : ''}`;
+      row.className = `menu-recent-row${item.completed ? ' is-completed' : ''}`;
+      row.setAttribute('role', 'menuitem');
       row.setAttribute('tabindex', '0');
 
-      const top = document.createElement('div');
-      top.className = 'p3-card-top';
-
       const badge = document.createElement('span');
-      badge.className = `p3-kind-tag is-${item.kind}`;
+      badge.className = `menu-recent-kind is-${item.kind}`;
       badge.textContent = item.kind === 'audio' ? 'AUD' : 'VID';
 
+      const info = document.createElement('div');
+      info.className = 'menu-recent-info';
+
       const titleEl = document.createElement('div');
-      titleEl.className = 'p3-card-title';
+      titleEl.className = 'menu-recent-title';
       titleEl.textContent = item.title;
       titleEl.title = item.fullPath || item.title;
 
-      const actions = document.createElement('div');
-      actions.className = 'p3-card-actions';
+      const pct =
+        item.duration > 0 ? Math.min(100, Math.round((item.lastTime / item.duration) * 100)) : 0;
+      const statusText = item.completed
+        ? `✓ ${p3t('histCompleted')}`
+        : `${p3t('histResumeAt')} ${formatTime(item.lastTime)}${item.duration ? ` / ${formatTime(item.duration)}` : ''}`;
 
-      const doneBtn = document.createElement('button');
-      doneBtn.type = 'button';
-      doneBtn.className = `p3-icon-btn${item.completed ? ' is-active' : ''}`;
-      doneBtn.title = item.completed ? p3t('histMarkUndone') : p3t('histMarkDone');
-      doneBtn.textContent = item.completed ? '✓' : '○';
-      doneBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        historyManager.toggleCompleted(item.id);
-        renderHistory();
-      });
+      const metaEl = document.createElement('div');
+      metaEl.className = 'menu-recent-meta';
+      metaEl.textContent = `${statusText} · ${formatRelativeDate(item.lastPlayedAt, lang)}`;
+
+      info.append(titleEl, metaEl);
 
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
-      delBtn.className = 'p3-icon-btn is-danger';
+      delBtn.className = 'menu-recent-remove';
       delBtn.title = p3t('histRemoved');
+      delBtn.setAttribute('aria-label', p3t('histRemoved'));
       delBtn.textContent = '×';
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         historyManager.removeEntry(item.id);
         renderHistory();
-        api.showNotice(p3t('histRemoved'));
       });
 
-      actions.append(doneBtn, delBtn);
-      top.append(badge, titleEl, actions);
+      row.append(badge, info, delBtn);
 
-      const meta = document.createElement('div');
-      meta.className = 'p3-card-meta';
-      const pct =
-        item.duration > 0 ? Math.min(100, Math.round((item.lastTime / item.duration) * 100)) : 0;
-      const statusText = item.completed
-        ? p3t('histCompleted')
-        : `${p3t('histResumeAt')} ${formatTime(item.lastTime)}${item.duration ? ` / ${formatTime(item.duration)}` : ''}`;
-      meta.textContent = `${statusText} · ${formatRelativeDate(item.lastPlayedAt, lang)}`;
+      if (pct > 2 || item.completed) {
+        const barWrap = document.createElement('span');
+        barWrap.className = 'menu-recent-progress';
+        const barFill = document.createElement('span');
+        barFill.className = 'menu-recent-progress-fill';
+        barFill.style.width = `${item.completed ? 100 : pct}%`;
+        barWrap.appendChild(barFill);
+        row.appendChild(barWrap);
+      }
 
-      const barWrap = document.createElement('div');
-      barWrap.className = 'p3-progress-track';
-      const barFill = document.createElement('div');
-      barFill.className = 'p3-progress-fill';
-      barFill.style.width = `${item.completed ? 100 : pct}%`;
-      barWrap.appendChild(barFill);
-
-      row.append(top, meta, barWrap);
-
-      const triggerPlay = () => playHistoryItem(item);
+      const triggerPlay = (e) => {
+        if (e) e.stopPropagation();
+        if (api.closeAllMenus) api.closeAllMenus();
+        playHistoryItem(item);
+      };
       row.addEventListener('click', triggerPlay);
       row.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          triggerPlay();
+          triggerPlay(e);
         }
       });
 
       frag.appendChild(row);
     }
 
-    dom.historyList.replaceChildren(frag);
+    dom.recentHistoryList.replaceChildren(frag);
     updateCounts();
   }
 
@@ -492,19 +499,47 @@ export function createPhase3Controller(api) {
   }
 
   /* -------------------------------------------------------------------------
-     3. Media Library Rendering & Folder Management
+     3. Media Library Rendering & Folder Management (Unified with Queue UI)
      ------------------------------------------------------------------------- */
   function renderLibrary() {
     if (!dom.libList) return;
     const folders = libraryManager.getFolders();
 
-    // Render folder chips
+    // Compute counts for header meta and segmented All/Audio/Video tabs
+    const scopedItems = libraryManager.queryItems({
+      search: '',
+      type: 'all',
+      sortBy: 'name',
+      folderPath: uiState.libraryFolderFilter,
+    });
+    const totalAll = folders.reduce((acc, f) => acc + (f.items?.length || 0), 0);
+    const scopedAudio = scopedItems.filter((it) => it.kind === 'audio').length;
+    const scopedVideo = scopedItems.filter((it) => it.kind === 'video').length;
+
+    if (dom.libCountAll) dom.libCountAll.textContent = String(scopedItems.length);
+    if (dom.libCountAudio) dom.libCountAudio.textContent = String(scopedAudio);
+    if (dom.libCountVideo) dom.libCountVideo.textContent = String(scopedVideo);
+
+    if (dom.libMeta) {
+      if (folders.length === 0) {
+        dom.libMeta.textContent = p3t('libEmptyMeta');
+      } else {
+        dom.libMeta.textContent = p3t('libMetaSummary', {
+          folders: folders.length,
+          folderWord: folders.length === 1 ? p3t('libFolderOne') : p3t('libFolderMany'),
+          items: totalAll,
+          itemWord: totalAll === 1 ? p3t('libItemOne') : p3t('libItemMany'),
+        });
+      }
+    }
+
+    // Render compact folder filter strip (matching Queue theme tokens)
     if (dom.libFolderChips) {
       const chipFrag = document.createDocumentFragment();
       if (folders.length > 0) {
         const allChip = document.createElement('button');
         allChip.type = 'button';
-        allChip.className = `p3-folder-chip${!uiState.libraryFolderFilter ? ' is-active' : ''}`;
+        allChip.className = `lib-folder-all${!uiState.libraryFolderFilter ? ' is-active' : ''}`;
         allChip.textContent = p3t('libAllFolders');
         allChip.addEventListener('click', () => {
           uiState.libraryFolderFilter = '';
@@ -514,13 +549,18 @@ export function createPhase3Controller(api) {
 
         for (const f of folders) {
           const wrap = document.createElement('div');
-          wrap.className = `p3-folder-chip-wrap${uiState.libraryFolderFilter === f.path ? ' is-active' : ''}`;
+          wrap.className = `lib-folder-item${uiState.libraryFolderFilter === f.path ? ' is-active' : ''}`;
 
           const btn = document.createElement('button');
           btn.type = 'button';
-          btn.className = 'p3-folder-chip-label';
-          btn.textContent = `${f.name} (${f.items?.length || 0})`;
+          btn.className = 'lib-folder-label';
           btn.title = f.path;
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = f.name;
+          const countSpan = document.createElement('span');
+          countSpan.className = 'lib-folder-count';
+          countSpan.textContent = String(f.items?.length || 0);
+          btn.append(nameSpan, countSpan);
           btn.addEventListener('click', () => {
             uiState.libraryFolderFilter = uiState.libraryFolderFilter === f.path ? '' : f.path;
             renderLibrary();
@@ -528,8 +568,9 @@ export function createPhase3Controller(api) {
 
           const rescanBtn = document.createElement('button');
           rescanBtn.type = 'button';
-          rescanBtn.className = 'p3-chip-mini';
+          rescanBtn.className = 'lib-folder-act';
           rescanBtn.title = p3t('libRescan');
+          rescanBtn.setAttribute('aria-label', p3t('libRescan'));
           rescanBtn.textContent = '↻';
           rescanBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -538,8 +579,9 @@ export function createPhase3Controller(api) {
 
           const remBtn = document.createElement('button');
           remBtn.type = 'button';
-          remBtn.className = 'p3-chip-mini is-danger';
+          remBtn.className = 'lib-folder-act is-danger';
           remBtn.title = p3t('libRemoveFolder');
+          remBtn.setAttribute('aria-label', p3t('libRemoveFolder'));
           remBtn.textContent = '×';
           remBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -567,19 +609,32 @@ export function createPhase3Controller(api) {
 
     if (folders.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'empty-state p3-empty';
+      empty.className = 'empty-state';
+
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'empty-icon-wrap';
+      iconWrap.setAttribute('aria-hidden', 'true');
+      iconWrap.innerHTML =
+        '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+
       const title = document.createElement('div');
       title.className = 'empty-title';
       title.textContent = p3t('libEmptyTitle');
+
       const desc = document.createElement('div');
       desc.className = 'empty-desc';
       desc.textContent = p3t('libEmptyDesc');
+
+      const actions = document.createElement('div');
+      actions.className = 'empty-actions';
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'btn btn-primary';
-      addBtn.textContent = p3t('libAddFolder');
+      addBtn.textContent = p3t('libAddFolderFull');
       addBtn.addEventListener('click', () => addFolderToLibrary());
-      empty.append(title, desc, addBtn);
+      actions.appendChild(addBtn);
+
+      empty.append(iconWrap, title, desc, actions);
       frag.appendChild(empty);
       dom.libList.replaceChildren(frag);
       updateCounts();
@@ -589,47 +644,72 @@ export function createPhase3Controller(api) {
     if (items.length === 0) {
       const noRes = document.createElement('div');
       noRes.className = 'no-results';
-      noRes.textContent = p3t('savedNoMatch');
+      noRes.textContent = p3t('libNoMatch');
       frag.appendChild(noRes);
       dom.libList.replaceChildren(frag);
       updateCounts();
       return;
     }
 
-    const lang = api.getLang();
-    for (const item of items) {
+    const currentTrack = api.getCurrentTrack();
+    const norm = api.normalizeFsPath || ((p) => String(p || '').toLowerCase());
+    const activeNormPath = currentTrack?.fullPath ? norm(currentTrack.fullPath) : '';
+
+    items.forEach((item, idx) => {
+      const isActive = Boolean(activeNormPath && item.fullPath && norm(item.fullPath) === activeNormPath);
       const row = document.createElement('div');
-      row.className = 'p3-card';
+      row.className = `track-row lib-track-row${isActive ? ' is-active' : ''}`;
+      row.setAttribute('role', 'option');
       row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-selected', String(isActive));
+      row.title = item.fullPath || item.name;
 
-      const top = document.createElement('div');
-      top.className = 'p3-card-top';
+      const idxCell = document.createElement('span');
+      idxCell.className = 'track-index';
+      if (isActive) {
+        idxCell.innerHTML =
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>';
+      } else {
+        idxCell.textContent = String(idx + 1).padStart(2, '0');
+      }
 
-      const badge = document.createElement('span');
-      badge.className = `p3-kind-tag is-${item.kind}`;
-      badge.textContent = item.kind === 'audio' ? 'AUD' : 'VID';
+      const infoCell = document.createElement('span');
+      infoCell.className = 'track-info';
 
-      const titleEl = document.createElement('div');
-      titleEl.className = 'p3-card-title';
-      titleEl.textContent = item.title;
-      titleEl.title = item.fullPath || item.name;
+      const nameRow = document.createElement('span');
+      nameRow.className = 'track-name-row';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'track-name';
+      nameSpan.textContent = item.title;
+      nameRow.appendChild(nameSpan);
+      infoCell.appendChild(nameRow);
 
-      top.append(badge, titleEl);
+      const ext = item.name && item.name.includes('.') ? item.name.split('.').pop().toUpperCase() : '';
+      const subParts = [];
+      subParts.push(item.kind === 'video' ? 'Video' : 'Audio');
+      if (ext) subParts.push(ext);
+      if (item.folderName) subParts.push(item.folderName);
 
-      const meta = document.createElement('div');
-      meta.className = 'p3-card-meta';
-      const parts = [item.folderName];
-      if (item.duration) parts.push(formatTime(item.duration));
-      if (item.size) parts.push(formatBytes(item.size));
-      if (item.mtimeMs) parts.push(formatRelativeDate(item.mtimeMs, lang));
-      meta.textContent = parts.filter(Boolean).join(' · ');
+      const subSpan = document.createElement('span');
+      subSpan.className = 'track-sub';
+      subSpan.textContent = subParts.join(' · ');
+      infoCell.appendChild(subSpan);
 
-      row.append(top, meta);
+      const rightCell = document.createElement('span');
+      rightCell.className = 'track-right';
+      rightCell.textContent = item.duration
+        ? formatTime(item.duration)
+        : item.size
+          ? formatBytes(item.size)
+          : '';
+
+      row.append(idxCell, infoCell, rightCell);
 
       const playLibItem = async () => {
         if (item.fullPath && api.desktopBridge && api.desktopBridge.inspectPaths) {
           try {
             await api.openExternalPathAtTime(item.fullPath, 0);
+            renderLibrary();
           } catch (err) {
             api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
           }
@@ -647,7 +727,7 @@ export function createPhase3Controller(api) {
       });
 
       frag.appendChild(row);
-    }
+    });
 
     dom.libList.replaceChildren(frag);
     updateCounts();
@@ -985,9 +1065,9 @@ export function createPhase3Controller(api) {
       const tr = api.getCurrentTrack();
       if (tr) {
         historyManager.recordPlay(tr, api.media.currentTime, api.media.duration);
-        if (api.getSidebarTab() === 'history') renderHistory();
-        else updateCounts();
+        renderHistory();
       }
+      if (api.getSidebarTab() === 'library') renderLibrary();
     });
     api.media.addEventListener('pause', () => {
       setBufferingVisible(false);
@@ -998,6 +1078,7 @@ export function createPhase3Controller(api) {
       const tr = api.getCurrentTrack();
       if (tr && tr.fullPath && Number.isFinite(api.media.duration) && api.media.duration > 0) {
         libraryManager.updateItemDuration(tr.fullPath, api.media.duration);
+        if (api.getSidebarTab() === 'library') renderLibrary();
       }
       syncMiniPlayerPlaybackUI();
     });
@@ -1014,44 +1095,28 @@ export function createPhase3Controller(api) {
       const tr = api.getCurrentTrack();
       if (tr) {
         historyManager.updateProgress(tr, api.media.duration || api.media.currentTime, api.media.duration);
-        if (api.getSidebarTab() === 'history') renderHistory();
+        renderHistory();
       }
     });
     api.media.addEventListener('error', () => setBufferingVisible(false));
 
-    // History controls (debounced search)
-    let histSearchTimer = null;
-    if (dom.historySearchInput) {
-      dom.historySearchInput.addEventListener('input', (e) => {
-        clearTimeout(histSearchTimer);
-        histSearchTimer = setTimeout(() => {
-          uiState.historySearch = e.target.value || '';
-          renderHistory();
-        }, 140);
-      });
-    }
-    dom.historyFilterBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        uiState.historyFilter = btn.dataset.histFilter || 'all';
-        dom.historyFilterBtns.forEach((b) =>
-          b.classList.toggle('is-active', b === btn)
-        );
-        renderHistory();
-      });
-    });
-    if (dom.historyPauseBtn) {
-      dom.historyPauseBtn.addEventListener('click', () => {
+    // Media -> Open Recent / Watch History footer controls
+    if (dom.historyPauseMenuBtn) {
+      dom.historyPauseMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const cur = settingsManager.get().recordWatchHistory;
         settingsManager.update({ recordWatchHistory: !cur });
         renderHistory();
         syncSettingsModalUI();
       });
     }
-    if (dom.historyClearBtn) {
-      dom.historyClearBtn.addEventListener('click', () => {
+    if (dom.historyClearMenuBtn) {
+      dom.historyClearMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (historyManager.getEntries().length === 0) return;
         historyManager.clearAll();
         renderHistory();
+        if (api.closeAllMenus) api.closeAllMenus();
         api.showNotice(p3t('histCleared'));
       });
     }
@@ -1076,13 +1141,20 @@ export function createPhase3Controller(api) {
     dom.libTypeBtns.forEach((btn) => {
       btn.addEventListener('click', () => {
         uiState.libraryType = btn.dataset.libType || 'all';
-        dom.libTypeBtns.forEach((b) => b.classList.toggle('is-active', b === btn));
+        dom.libTypeBtns.forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', String(active));
+        });
         renderLibrary();
       });
     });
-    if (dom.libSortSelect) {
-      dom.libSortSelect.addEventListener('change', (e) => {
-        uiState.librarySort = e.target.value || 'name';
+    if (dom.libSortBtn) {
+      const sortOrder = ['name', 'date', 'duration'];
+      dom.libSortBtn.addEventListener('click', () => {
+        const nextIdx = (sortOrder.indexOf(uiState.librarySort) + 1) % sortOrder.length;
+        uiState.librarySort = sortOrder[nextIdx];
+        updateLibSortButtonUI();
         renderLibrary();
       });
     }

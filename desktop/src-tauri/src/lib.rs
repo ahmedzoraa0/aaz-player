@@ -2903,12 +2903,8 @@ fn try_acquire_cast_slot(active: &Arc<AtomicUsize>, limit: usize) -> Option<Cast
         if current >= limit {
             return None;
         }
-        match active.compare_exchange_weak(
-            current,
-            current + 1,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ) {
+        match active.compare_exchange_weak(current, current + 1, Ordering::SeqCst, Ordering::SeqCst)
+        {
             Ok(_) => {
                 return Some(CastConnectionGuard {
                     active: active.clone(),

@@ -120,6 +120,25 @@
               <button type="button" class="menu-action" data-cmd="new-tab"><span class="menu-action-label" data-i18n="cmdNewTab">New Tab</span><span class="menu-shortcut">Ctrl+T</span></button>
               <button type="button" class="menu-action" data-cmd="new-window"><span class="menu-action-label" data-i18n="cmdNewWindow">New Window</span><span class="menu-shortcut">Ctrl+Shift+N</span></button>
               <button type="button" class="menu-action" data-cmd="resume-session"><span class="menu-action-label" data-i18n="cmdResume">Resume Last Session</span></button>
+              <div class="menu-sub" id="mediaRecentSubmenu">
+                <button type="button" class="menu-action menu-sub-trigger" aria-haspopup="true">
+                  <span class="menu-action-label" data-p3-i18n="menuOpenRecent">Open Recent / History</span>
+                  <span class="menu-sub-count" id="recentHistoryCount" hidden>0</span>
+                  <span class="menu-sub-arrow" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+                </button>
+                <div class="menu-sub-panel menu-recent-panel" id="recentHistoryPanel" role="menu">
+                  <div class="menu-recent-list" id="recentHistoryList"></div>
+                  <div class="menu-sep"></div>
+                  <div class="menu-recent-footer">
+                    <button type="button" class="menu-action" id="historyPauseMenuBtn" aria-pressed="false">
+                      <span class="menu-action-label" id="historyPauseMenuLabel" data-p3-i18n="histPauseOn">History Recording: On</span>
+                    </button>
+                    <button type="button" class="menu-action menu-action-danger" id="historyClearMenuBtn">
+                      <span class="menu-action-label" data-p3-i18n="histClearAll">Clear All</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
               <div class="menu-sep"></div>
               <button type="button" class="menu-action" data-cmd="save-to-library"><span class="menu-action-label" data-i18n="cmdSaveToLibrary">Save Playlist to Library...</span><span class="menu-shortcut">Ctrl+S</span></button>
               <button type="button" class="menu-action" data-cmd="import-playlist"><span class="menu-action-label" data-i18n="cmdImportPl">Import Playlist (.xspf / .m3u8 / .pls)</span></button>
@@ -297,7 +316,6 @@
               <button type="button" class="menu-action" data-cmd="toggle-sidebar"><span class="menu-action-label" data-i18n="cmdToggleSidebar">Show / Hide Playlist Sidebar</span></button>
               <button type="button" class="menu-action" data-cmd="open-saved-tab"><span class="menu-action-label" data-i18n="cmdSavedLibrary">Saved Playlists Library</span></button>
               <button type="button" class="menu-action" data-cmd="open-library-tab"><span class="menu-action-label" data-p3-i18n="libTitle">Media Library</span></button>
-              <button type="button" class="menu-action" data-cmd="open-history-tab"><span class="menu-action-label" data-p3-i18n="histTitle">Watch History</span></button>
               <div class="menu-sep"></div>
               <button type="button" class="menu-action" data-cmd="toggle-mini-player"><span class="menu-action-label" data-p3-i18n="miniBtnTitle">Mini Player Mode</span><span class="menu-shortcut">Ctrl+Shift+M</span></button>
               <button type="button" class="menu-action" data-cmd="open-settings"><span class="menu-action-label" data-p3-i18n="settingsTitle">Playback Settings</span><span class="menu-shortcut">Ctrl+,</span></button>
@@ -729,20 +747,16 @@
       <aside class="sidebar-pane" id="sidebarPane" aria-label="Playlist and Library Sidebar">
         <div class="sidebar-top-tabs" role="tablist" aria-label="Sidebar View">
           <button type="button" class="sidebar-tab-btn is-active" id="tabQueueBtn" data-sidebar="queue" role="tab" aria-selected="true">
-            <span data-i18n="tabQueue">Queue</span>
+            <span class="sidebar-tab-label" data-i18n="tabQueue">Queue</span>
             <span class="tab-badge-num" id="queueTabCount">0</span>
           </button>
           <button type="button" class="sidebar-tab-btn" id="tabSavedBtn" data-sidebar="saved" role="tab" aria-selected="false">
-            <span data-i18n="tabSaved">Saved</span>
+            <span class="sidebar-tab-label" data-i18n="tabSavedShort">Saved</span>
             <span class="tab-badge-num" id="savedTabCount">0</span>
           </button>
           <button type="button" class="sidebar-tab-btn" id="tabLibraryBtn" data-sidebar="library" role="tab" aria-selected="false">
-            <span data-p3-i18n="tabLibrary">Library</span>
+            <span class="sidebar-tab-label" data-p3-i18n="tabLibrary">Library</span>
             <span class="tab-badge-num" id="libraryTabCount">0</span>
-          </button>
-          <button type="button" class="sidebar-tab-btn" id="tabHistoryBtn" data-sidebar="history" role="tab" aria-selected="false">
-            <span data-p3-i18n="tabHistory">History</span>
-            <span class="tab-badge-num" id="historyTabCount">0</span>
           </button>
         </div>
 
@@ -842,12 +856,14 @@
             </div>
           </div>
 
-          <div class="p3-toolbar">
-            <div class="search-wrap">
-              <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input type="search" id="savedSearchInput" class="search-input" placeholder="Search saved playlists..." aria-label="Search saved playlists" />
+          <div class="mode-bar">
+            <div class="filter-row">
+              <div class="search-wrap">
+                <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="search" id="savedSearchInput" class="search-input" placeholder="Search saved playlists..." aria-label="Search saved playlists" />
+              </div>
             </div>
           </div>
 
@@ -859,61 +875,45 @@
           <div class="playlist-header">
             <div class="playlist-heading-group">
               <div class="playlist-title" data-p3-i18n="libTitle">Media Library</div>
+              <div class="playlist-meta" id="libMeta" data-p3-i18n="libEmptyMeta">No folders added yet</div>
             </div>
             <div class="playlist-header-actions">
-              <button type="button" class="btn btn-primary" id="libAddFolderBtn" style="height:28px;padding:0 9px;font-size:11.5px" data-p3-i18n="libAddFolder">+ Add Folder</button>
-              <button type="button" class="btn-icon" id="libRescanAllBtn" style="width:28px;height:28px" title="Rescan all folders" aria-label="Rescan all folders">↻</button>
+              <button type="button" class="btn" id="libAddFolderBtn" style="height:28px;padding:0 9px;font-size:11.5px" data-p3-i18n="libAddFolder">+ Folder</button>
+              <button type="button" class="btn-icon" id="libRescanAllBtn" style="width:28px;height:28px" title="Rescan all folders" aria-label="Rescan all folders">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
             </div>
           </div>
-          <div class="p3-toolbar">
-            <div class="p3-folder-chips" id="libFolderChips"></div>
-            <div class="p3-row">
-              <div class="search-wrap" style="flex:1">
+
+          <div class="mode-bar">
+            <div class="segmented-group mode-tabs lib-mode-tabs" role="tablist" aria-label="Library media type filter">
+              <button type="button" class="seg-btn is-active" data-lib-type="all" role="tab" aria-selected="true">
+                <span data-i18n="filterAll">All</span><span class="mode-count" id="libCountAll">0</span>
+              </button>
+              <button type="button" class="seg-btn" data-lib-type="audio" role="tab" aria-selected="false">
+                <span data-i18n="filterAudio">Audio</span><span class="mode-count" id="libCountAudio">0</span>
+              </button>
+              <button type="button" class="seg-btn" data-lib-type="video" role="tab" aria-selected="false">
+                <span data-i18n="filterVideo">Video</span><span class="mode-count" id="libCountVideo">0</span>
+              </button>
+            </div>
+
+            <div class="filter-row">
+              <div class="search-wrap">
                 <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
                 <input type="search" id="libSearchInput" class="search-input" placeholder="Search library files..." aria-label="Search library files" />
               </div>
-              <select id="libSortSelect" class="p3-select" aria-label="Sort library">
-                <option value="name" data-p3-i18n="libSortName">Name</option>
-                <option value="date" data-p3-i18n="libSortDate">Date</option>
-                <option value="duration" data-p3-i18n="libSortDur">Duration</option>
-              </select>
+              <button type="button" class="btn" id="libSortBtn" style="height:32px;padding:0 9px;font-size:11.5px;color:var(--text-secondary)" title="Sort order">Name</button>
             </div>
-            <div class="segmented-group" role="tablist" aria-label="Library media type filter">
-              <button type="button" class="seg-btn is-active" data-lib-type="all" data-i18n="filterAll">All</button>
-              <button type="button" class="seg-btn" data-lib-type="audio" data-i18n="filterAudio">Audio</button>
-              <button type="button" class="seg-btn" data-lib-type="video" data-i18n="filterVideo">Video</button>
-            </div>
-          </div>
-          <div class="playlist-list" id="libList" aria-label="Media Library Files"></div>
-        </div>
 
-        <!-- PANEL 4: WATCH HISTORY -->
-        <div class="sidebar-panel" id="panelHistory" hidden>
-          <div class="playlist-header">
-            <div class="playlist-heading-group">
-              <div class="playlist-title" data-p3-i18n="histTitle">Watch History</div>
-            </div>
-            <div class="playlist-header-actions">
-              <button type="button" class="btn" id="historyPauseBtn" style="height:28px;padding:0 8px;font-size:11px" aria-pressed="false" data-p3-i18n="histPauseOn">History Recording: On</button>
-              <button type="button" class="btn btn-ghost" id="historyClearBtn" style="height:28px;font-size:11px" data-p3-i18n="histClearAll">Clear All</button>
-            </div>
+            <div class="lib-folders-strip" id="libFolderChips"></div>
           </div>
-          <div class="p3-toolbar">
-            <div class="search-wrap">
-              <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input type="search" id="historySearchInput" class="search-input" placeholder="Search watch history..." aria-label="Search watch history" />
-            </div>
-            <div class="segmented-group" role="tablist" aria-label="History filter">
-              <button type="button" class="seg-btn is-active" data-hist-filter="all" data-p3-i18n="histFilterAll">All</button>
-              <button type="button" class="seg-btn" data-hist-filter="in-progress" data-p3-i18n="histFilterProgress">In Progress</button>
-              <button type="button" class="seg-btn" data-hist-filter="completed" data-p3-i18n="histFilterDone">Completed</button>
-            </div>
-          </div>
-          <div class="playlist-list" id="historyList" aria-label="Watch History"></div>
+
+          <div class="playlist-list" id="libList" role="listbox" aria-label="Media Library Files"></div>
         </div>
       </aside>
     </div>
