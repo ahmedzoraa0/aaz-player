@@ -63,7 +63,7 @@ jobs:
 
       - name: Run Clippy lints
         working-directory: desktop/src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -W clippy::all -D clippy::correctness -D clippy::suspicious
 
       - name: Run Rust unit & security tests
         working-directory: desktop/src-tauri

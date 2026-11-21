@@ -28,8 +28,8 @@ const MAX_HTTP_HEADERS: usize = 32;
 const MAX_HTTP_HEADER_BYTES: usize = 8192;
 
 const AUDIO_EXTS: &[&str] = &[
-    "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac", "opus", "wma", "aiff", "aif", "aifc",
-    "alac", "weba", "mka", "mp2", "amr", "caf", "ac3", "dts", "wv", "ape",
+    "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac", "opus", "wma", "aiff", "aif", "aifc", "alac",
+    "weba", "mka", "mp2", "amr", "caf", "ac3", "dts", "wv", "ape",
 ];
 
 const VIDEO_EXTS: &[&str] = &[
@@ -41,12 +41,71 @@ const SUBTITLE_EXTS: &[&str] = &["srt", "vtt"];
 const PLAYLIST_EXTS: &[&str] = &["xspf", "m3u8", "m3u", "pls"];
 
 const SUB_NOISE_TOKENS: &[&str] = &[
-    "1080p", "720p", "480p", "2160p", "4k", "uhd", "hd", "sd", "hdr", "hdr10", "bluray", "bdrip",
-    "brrip", "webrip", "webdl", "web", "dl", "hdtv", "dvdrip", "cam", "ts", "x264", "x265",
-    "h264", "h265", "hevc", "avc", "xvid", "10bit", "8bit", "aac", "ac3", "dts", "ddp5", "dd5",
-    "atmos", "mp3", "flac", "yts", "yify", "rarbg", "etrg", "evo", "nf", "amzn", "dsnp", "hmax",
-    "extended", "unrated", "repack", "proper", "ar", "ara", "arabic", "en", "eng", "english",
-    "sub", "subs", "subtitle", "subtitles", "sdh", "hi", "forced", "cc",
+    "1080p",
+    "720p",
+    "480p",
+    "2160p",
+    "4k",
+    "uhd",
+    "hd",
+    "sd",
+    "hdr",
+    "hdr10",
+    "bluray",
+    "bdrip",
+    "brrip",
+    "webrip",
+    "webdl",
+    "web",
+    "dl",
+    "hdtv",
+    "dvdrip",
+    "cam",
+    "ts",
+    "x264",
+    "x265",
+    "h264",
+    "h265",
+    "hevc",
+    "avc",
+    "xvid",
+    "10bit",
+    "8bit",
+    "aac",
+    "ac3",
+    "dts",
+    "ddp5",
+    "dd5",
+    "atmos",
+    "mp3",
+    "flac",
+    "yts",
+    "yify",
+    "rarbg",
+    "etrg",
+    "evo",
+    "nf",
+    "amzn",
+    "dsnp",
+    "hmax",
+    "extended",
+    "unrated",
+    "repack",
+    "proper",
+    "ar",
+    "ara",
+    "arabic",
+    "en",
+    "eng",
+    "english",
+    "sub",
+    "subs",
+    "subtitle",
+    "subtitles",
+    "sdh",
+    "hi",
+    "forced",
+    "cc",
 ];
 
 struct CastServerState {
@@ -343,7 +402,8 @@ fn parse_http_range(
 
 fn generate_session_token() -> Result<String, String> {
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes).map_err(|e| format!("Failed to generate session token: {e}"))?;
+    getrandom::getrandom(&mut bytes)
+        .map_err(|e| format!("Failed to generate session token: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
@@ -505,7 +565,8 @@ fn verify_file_integrity(
     expected_sha256: Option<&str>,
     expected_size: Option<u64>,
 ) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|_| "Could not open downloaded update file.".to_string())?;
+    let mut file =
+        File::open(path).map_err(|_| "Could not open downloaded update file.".to_string())?;
     let meta = file
         .metadata()
         .map_err(|_| "Could not read update file metadata.".to_string())?;
@@ -549,7 +610,9 @@ fn verify_file_integrity(
 
     if let Some(expected) = expected_sha256 {
         if !constant_time_eq(&digest, expected) {
-            return Err("Update checksum mismatch — file may be corrupted or tampered.".to_string());
+            return Err(
+                "Update checksum mismatch — file may be corrupted or tampered.".to_string(),
+            );
         }
     }
 
@@ -793,7 +856,9 @@ fn inspect_path_list(paths: Vec<String>) -> InspectResult {
             let stripped = p_str
                 .trim_start_matches("file:///")
                 .trim_start_matches("file://");
-            let decoded = percent_decode_str(stripped).decode_utf8_lossy().into_owned();
+            let decoded = percent_decode_str(stripped)
+                .decode_utf8_lossy()
+                .into_owned();
             #[cfg(target_os = "windows")]
             {
                 p_str = decoded.replace('/', "\\");
@@ -957,13 +1022,7 @@ fn has_arabic_hint(name: &str) -> bool {
     }
     let replaced: String = lower
         .chars()
-        .map(|c| {
-            if c.is_alphanumeric() {
-                c
-            } else {
-                ' '
-            }
-        })
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
         .collect();
     replaced
         .split_whitespace()
@@ -1189,7 +1248,11 @@ fn handle_aazmedia_protocol(
 
     let max_chunk: u64 = 4 * 1024 * 1024; // 4 MB smooth streaming window
 
-    if let Some(range_val) = req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()) {
+    if let Some(range_val) = req
+        .headers()
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+    {
         match parse_http_range(range_val, file_len, Some(max_chunk)) {
             Ok((start, end)) => {
                 let len = (end - start + 1) as usize;
@@ -1310,8 +1373,8 @@ fn handle_aazmedia_protocol(
 }
 
 /* ============================================================================
-   Tauri Commands (Native Rust Backend for AAZ Player)
-   ============================================================================ */
+Tauri Commands (Native Rust Backend for AAZ Player)
+============================================================================ */
 
 #[tauri::command]
 fn aaz_get_app_version(app: AppHandle) -> String {
@@ -1346,7 +1409,9 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
 #[tauri::command]
 async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderResult>, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        let folder = rfd::FileDialog::new().set_title("AAZ Player").pick_folder()?;
+        let folder = rfd::FileDialog::new()
+            .set_title("AAZ Player")
+            .pick_folder()?;
         let mut entries = Vec::new();
         scan_local_directory(&folder, "", &mut entries);
         let folder_path = folder.to_string_lossy().into_owned();
@@ -2042,7 +2107,10 @@ async fn aaz_check_updates(
         .get("tag_name")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let remote_ver = tag.trim_start_matches('v').trim_start_matches('V').to_string();
+    let remote_ver = tag
+        .trim_start_matches('v')
+        .trim_start_matches('V')
+        .to_string();
 
     if parse_semver(&remote_ver) <= parse_semver(&current_ver) {
         let _ = app.emit(
@@ -2132,18 +2200,19 @@ async fn aaz_check_updates(
         if let Some(sum_url) = checksum_asset_url {
             let asset_name_clone = asset_name.clone();
             let repo_clone = repo.clone();
-            if let Ok(Ok(found_hash)) = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
-                let agent = build_secure_http_agent(10, 15);
-                let resp = agent
-                    .get(&sum_url)
-                    .set("User-Agent", "AAZ-Player-Updater")
-                    .call()
-                    .map_err(|_| "Failed to fetch checksum manifest.".to_string())?;
-                validate_update_download_url(resp.get_url(), &repo_clone)?;
-                let text = read_bounded_string(resp, 64 * 1024)?;
-                Ok(find_checksum_in_sums_text(&text, &asset_name_clone))
-            })
-            .await
+            if let Ok(Ok(found_hash)) =
+                tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+                    let agent = build_secure_http_agent(10, 15);
+                    let resp = agent
+                        .get(&sum_url)
+                        .set("User-Agent", "AAZ-Player-Updater")
+                        .call()
+                        .map_err(|_| "Failed to fetch checksum manifest.".to_string())?;
+                    validate_update_download_url(resp.get_url(), &repo_clone)?;
+                    let text = read_bounded_string(resp, 64 * 1024)?;
+                    Ok(find_checksum_in_sums_text(&text, &asset_name_clone))
+                })
+                .await
             {
                 expected_sha256 = found_hash;
             }
@@ -2234,12 +2303,14 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(0);
         if total > MAX_UPDATE_DOWNLOAD_BYTES {
-            return Err("Update installer exceeds the maximum permitted download size.".to_string());
+            return Err(
+                "Update installer exceeds the maximum permitted download size.".to_string(),
+            );
         }
 
         let mut reader = resp.into_reader();
-        let mut out_file =
-            File::create(&part_clone).map_err(|_| "Could not create temporary update file.".to_string())?;
+        let mut out_file = File::create(&part_clone)
+            .map_err(|_| "Could not create temporary update file.".to_string())?;
         let mut buf = [0u8; 32768];
         let mut downloaded: u64 = 0;
         let mut last_pct: i32 = -1;
@@ -2361,8 +2432,8 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
 }
 
 /* ============================================================================
-   Native LAN Cast Server & UPnP / DLNA Smart TV Casting Engine
-   ============================================================================ */
+Native LAN Cast Server & UPnP / DLNA Smart TV Casting Engine
+============================================================================ */
 
 fn detect_local_lan_ip() -> String {
     if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
@@ -2396,7 +2467,11 @@ fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
     let gt_offset = lower[start_idx..].find('>')?;
     let content_start = start_idx + gt_offset + 1;
     let end_offset = lower[content_start..].find(&close)?;
-    Some(xml[content_start..content_start + end_offset].trim().to_string())
+    Some(
+        xml[content_start..content_start + end_offset]
+            .trim()
+            .to_string(),
+    )
 }
 
 fn extract_avtransport_control_url(xml: &str, location: &str) -> Option<String> {
@@ -2616,10 +2691,7 @@ fn handle_cast_http_client(
         return;
     }
 
-    let expected_token = session_token
-        .lock()
-        .map(|g| g.clone())
-        .unwrap_or_default();
+    let expected_token = session_token.lock().map(|g| g.clone()).unwrap_or_default();
     if !authorize_cast_request(raw_target, header_token.as_deref(), &expected_token) {
         let _ = stream.write_all(
             b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 27\r\nConnection: close\r\n\r\nInvalid or missing session.",
@@ -3316,7 +3388,10 @@ mod tests {
     #[test]
     fn http_range_parsing_handles_valid_and_invalid_ranges() {
         assert_eq!(parse_http_range("bytes=0-99", 1000, None), Ok((0, 99)));
-        assert_eq!(parse_http_range("bytes=100-", 1000, Some(200)), Ok((100, 299)));
+        assert_eq!(
+            parse_http_range("bytes=100-", 1000, Some(200)),
+            Ok((100, 299))
+        );
         assert_eq!(parse_http_range("bytes=-50", 1000, None), Ok((950, 999)));
 
         assert_eq!(
@@ -3399,7 +3474,9 @@ mod tests {
 
         let digest = verify_file_integrity(&good_exe, None, Some(payload.len() as u64))
             .expect("valid PE passes");
-        assert!(verify_file_integrity(&good_exe, Some(&digest), Some(payload.len() as u64)).is_ok());
+        assert!(
+            verify_file_integrity(&good_exe, Some(&digest), Some(payload.len() as u64)).is_ok()
+        );
 
         // Wrong checksum fails
         let bad_hash = "0".repeat(64);
@@ -3418,8 +3495,13 @@ mod tests {
 
     #[test]
     fn dlna_url_validation_restricts_to_private_lan_ipv4() {
-        assert!(validate_lan_http_url("http://192.168.1.50:9197/upnp/control/AVTransport1").is_ok());
-        assert!(validate_lan_http_url("http://10.0.0.15:1400/MediaRenderer/AVTransport/Control").is_ok());
+        assert!(
+            validate_lan_http_url("http://192.168.1.50:9197/upnp/control/AVTransport1").is_ok()
+        );
+        assert!(
+            validate_lan_http_url("http://10.0.0.15:1400/MediaRenderer/AVTransport/Control")
+                .is_ok()
+        );
         assert!(validate_lan_http_url("http://172.16.5.20:8080/ctl").is_ok());
 
         // Loopback, link-local metadata, public IPs, DNS hosts, file://, and userinfo blocked
