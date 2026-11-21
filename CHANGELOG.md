@@ -4,6 +4,32 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [Unreleased]
+
+### Security Hardening (Phase 1)
+- **Custom Media Protocol (`aazmedia://`)**: Added canonical path resolution, user-authorized media path allowlisting, extension & regular-file enforcement, and strict HTTP Range parsing.
+- **Local Cast & DLNA/UPnP Server**: Bound Cast HTTP streaming to the detected private LAN IP (fallback `127.0.0.1`), added 256-bit per-session token authentication with constant-time comparison, restricted DLNA SOAP/XML requests to discovered RFC 1918 LAN devices with bounded 256 KB reads, and ensured clean server shutdown on exit.
+- **Content Security Policy**: Replaced `"csp": null` in `tauri.conf.json` with a restrictive CSP enforcing `script-src 'self'` (no inline scripts).
+- **Verified Auto-Updater**: Enforced strict GitHub HTTPS host/path allowlists (including redirect verification), 150 MB download cap, atomic `.part` download, PE `MZ` header validation, and SHA-256 checksum verification (`SHA256SUMS.txt` / GitHub asset digest) prior to installer execution.
+- **Hardened Cross-Window Messaging**: Replaced wildcard `postMessage(..., '*')` with strict same-origin, source-window, `tabId`, message-type, and payload schema verification.
+
+### Architecture & Stability (Phase 2)
+- **Modular Frontend**: Extracted the monolithic inline script and stylesheet from `index.html` into `css/styles.css` and acyclic ES modules under `js/core/`, `js/utils/`, `js/modules/`, `js/ui/`, and `js/app/`.
+- **Versioned Storage (`v4`)**: Added non-destructive `v1`/`v2`/`v3` -> `v4` migration with automatic pre-migration backup (`aaz_media_player_backup_v3`), schema validation, and JSON Backup/Restore.
+- **Error Handling & Performance**: Added centralized bilingual user-facing error handling (`js/utils/error-handler.js`), debounced search filtering, and `DocumentFragment` rendering.
+- **CI & Automated Testing**: Added `.github/workflows/ci.yml`, updated `.github/workflows/release.yml` to publish `SHA256SUMS.txt`, added `tests/run-tests.cjs` and Rust unit tests, removed unused template remnants, and updated `desktop/README.md` for Rust + Tauri v2.
+
+### New Features (Phase 3)
+- **Mini Player Mode**: Compact floating player HUD reusing the active playback engine with always-on-top pinning, Play/Pause, Prev/Next, Volume/Mute, drag-to-move, and Return to Full Player.
+- **Window Layout Persistence**: Remembers main and mini-player window bounds and maximized state with multi-monitor safety clamping.
+- **Watch History**: Dedicated History sidebar tab tracking recently played items, resume timestamps, auto/manual completion, search, individual removal, clear all, and pause-recording privacy toggle.
+- **Media Library**: Dedicated Library sidebar tab for user-selected folders only with rescan, folder removal, search, audio/video filtering, and Name/Date/Duration sorting.
+- **Advanced Saved Playlists**: Added live Saved Playlists search and Duplicate Saved Playlist action.
+- **Customizable Keyboard Shortcuts**: Upgraded Shortcuts modal into an interactive editor with live key capture, conflict detection/override, and per-action / global reset.
+- **Playback Settings & UX Polish**: Added Playback Settings modal (default speed, default volume, resume toggle, subtitle language preference, default aspect ratio, audio output preference, watch history toggle, live WebGL/GPU status, JSON backup/restore) plus stage buffering indicator.
+
+---
+
 ## [1.4.2] - 2026-06-03
 
 ### Fixed & Improved

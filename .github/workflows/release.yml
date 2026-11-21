@@ -5,6 +5,8 @@ on:
     branches: [ main, master ]
     paths:
       - 'index.html'
+      - 'css/**'
+      - 'js/**'
       - 'desktop/**'
       - '.github/workflows/release.yml'
   workflow_dispatch:
@@ -66,9 +68,18 @@ jobs:
         with:
           workspaces: "desktop/src-tauri -> target"
 
-      - name: Prepare app HTML, version & GitHub repo for Rust auto-updater
+      - name: Prepare modular frontend, version & GitHub repo for Rust auto-updater
         if: steps.version_check.outputs.should_release == 'true'
         run: node desktop/scripts/prepare-ci.cjs
+
+      - name: Run automated JavaScript tests
+        if: steps.version_check.outputs.should_release == 'true'
+        run: node tests/run-tests.cjs
+
+      - name: Run Rust unit & security tests
+        if: steps.version_check.outputs.should_release == 'true'
+        working-directory: desktop/src-tauri
+        run: cargo test
 
       - name: Install Tauri CLI
         if: steps.version_check.outputs.should_release == 'true'
@@ -85,7 +96,7 @@ jobs:
         working-directory: desktop
         run: npx @tauri-apps/cli build --bundles nsis
 
-      - name: Collect artifacts & publish GitHub Release
+      - name: Collect artifacts, generate SHA256SUMS.txt & publish GitHub Release
         if: steps.version_check.outputs.should_release == 'true'
         shell: pwsh
         env:
@@ -111,18 +122,28 @@ jobs:
           $portableDest = "release-out/AAZ-Player-Portable-$ver.exe"
           Copy-Item $portableBin -Destination $portableDest -Force
 
-          Write-Host "Built artifacts:"
+          # Generate SHA256SUMS.txt for cryptographic auto-updater verification
+          $setupHash = (Get-FileHash -Path $setupDest -Algorithm SHA256).Hash.ToLower()
+          $portableHash = (Get-FileHash -Path $portableDest -Algorithm SHA256).Hash.ToLower()
+          $sumsPath = "release-out/SHA256SUMS.txt"
+          @(
+            "$setupHash  AAZ-Player-Setup-$ver.exe",
+            "$portableHash  AAZ-Player-Portable-$ver.exe"
+          ) | Set-Content -Path $sumsPath -Encoding UTF8
+
+          Write-Host "Built artifacts & checksums:"
           Get-ChildItem "release-out" | ForEach-Object { Write-Host " - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)" }
+          Get-Content $sumsPath
 
           $ErrorActionPreference = "Continue"
           gh release view $tag *> $null
           $exists = ($LASTEXITCODE -eq 0)
           $global:LASTEXITCODE = 0
 
-          $notes = "AAZ Player $tag — Powered by Rust + Tauri v2 (ultra-lightweight installer & low RAM), frame-by-frame stepping, HD video snapshots, aspect ratio/zoom/crop controls, and refined RTL/LTR menus."
+          $notes = "AAZ Player $tag — Rust + Tauri v2 desktop media player with SHA-256 verified updates, Mini Player, Watch History, Media Library, customizable shortcuts, and Playback Settings."
           if ($exists) {
-            gh release upload $tag $setupDest $portableDest --clobber
+            gh release upload $tag $setupDest $portableDest $sumsPath --clobber
           } else {
-            gh release create $tag $setupDest $portableDest --title "AAZ Player $tag" --notes $notes
+            gh release create $tag $setupDest $portableDest $sumsPath --title "AAZ Player $tag" --notes $notes
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

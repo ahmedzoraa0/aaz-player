@@ -1,21 +1,31 @@
 use base64::Engine as _;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{Ipv4Addr, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::http::{header, Method, Response, StatusCode};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Position, Size,
+    State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 const REPO_CONFIG_JSON: &str = include_str!("repo_config.json");
 
 static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+const MAX_UPDATE_DOWNLOAD_BYTES: u64 = 150 * 1024 * 1024; // 150 MB hard cap
+const MAX_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024; // 16 MB max subtitle/playlist text file
+const MAX_DLNA_XML_BYTES: u64 = 256 * 1024; // 256 KB max UPnP XML description
+const MAX_HTTP_HEADERS: usize = 32;
+const MAX_HTTP_HEADER_BYTES: usize = 8192;
 
 const AUDIO_EXTS: &[&str] = &[
     "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac", "opus", "wma", "aiff", "aif", "aifc",
@@ -43,7 +53,8 @@ struct CastServerState {
     running: Arc<AtomicBool>,
     port: u16,
     lan_ip: String,
-    media_path: Arc<Mutex<Option<String>>>,
+    session_token: Arc<Mutex<String>>,
+    media_path: Arc<Mutex<Option<PathBuf>>>,
     media_title: Arc<Mutex<String>>,
     subtitle_vtt: Arc<Mutex<Option<String>>>,
 }
@@ -54,8 +65,13 @@ struct AppState {
     cached_fonts: Mutex<Option<Vec<String>>>,
     pending_update_url: Mutex<Option<String>>,
     pending_update_version: Mutex<Option<String>>,
+    pending_update_sha256: Mutex<Option<String>>,
     downloaded_installer: Mutex<Option<PathBuf>>,
+    downloaded_installer_sha256: Mutex<Option<String>>,
     cast_server: Mutex<Option<CastServerState>>,
+    authorized_files: Mutex<HashSet<PathBuf>>,
+    authorized_dirs: Mutex<HashSet<PathBuf>>,
+    discovered_dlna_controls: Mutex<HashSet<String>>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +90,7 @@ struct MediaEntry {
     kind: String,
     ext: String,
     size: u64,
+    mtime_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -141,8 +158,47 @@ struct CastDevice {
     location: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct MonitorRect {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct WindowGeometry {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
+    scale_factor: f64,
+    monitors: Vec<MonitorRect>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum HttpRangeError {
+    Malformed,
+    Unsatisfiable,
+}
+
 fn is_ext_in(ext: &str, list: &[&str]) -> bool {
     list.iter().any(|&item| item.eq_ignore_ascii_case(ext))
+}
+
+fn is_supported_media_or_subtitle_ext(ext: &str) -> bool {
+    is_ext_in(ext, AUDIO_EXTS) || is_ext_in(ext, VIDEO_EXTS) || is_ext_in(ext, SUBTITLE_EXTS)
+}
+
+fn is_supported_media_ext(ext: &str) -> bool {
+    is_ext_in(ext, AUDIO_EXTS) || is_ext_in(ext, VIDEO_EXTS)
+}
+
+fn is_supported_text_ext(ext: &str) -> bool {
+    is_ext_in(ext, SUBTITLE_EXTS) || is_ext_in(ext, PLAYLIST_EXTS)
 }
 
 fn path_ext_lower(path: &Path) -> String {
@@ -152,10 +208,454 @@ fn path_ext_lower(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+fn file_mtime_ms(path: &Path) -> u64 {
+    fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn build_media_url(full_path: &Path) -> String {
     let raw = full_path.to_string_lossy();
     let encoded = utf8_percent_encode(raw.as_ref(), NON_ALPHANUMERIC).to_string();
     format!("http://aazmedia.localhost/file?path={encoded}")
+}
+
+fn authorize_file_path(state: &AppState, path: &Path) {
+    if let Ok(canon) = fs::canonicalize(path) {
+        if canon.is_file() {
+            let ext = path_ext_lower(&canon);
+            if is_supported_media_or_subtitle_ext(&ext) || is_ext_in(&ext, PLAYLIST_EXTS) {
+                if let Ok(mut guard) = state.authorized_files.lock() {
+                    guard.insert(canon);
+                }
+            }
+        }
+    }
+}
+
+fn authorize_dir_path(state: &AppState, dir: &Path) {
+    if let Ok(canon) = fs::canonicalize(dir) {
+        if canon.is_dir() {
+            if let Ok(mut guard) = state.authorized_dirs.lock() {
+                guard.insert(canon);
+            }
+        }
+    }
+}
+
+fn validate_authorized_media_path(
+    raw_path: &str,
+    authorized_files: &HashSet<PathBuf>,
+    authorized_dirs: &HashSet<PathBuf>,
+    require_audio_or_video_only: bool,
+) -> Result<PathBuf, StatusCode> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() || trimmed.contains('\0') {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let canon = fs::canonicalize(Path::new(trimmed)).map_err(|_| StatusCode::NOT_FOUND)?;
+    let meta = fs::metadata(&canon).map_err(|_| StatusCode::NOT_FOUND)?;
+    if !meta.is_file() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let ext = path_ext_lower(&canon);
+    let ext_ok = if require_audio_or_video_only {
+        is_supported_media_ext(&ext)
+    } else {
+        is_supported_media_or_subtitle_ext(&ext)
+    };
+    if !ext_ok {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let allowed = authorized_files.contains(&canon)
+        || authorized_dirs.iter().any(|dir| canon.starts_with(dir));
+    if !allowed {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    Ok(canon)
+}
+
+fn parse_http_range(
+    range_val: &str,
+    file_len: u64,
+    max_chunk: Option<u64>,
+) -> Result<(u64, u64), HttpRangeError> {
+    if file_len == 0 {
+        return Err(HttpRangeError::Unsatisfiable);
+    }
+    let trimmed = range_val.trim();
+    let spec = trimmed
+        .strip_prefix("bytes=")
+        .or_else(|| trimmed.strip_prefix("BYTES="))
+        .ok_or(HttpRangeError::Malformed)?;
+    let first_range = spec.split(',').next().unwrap_or("").trim();
+    let (start_s, end_s) = first_range
+        .split_once('-')
+        .ok_or(HttpRangeError::Malformed)?;
+    let start_s = start_s.trim();
+    let end_s = end_s.trim();
+
+    if start_s.is_empty() && end_s.is_empty() {
+        return Err(HttpRangeError::Malformed);
+    }
+
+    if start_s.is_empty() {
+        let suffix: u64 = end_s.parse().map_err(|_| HttpRangeError::Malformed)?;
+        if suffix == 0 {
+            return Err(HttpRangeError::Unsatisfiable);
+        }
+        let start = file_len.saturating_sub(suffix);
+        let mut end = file_len - 1;
+        if let Some(cap) = max_chunk {
+            end = end.min(start.saturating_add(cap.saturating_sub(1)));
+        }
+        return Ok((start, end));
+    }
+
+    let start: u64 = start_s.parse().map_err(|_| HttpRangeError::Malformed)?;
+    if start >= file_len {
+        return Err(HttpRangeError::Unsatisfiable);
+    }
+
+    let mut end = if end_s.is_empty() {
+        file_len - 1
+    } else {
+        let parsed_end: u64 = end_s.parse().map_err(|_| HttpRangeError::Malformed)?;
+        if parsed_end < start {
+            return Err(HttpRangeError::Unsatisfiable);
+        }
+        parsed_end.min(file_len - 1)
+    };
+
+    if let Some(cap) = max_chunk {
+        end = end.min(start.saturating_add(cap.saturating_sub(1)));
+    }
+
+    Ok((start, end))
+}
+
+fn generate_session_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|e| format!("Failed to generate session token: {e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let ab = a.as_bytes();
+    let bb = b.as_bytes();
+    if ab.len() != bb.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (&x, &y) in ab.iter().zip(bb.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+fn build_http_response(
+    status: StatusCode,
+    content_type: Option<&str>,
+    body: Vec<u8>,
+) -> Response<Vec<u8>> {
+    let mut builder = Response::builder()
+        .status(status)
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .header("Cross-Origin-Resource-Policy", "cross-origin");
+    if let Some(ct) = content_type {
+        builder = builder.header(header::CONTENT_TYPE, ct);
+    }
+    builder
+        .body(body)
+        .unwrap_or_else(|_| Response::new(Vec::new()))
+}
+
+fn validate_repo_slug(repo: &str) -> bool {
+    let trimmed = repo.trim();
+    let Some((owner, name)) = trimmed.split_once('/') else {
+        return false;
+    };
+    if owner.is_empty() || name.is_empty() || name.contains('/') {
+        return false;
+    }
+    let valid_part = |s: &str| {
+        !s.starts_with('.')
+            && !s.contains("..")
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    valid_part(owner) && valid_part(name)
+}
+
+fn sanitize_version_for_filename(ver: &str) -> String {
+    let cleaned: String = ver
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .take(32)
+        .collect();
+    if cleaned.is_empty() || cleaned.starts_with('.') || cleaned.contains("..") {
+        "latest".to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn extract_https_host_and_path(raw_url: &str) -> Option<(String, String)> {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() || trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return None;
+    }
+    let rest = trimmed.strip_prefix("https://")?;
+    let (authority, path) = match rest.find('/') {
+        Some(idx) => (&rest[..idx], &rest[idx..]),
+        None => (rest, "/"),
+    };
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+    let (host, port_opt) = match authority.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (authority, None),
+    };
+    if let Some(port) = port_opt {
+        if port != "443" {
+            return None;
+        }
+    }
+    if host.is_empty() || path.contains("..") {
+        return None;
+    }
+    Some((host.to_ascii_lowercase(), path.to_string()))
+}
+
+fn validate_update_download_url(raw_url: &str, repo: &str) -> Result<(), String> {
+    if !validate_repo_slug(repo) {
+        return Err("Invalid repository configuration.".to_string());
+    }
+    let (host, path) = extract_https_host_and_path(raw_url)
+        .ok_or_else(|| "Update URL must use HTTPS on a trusted GitHub host.".to_string())?;
+    let expected_prefix = format!("/{}/releases/download/", repo.to_ascii_lowercase());
+    match host.as_str() {
+        "github.com" => {
+            if path.to_ascii_lowercase().starts_with(&expected_prefix) {
+                Ok(())
+            } else {
+                Err("Update URL path does not match the configured repository release.".to_string())
+            }
+        }
+        "objects.githubusercontent.com"
+        | "release-assets.githubusercontent.com"
+        | "github-releases.githubusercontent.com" => Ok(()),
+        _ => Err("Update URL host is not an allowlisted GitHub release domain.".to_string()),
+    }
+}
+
+fn parse_sha256_hex(raw: &str) -> Option<String> {
+    let cleaned = raw
+        .trim()
+        .strip_prefix("sha256:")
+        .or_else(|| raw.trim().strip_prefix("SHA256:"))
+        .unwrap_or(raw.trim())
+        .trim();
+    if cleaned.len() == 64 && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(cleaned.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn find_checksum_in_sums_text(content: &str, asset_name: &str) -> Option<String> {
+    let target = asset_name.to_ascii_lowercase();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let mut parts = trimmed.split_whitespace();
+        let Some(hash_candidate) = parts.next() else {
+            continue;
+        };
+        let Some(valid_hash) = parse_sha256_hex(hash_candidate) else {
+            continue;
+        };
+        let rest_name = parts
+            .next()
+            .map(|s| s.trim_start_matches('*').to_ascii_lowercase());
+        match rest_name {
+            Some(fname) if fname == target || fname.ends_with(&format!("/{target}")) => {
+                return Some(valid_hash);
+            }
+            None if content.lines().count() == 1 => return Some(valid_hash),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn verify_file_integrity(
+    path: &Path,
+    expected_sha256: Option<&str>,
+    expected_size: Option<u64>,
+) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|_| "Could not open downloaded update file.".to_string())?;
+    let meta = file
+        .metadata()
+        .map_err(|_| "Could not read update file metadata.".to_string())?;
+    if !meta.is_file() || meta.len() < 64 {
+        return Err("Update file is empty or incomplete.".to_string());
+    }
+    if meta.len() > MAX_UPDATE_DOWNLOAD_BYTES {
+        return Err("Update file exceeds maximum permitted size.".to_string());
+    }
+    if let Some(exp_len) = expected_size {
+        if exp_len > 0 && meta.len() != exp_len {
+            return Err("Downloaded update file size does not match Content-Length.".to_string());
+        }
+    }
+
+    let mut header_bytes = [0u8; 2];
+    file.read_exact(&mut header_bytes)
+        .map_err(|_| "Failed to read executable header.".to_string())?;
+    if &header_bytes != b"MZ" {
+        return Err("Downloaded file is not a valid Windows executable.".to_string());
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|_| "Failed to seek downloaded file.".to_string())?;
+
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 32768];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|_| "Failed reading update file during hash verification.".to_string())?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+
+    if let Some(expected) = expected_sha256 {
+        if !constant_time_eq(&digest, expected) {
+            return Err("Update checksum mismatch — file may be corrupted or tampered.".to_string());
+        }
+    }
+
+    Ok(digest)
+}
+
+fn validate_lan_http_url(raw_url: &str) -> Result<String, String> {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() || trimmed.len() > 1024 {
+        return Err("Invalid DLNA device URL length.".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("Invalid characters in DLNA device URL.".to_string());
+    }
+
+    let (scheme, rest) = if let Some(r) = trimmed.strip_prefix("http://") {
+        ("http", r)
+    } else if let Some(r) = trimmed.strip_prefix("https://") {
+        ("https", r)
+    } else {
+        return Err("DLNA URL must use http:// or https://.".to_string());
+    };
+
+    let (authority, path) = match rest.find('/') {
+        Some(idx) => (&rest[..idx], &rest[idx..]),
+        None => (rest, "/"),
+    };
+    if authority.is_empty() || authority.contains('@') {
+        return Err("DLNA URL authority is invalid.".to_string());
+    }
+
+    let (host, port_opt) = match authority.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (authority, None),
+    };
+    if let Some(port_s) = port_opt {
+        let port: u16 = port_s
+            .parse()
+            .map_err(|_| "Invalid port in DLNA URL.".to_string())?;
+        if port == 0 {
+            return Err("Invalid zero port in DLNA URL.".to_string());
+        }
+    }
+
+    let ip: Ipv4Addr = host
+        .parse()
+        .map_err(|_| "DLNA target host must be a direct private LAN IPv4 address.".to_string())?;
+
+    if !ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+    {
+        return Err("DLNA target IP is outside private LAN ranges.".to_string());
+    }
+
+    let normalized_authority = match port_opt {
+        Some(p) => format!("{ip}:{p}"),
+        None => ip.to_string(),
+    };
+    Ok(format!("{scheme}://{normalized_authority}{path}"))
+}
+
+fn clamp_window_geometry_to_monitors(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    min_w: u32,
+    min_h: u32,
+    monitors: &[MonitorRect],
+) -> (i32, i32, u32, u32) {
+    let mut w = width.max(min_w);
+    let mut h = height.max(min_h);
+    if monitors.is_empty() {
+        return (x.max(0), y.max(0), w, h);
+    }
+
+    let center_x = x as i64 + (w as i64) / 2;
+    let center_y = y as i64 + (h as i64) / 2;
+
+    let target = monitors
+        .iter()
+        .find(|m| {
+            center_x >= m.x as i64
+                && center_x <= m.x as i64 + m.width as i64
+                && center_y >= m.y as i64
+                && center_y <= m.y as i64 + m.height as i64
+        })
+        .unwrap_or(&monitors[0]);
+
+    let max_w = target.width.max(min_w);
+    let max_h = target.height.max(min_h);
+    w = w.min(max_w);
+    h = h.min(max_h);
+
+    let min_x = target.x;
+    let min_y = target.y;
+    let max_x = target.x + (target.width.saturating_sub(w)) as i32;
+    let max_y = target.y + (target.height.saturating_sub(h)) as i32;
+
+    let clamped_x = x.clamp(min_x, max_x.max(min_x));
+    let clamped_y = y.clamp(min_y, max_y.max(min_y));
+    (clamped_x, clamped_y, w, h)
 }
 
 fn mime_for_ext(ext: &str) -> &'static str {
@@ -239,6 +739,7 @@ fn scan_local_directory(current_dir: &Path, rel_prefix: &str, out: &mut Vec<Medi
             };
 
             let size = fs::metadata(&full_path).map(|m| m.len()).unwrap_or(0);
+            let mtime_ms = file_mtime_ms(&full_path);
             let folder_path = rel_prefix.trim_end_matches('/').to_string();
             let key = format!("{rel_prefix}{name}");
             out.push(MediaEntry {
@@ -250,6 +751,7 @@ fn scan_local_directory(current_dir: &Path, rel_prefix: &str, out: &mut Vec<Medi
                 kind: kind.to_string(),
                 ext: ext.to_ascii_uppercase(),
                 size,
+                mtime_ms,
             });
         }
     }
@@ -353,6 +855,7 @@ fn inspect_path_list(paths: Vec<String>) -> InspectResult {
                 continue;
             };
             let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            let mtime_ms = file_mtime_ms(&path);
             entries.push(MediaEntry {
                 key: name.clone(),
                 name,
@@ -362,6 +865,7 @@ fn inspect_path_list(paths: Vec<String>) -> InspectResult {
                 kind: kind.to_string(),
                 ext: ext.to_ascii_uppercase(),
                 size,
+                mtime_ms,
             });
         }
     }
@@ -559,14 +1063,17 @@ fn parse_semver(ver: &str) -> (u32, u32, u32) {
 fn get_configured_repo() -> Option<String> {
     let parsed: RepoConfig = serde_json::from_str(REPO_CONFIG_JSON).ok()?;
     let trimmed = parsed.repo.trim();
-    if trimmed.contains('/') {
+    if validate_repo_slug(trimmed) {
         Some(trimmed.to_string())
     } else {
         None
     }
 }
 
-fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<u8>> {
+fn handle_aazmedia_protocol(
+    app: &AppHandle,
+    req: tauri::http::Request<Vec<u8>>,
+) -> Response<Vec<u8>> {
     if req.method() == Method::OPTIONS {
         return Response::builder()
             .status(StatusCode::NO_CONTENT)
@@ -574,7 +1081,15 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
             .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS")
             .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Range, Content-Type")
             .body(Vec::new())
-            .unwrap();
+            .unwrap_or_else(|_| Response::new(Vec::new()));
+    }
+
+    if req.method() != Method::GET && req.method() != Method::HEAD {
+        return build_http_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            Some("text/plain; charset=utf-8"),
+            b"Method not allowed".to_vec(),
+        );
     }
 
     let query = req.uri().query().unwrap_or("");
@@ -584,34 +1099,79 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
         .unwrap_or("");
 
     if encoded_path.is_empty() {
-        return Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-            .body(b"Missing path".to_vec())
-            .unwrap();
+        return build_http_response(
+            StatusCode::BAD_REQUEST,
+            Some("text/plain; charset=utf-8"),
+            b"Missing path".to_vec(),
+        );
     }
 
     let file_path_str = percent_decode_str(encoded_path)
         .decode_utf8_lossy()
         .into_owned();
-    let path = Path::new(&file_path_str);
-    let mut file = match File::open(path) {
+
+    let state = app.state::<AppState>();
+    let canon_path = {
+        let auth_files = match state.authorized_files.lock() {
+            Ok(g) => g,
+            Err(_) => {
+                return build_http_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Some("text/plain; charset=utf-8"),
+                    b"Authorization state unavailable".to_vec(),
+                )
+            }
+        };
+        let auth_dirs = match state.authorized_dirs.lock() {
+            Ok(g) => g,
+            Err(_) => {
+                return build_http_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Some("text/plain; charset=utf-8"),
+                    b"Authorization state unavailable".to_vec(),
+                )
+            }
+        };
+        match validate_authorized_media_path(&file_path_str, &auth_files, &auth_dirs, false) {
+            Ok(p) => p,
+            Err(status) => {
+                let msg = match status {
+                    StatusCode::BAD_REQUEST => b"Invalid path".as_slice(),
+                    StatusCode::FORBIDDEN => b"Access denied".as_slice(),
+                    _ => b"File not found".as_slice(),
+                };
+                return build_http_response(
+                    status,
+                    Some("text/plain; charset=utf-8"),
+                    msg.to_vec(),
+                );
+            }
+        }
+    };
+
+    let mut file = match File::open(&canon_path) {
         Ok(f) => f,
         Err(_) => {
-            return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                .body(b"File not found".to_vec())
-                .unwrap();
+            return build_http_response(
+                StatusCode::NOT_FOUND,
+                Some("text/plain; charset=utf-8"),
+                b"File not found".to_vec(),
+            );
         }
     };
 
     let file_len = match file.metadata() {
-        Ok(m) => m.len(),
-        Err(_) => 0,
+        Ok(m) if m.is_file() => m.len(),
+        _ => {
+            return build_http_response(
+                StatusCode::FORBIDDEN,
+                Some("text/plain; charset=utf-8"),
+                b"Not a regular file".to_vec(),
+            );
+        }
     };
 
-    let ext = path_ext_lower(path);
+    let ext = path_ext_lower(&canon_path);
     let mime = mime_for_ext(&ext);
     let is_head = req.method() == Method::HEAD;
 
@@ -624,55 +1184,34 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
             .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
             .header("Cross-Origin-Resource-Policy", "cross-origin")
             .body(Vec::new())
-            .unwrap();
+            .unwrap_or_else(|_| Response::new(Vec::new()));
     }
 
     let max_chunk: u64 = 4 * 1024 * 1024; // 4 MB smooth streaming window
 
     if let Some(range_val) = req.headers().get(header::RANGE).and_then(|v| v.to_str().ok()) {
-        if let Some(spec) = range_val.strip_prefix("bytes=") {
-            let first_range = spec.split(',').next().unwrap_or("").trim();
-            if let Some((start_s, end_s)) = first_range.split_once('-') {
-                let (start, end) = if start_s.is_empty() {
-                    let suffix: u64 = end_s.parse().unwrap_or(0);
-                    let start = file_len.saturating_sub(suffix);
-                    (start, file_len - 1)
-                } else {
-                    let start: u64 = start_s.parse().unwrap_or(0);
-                    if start >= file_len {
-                        return Response::builder()
-                            .status(StatusCode::RANGE_NOT_SATISFIABLE)
-                            .header(header::CONTENT_RANGE, format!("bytes */{file_len}"))
-                            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-                            .body(Vec::new())
-                            .unwrap();
-                    }
-                    let req_end: u64 = if end_s.is_empty() {
-                        (start + max_chunk - 1).min(file_len - 1)
-                    } else {
-                        end_s
-                            .parse::<u64>()
-                            .unwrap_or(file_len - 1)
-                            .min(file_len - 1)
-                    };
-                    (start, req_end.max(start).min((start + max_chunk - 1).min(file_len - 1)))
-                };
-
+        match parse_http_range(range_val, file_len, Some(max_chunk)) {
+            Ok((start, end)) => {
                 let len = (end - start + 1) as usize;
                 let mut body = Vec::new();
                 if !is_head {
-                    if file.seek(SeekFrom::Start(start)).is_ok() {
-                        body.resize(len, 0);
-                        let mut read_total = 0;
-                        while read_total < len {
-                            match file.read(&mut body[read_total..]) {
-                                Ok(0) => break,
-                                Ok(n) => read_total += n,
-                                Err(_) => break,
-                            }
-                        }
-                        body.truncate(read_total);
+                    if file.seek(SeekFrom::Start(start)).is_err() {
+                        return build_http_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Some("text/plain; charset=utf-8"),
+                            b"Read error".to_vec(),
+                        );
                     }
+                    body.resize(len, 0);
+                    let mut read_total = 0;
+                    while read_total < len {
+                        match file.read(&mut body[read_total..]) {
+                            Ok(0) => break,
+                            Ok(n) => read_total += n,
+                            Err(_) => break,
+                        }
+                    }
+                    body.truncate(read_total);
                 }
                 let actual_end = if is_head {
                     end
@@ -695,14 +1234,28 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
                     .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                     .header("Cross-Origin-Resource-Policy", "cross-origin")
                     .body(body)
-                    .unwrap();
+                    .unwrap_or_else(|_| Response::new(Vec::new()));
+            }
+            Err(HttpRangeError::Malformed) => {
+                return build_http_response(
+                    StatusCode::BAD_REQUEST,
+                    Some("text/plain; charset=utf-8"),
+                    b"Malformed Range header".to_vec(),
+                );
+            }
+            Err(HttpRangeError::Unsatisfiable) => {
+                return Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header(header::CONTENT_RANGE, format!("bytes */{file_len}"))
+                    .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                    .body(Vec::new())
+                    .unwrap_or_else(|_| Response::new(Vec::new()));
             }
         }
     }
 
     // No Range header: stream small files in full, or first chunk as 206 for very large videos
     if file_len > max_chunk * 4 && !is_head {
-        let end = max_chunk - 1;
         let mut body = vec![0u8; max_chunk as usize];
         let mut read_total = 0;
         while read_total < body.len() {
@@ -713,21 +1266,33 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
             }
         }
         body.truncate(read_total);
+        let actual_end = if body.is_empty() {
+            0
+        } else {
+            body.len() as u64 - 1
+        };
         return Response::builder()
             .status(StatusCode::PARTIAL_CONTENT)
             .header(header::CONTENT_TYPE, mime)
             .header(header::ACCEPT_RANGES, "bytes")
-            .header(header::CONTENT_RANGE, format!("bytes 0-{end}/{file_len}"))
+            .header(
+                header::CONTENT_RANGE,
+                format!("bytes 0-{actual_end}/{file_len}"),
+            )
             .header(header::CONTENT_LENGTH, body.len().to_string())
             .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
             .header("Cross-Origin-Resource-Policy", "cross-origin")
             .body(body)
-            .unwrap();
+            .unwrap_or_else(|_| Response::new(Vec::new()));
     }
 
     let mut body = Vec::new();
-    if !is_head {
-        let _ = file.read_to_end(&mut body);
+    if !is_head && file.read_to_end(&mut body).is_err() {
+        return build_http_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Some("text/plain; charset=utf-8"),
+            b"Read error".to_vec(),
+        );
     }
 
     Response::builder()
@@ -741,7 +1306,7 @@ fn handle_aazmedia_protocol(req: tauri::http::Request<Vec<u8>>) -> Response<Vec<
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header("Cross-Origin-Resource-Policy", "cross-origin")
         .body(body)
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
 /* ============================================================================
@@ -779,8 +1344,8 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-async fn aaz_select_folder() -> Option<FolderResult> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderResult>, String> {
+    let result = tauri::async_runtime::spawn_blocking(|| {
         let folder = rfd::FileDialog::new().set_title("AAZ Player").pick_folder()?;
         let mut entries = Vec::new();
         scan_local_directory(&folder, "", &mut entries);
@@ -797,12 +1362,20 @@ async fn aaz_select_folder() -> Option<FolderResult> {
     })
     .await
     .ok()
-    .flatten()
+    .flatten();
+
+    if let Some(ref res) = result {
+        authorize_dir_path(&state, Path::new(&res.folder_path));
+        for entry in &res.entries {
+            authorize_file_path(&state, Path::new(&entry.full_path));
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
-async fn aaz_select_files() -> Option<InspectResult> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn aaz_select_files(state: State<'_, AppState>) -> Result<Option<InspectResult>, String> {
+    let result = tauri::async_runtime::spawn_blocking(|| {
         let mut all_exts: Vec<&str> = Vec::new();
         all_exts.extend_from_slice(AUDIO_EXTS);
         all_exts.extend_from_slice(VIDEO_EXTS);
@@ -822,47 +1395,100 @@ async fn aaz_select_files() -> Option<InspectResult> {
     })
     .await
     .ok()
-    .flatten()
+    .flatten();
+
+    if let Some(ref res) = result {
+        if let Some(ref fp) = res.folder_path {
+            authorize_dir_path(&state, Path::new(fp));
+        }
+        for entry in &res.entries {
+            authorize_file_path(&state, Path::new(&entry.full_path));
+        }
+        for pl in &res.playlists {
+            authorize_file_path(&state, Path::new(&pl.full_path));
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
-async fn aaz_read_folder(folder_path: String) -> Option<FolderResult> {
-    tauri::async_runtime::spawn_blocking(move || {
+async fn aaz_read_folder(
+    state: State<'_, AppState>,
+    folder_path: String,
+) -> Result<Option<FolderResult>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let folder = PathBuf::from(&folder_path);
         if !folder.exists() || !folder.is_dir() {
             return None;
         }
+        let canon = fs::canonicalize(&folder).ok()?;
         let mut entries = Vec::new();
-        scan_local_directory(&folder, "", &mut entries);
-        let folder_name = folder
+        scan_local_directory(&canon, "", &mut entries);
+        let folder_name = canon
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| folder_path.clone());
         Some(FolderResult {
-            folder_path,
+            folder_path: canon.to_string_lossy().into_owned(),
             folder_name,
             entries,
         })
     })
     .await
     .ok()
-    .flatten()
+    .flatten();
+
+    if let Some(ref res) = result {
+        authorize_dir_path(&state, Path::new(&res.folder_path));
+        for entry in &res.entries {
+            authorize_file_path(&state, Path::new(&entry.full_path));
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
-async fn aaz_read_text_file(file_path: String) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let bytes = fs::read(&file_path).ok()?;
+async fn aaz_read_text_file(
+    state: State<'_, AppState>,
+    file_path: String,
+) -> Result<Option<String>, String> {
+    let canon = match fs::canonicalize(Path::new(file_path.trim())) {
+        Ok(p) => p,
+        Err(_) => return Ok(None),
+    };
+    let ext = path_ext_lower(&canon);
+    if !canon.is_file() || !is_supported_text_ext(&ext) {
+        return Ok(None);
+    }
+    let allowed = {
+        let files = state.authorized_files.lock().map_err(|e| e.to_string())?;
+        let dirs = state.authorized_dirs.lock().map_err(|e| e.to_string())?;
+        files.contains(&canon) || dirs.iter().any(|d| canon.starts_with(d))
+    };
+    if !allowed {
+        return Ok(None);
+    }
+
+    let text = tauri::async_runtime::spawn_blocking(move || {
+        let meta = fs::metadata(&canon).ok()?;
+        if !meta.is_file() || meta.len() > MAX_TEXT_FILE_BYTES {
+            return None;
+        }
+        let bytes = fs::read(&canon).ok()?;
         Some(decode_text_smart(&bytes))
     })
     .await
     .ok()
-    .flatten()
+    .flatten();
+    Ok(text)
 }
 
 #[tauri::command]
-async fn aaz_find_nearby_subtitle(video_full_path: String) -> Option<NearbySubtitle> {
-    tauri::async_runtime::spawn_blocking(move || {
+async fn aaz_find_nearby_subtitle(
+    state: State<'_, AppState>,
+    video_full_path: String,
+) -> Result<Option<NearbySubtitle>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let video_path = PathBuf::from(&video_full_path);
         if !video_path.exists() {
             return None;
@@ -992,12 +1618,20 @@ async fn aaz_find_nearby_subtitle(video_full_path: String) -> Option<NearbySubti
     })
     .await
     .ok()
-    .flatten()
+    .flatten();
+
+    if let Some(ref sub) = result {
+        authorize_file_path(&state, Path::new(&sub.full_path));
+    }
+    Ok(result)
 }
 
 #[tauri::command]
-async fn aaz_inspect_paths(paths: Vec<String>) -> InspectResult {
-    tauri::async_runtime::spawn_blocking(move || inspect_path_list(paths))
+async fn aaz_inspect_paths(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> Result<InspectResult, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || inspect_path_list(paths))
         .await
         .unwrap_or(InspectResult {
             is_directory: false,
@@ -1005,7 +1639,18 @@ async fn aaz_inspect_paths(paths: Vec<String>) -> InspectResult {
             folder_name: None,
             entries: Vec::new(),
             playlists: Vec::new(),
-        })
+        });
+
+    if let Some(ref fp) = result.folder_path {
+        authorize_dir_path(&state, Path::new(fp));
+    }
+    for entry in &result.entries {
+        authorize_file_path(&state, Path::new(&entry.full_path));
+    }
+    for pl in &result.playlists {
+        authorize_file_path(&state, Path::new(&pl.full_path));
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1054,6 +1699,149 @@ fn aaz_win_close(window: WebviewWindow) -> bool {
 #[tauri::command]
 fn aaz_win_start_drag(window: WebviewWindow) -> bool {
     window.start_dragging().is_ok()
+}
+
+#[tauri::command]
+fn aaz_get_window_geometry(window: WebviewWindow) -> Option<WindowGeometry> {
+    let pos = window.outer_position().ok()?;
+    let size = window.inner_size().ok()?;
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let maximized = window.is_maximized().unwrap_or(false);
+    let monitors: Vec<MonitorRect> = window
+        .available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            let mp = m.position();
+            let ms = m.size();
+            MonitorRect {
+                x: mp.x,
+                y: mp.y,
+                width: ms.width,
+                height: ms.height,
+            }
+        })
+        .collect();
+
+    Some(WindowGeometry {
+        x: pos.x,
+        y: pos.y,
+        width: size.width,
+        height: size.height,
+        maximized,
+        scale_factor,
+        monitors,
+    })
+}
+
+#[tauri::command]
+fn aaz_apply_window_geometry(
+    window: WebviewWindow,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
+) -> bool {
+    let monitors: Vec<MonitorRect> = window
+        .available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            let mp = m.position();
+            let ms = m.size();
+            MonitorRect {
+                x: mp.x,
+                y: mp.y,
+                width: ms.width,
+                height: ms.height,
+            }
+        })
+        .collect();
+
+    let (cx, cy, cw, ch) =
+        clamp_window_geometry_to_monitors(x, y, width, height, 460, 540, &monitors);
+    let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
+    let _ = window.set_position(Position::Physical(PhysicalPosition::new(cx, cy)));
+    if maximized {
+        let _ = window.maximize();
+    } else if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    }
+    true
+}
+
+#[tauri::command]
+fn aaz_set_mini_mode(
+    window: WebviewWindow,
+    enabled: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    always_on_top: Option<bool>,
+) -> bool {
+    let monitors: Vec<MonitorRect> = window
+        .available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            let mp = m.position();
+            let ms = m.size();
+            MonitorRect {
+                x: mp.x,
+                y: mp.y,
+                width: ms.width,
+                height: ms.height,
+            }
+        })
+        .collect();
+
+    if enabled {
+        if window.is_fullscreen().unwrap_or(false) {
+            let _ = window.set_fullscreen(false);
+        }
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
+        }
+        let _ = window.set_min_size(Some(Size::Logical(LogicalSize::new(300.0, 190.0))));
+        let target_w = width.unwrap_or(420).max(300);
+        let target_h = height.unwrap_or(260).max(190);
+        let default_x = monitors
+            .first()
+            .map(|m| m.x + m.width.saturating_sub(target_w + 28) as i32)
+            .unwrap_or(60);
+        let default_y = monitors
+            .first()
+            .map(|m| m.y + m.height.saturating_sub(target_h + 64) as i32)
+            .unwrap_or(60);
+        let (cx, cy, cw, ch) = clamp_window_geometry_to_monitors(
+            x.unwrap_or(default_x),
+            y.unwrap_or(default_y),
+            target_w,
+            target_h,
+            300,
+            190,
+            &monitors,
+        );
+        let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
+        let _ = window.set_position(Position::Physical(PhysicalPosition::new(cx, cy)));
+        if let Some(pin) = always_on_top {
+            let _ = window.set_always_on_top(pin);
+        }
+    } else {
+        let _ = window.set_min_size(Some(Size::Logical(LogicalSize::new(460.0, 540.0))));
+        if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
+            let (cx, cy, cw, ch) =
+                clamp_window_geometry_to_monitors(rx, ry, rw, rh, 460, 540, &monitors);
+            let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
+            let _ = window.set_position(Position::Physical(PhysicalPosition::new(cx, cy)));
+        }
+        if let Some(pin) = always_on_top {
+            let _ = window.set_always_on_top(pin);
+        }
+    }
+    true
 }
 
 #[tauri::command]
@@ -1187,6 +1975,26 @@ async fn aaz_list_system_fonts(state: State<'_, AppState>) -> Result<Vec<String>
     Ok(fonts)
 }
 
+fn build_secure_http_agent(connect_secs: u64, read_secs: u64) -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(connect_secs))
+        .timeout_read(Duration::from_secs(read_secs))
+        .redirects(5)
+        .build()
+}
+
+fn read_bounded_string(resp: ureq::Response, max_bytes: u64) -> Result<String, String> {
+    let mut buf = Vec::new();
+    resp.into_reader()
+        .take(max_bytes + 1)
+        .read_to_end(&mut buf)
+        .map_err(|_| "Failed to read HTTP response body.".to_string())?;
+    if buf.len() as u64 > max_bytes {
+        return Err("HTTP response exceeded maximum allowed size.".to_string());
+    }
+    String::from_utf8(buf).map_err(|_| "HTTP response was not valid UTF-8.".to_string())
+}
+
 #[tauri::command]
 async fn aaz_check_updates(
     app: AppHandle,
@@ -1205,12 +2013,16 @@ async fn aaz_check_updates(
 
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let fetch_res = tauri::async_runtime::spawn_blocking(move || {
-        ureq::get(&url)
+        let agent = build_secure_http_agent(10, 20);
+        let resp = agent
+            .get(&url)
             .set("User-Agent", "AAZ-Player-Updater")
             .set("Accept", "application/vnd.github+json")
             .call()
-            .map_err(|e| e.to_string())
-            .and_then(|resp| resp.into_json::<serde_json::Value>().map_err(|e| e.to_string()))
+            .map_err(|_| "Could not contact GitHub Releases.".to_string())?;
+        let text = read_bounded_string(resp, 512 * 1024)?;
+        serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|_| "Invalid release metadata received.".to_string())
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -1246,28 +2058,30 @@ async fn aaz_check_updates(
         .cloned()
         .unwrap_or_default();
 
-    let installer_url = assets
+    let selected_asset = assets
         .iter()
-        .find_map(|a| {
-            let name = a.get("name")?.as_str()?.to_lowercase();
-            if name.ends_with(".exe") && name.contains("setup") {
-                a.get("browser_download_url")?.as_str().map(|s| s.to_string())
-            } else {
-                None
-            }
+        .find(|a| {
+            a.get("name")
+                .and_then(|v| v.as_str())
+                .map(|n| {
+                    let low = n.to_lowercase();
+                    low.ends_with(".exe") && low.contains("setup")
+                })
+                .unwrap_or(false)
         })
         .or_else(|| {
-            assets.iter().find_map(|a| {
-                let name = a.get("name")?.as_str()?.to_lowercase();
-                if name.ends_with(".exe") && !name.contains("portable") {
-                    a.get("browser_download_url")?.as_str().map(|s| s.to_string())
-                } else {
-                    None
-                }
+            assets.iter().find(|a| {
+                a.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|n| {
+                        let low = n.to_lowercase();
+                        low.ends_with(".exe") && !low.contains("portable")
+                    })
+                    .unwrap_or(false)
             })
         });
 
-    let Some(dl_url) = installer_url else {
+    let Some(asset) = selected_asset else {
         let _ = app.emit(
             "aaz:update-status",
             serde_json::json!({ "status": "not-available", "version": current_ver }),
@@ -1275,8 +2089,76 @@ async fn aaz_check_updates(
         return Ok(serde_json::json!({ "status": "not-available", "version": current_ver }));
     };
 
-    *state.pending_update_url.lock().unwrap() = Some(dl_url);
-    *state.pending_update_version.lock().unwrap() = Some(remote_ver.clone());
+    let asset_name = asset
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let dl_url = asset
+        .get("browser_download_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    if let Err(err_msg) = validate_update_download_url(&dl_url, &repo) {
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(serde_json::json!({ "status": "error", "message": err_msg }));
+    }
+
+    // Prefer GitHub native asset digest (`sha256:...`), else companion SHA256SUMS.txt / .sha256 asset
+    let mut expected_sha256 = asset
+        .get("digest")
+        .and_then(|v| v.as_str())
+        .and_then(parse_sha256_hex);
+
+    if expected_sha256.is_none() {
+        let checksum_asset_url = assets.iter().find_map(|a| {
+            let n = a.get("name")?.as_str()?.to_lowercase();
+            if n == "sha256sums.txt"
+                || n == "checksums.txt"
+                || n == format!("{}.sha256", asset_name.to_lowercase())
+            {
+                let u = a.get("browser_download_url")?.as_str()?;
+                if validate_update_download_url(u, &repo).is_ok() {
+                    return Some(u.to_string());
+                }
+            }
+            None
+        });
+
+        if let Some(sum_url) = checksum_asset_url {
+            let asset_name_clone = asset_name.clone();
+            let repo_clone = repo.clone();
+            if let Ok(Ok(found_hash)) = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+                let agent = build_secure_http_agent(10, 15);
+                let resp = agent
+                    .get(&sum_url)
+                    .set("User-Agent", "AAZ-Player-Updater")
+                    .call()
+                    .map_err(|_| "Failed to fetch checksum manifest.".to_string())?;
+                validate_update_download_url(resp.get_url(), &repo_clone)?;
+                let text = read_bounded_string(resp, 64 * 1024)?;
+                Ok(find_checksum_in_sums_text(&text, &asset_name_clone))
+            })
+            .await
+            {
+                expected_sha256 = found_hash;
+            }
+        }
+    }
+
+    if let Ok(mut g) = state.pending_update_url.lock() {
+        *g = Some(dl_url);
+    }
+    if let Ok(mut g) = state.pending_update_version.lock() {
+        *g = Some(remote_ver.clone());
+    }
+    if let Ok(mut g) = state.pending_update_sha256.lock() {
+        *g = expected_sha256;
+    }
 
     let _ = app.emit(
         "aaz:update-status",
@@ -1292,45 +2174,94 @@ async fn aaz_check_updates(
 
 #[tauri::command]
 async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
-    let dl_url = state.pending_update_url.lock().unwrap().clone();
-    let ver = state
+    let repo = match get_configured_repo() {
+        Some(r) => r,
+        None => return Ok(false),
+    };
+    let dl_url = state
+        .pending_update_url
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    let raw_ver = state
         .pending_update_version
         .lock()
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .clone()
         .unwrap_or_else(|| "latest".to_string());
+    let expected_sha256 = state
+        .pending_update_sha256
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
 
     let Some(url) = dl_url else {
         return Ok(false);
     };
 
-    let app_clone = app.clone();
-    let dest_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{ver}.exe"));
-    let dest_clone = dest_path.clone();
+    if let Err(err_msg) = validate_update_download_url(&url, &repo) {
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": err_msg }),
+        );
+        return Ok(false);
+    }
 
-    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let resp = ureq::get(&url)
+    let safe_ver = sanitize_version_for_filename(&raw_ver);
+    let nonce = generate_session_token()
+        .map(|s| s[..12].to_string())
+        .unwrap_or_else(|_| "tmp".to_string());
+    let part_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{safe_ver}-{nonce}.part"));
+    let final_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{safe_ver}.exe"));
+    let part_clone = part_path.clone();
+    let final_clone = final_path.clone();
+    let expected_clone = expected_sha256.clone();
+    let app_clone = app.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let agent = build_secure_http_agent(10, 60);
+        let resp = agent
+            .get(&url)
             .set("User-Agent", "AAZ-Player-Updater")
             .call()
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| "Update download failed due to a network error.".to_string())?;
+
+        // Re-validate final redirect destination host
+        validate_update_download_url(resp.get_url(), &repo)?;
+
         let total = resp
             .header("Content-Length")
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(0);
+        if total > MAX_UPDATE_DOWNLOAD_BYTES {
+            return Err("Update installer exceeds the maximum permitted download size.".to_string());
+        }
 
         let mut reader = resp.into_reader();
-        let mut out_file = File::create(&dest_clone).map_err(|e| e.to_string())?;
+        let mut out_file =
+            File::create(&part_clone).map_err(|_| "Could not create temporary update file.".to_string())?;
         let mut buf = [0u8; 32768];
         let mut downloaded: u64 = 0;
         let mut last_pct: i32 = -1;
 
         loop {
-            let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+            let n = reader
+                .read(&mut buf)
+                .map_err(|_| "Connection interrupted while downloading update.".to_string())?;
             if n == 0 {
                 break;
             }
-            out_file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-            downloaded += n as u64;
+            downloaded = downloaded.saturating_add(n as u64);
+            if downloaded > MAX_UPDATE_DOWNLOAD_BYTES {
+                drop(out_file);
+                let _ = fs::remove_file(&part_clone);
+                return Err("Update download exceeded size limit and was aborted.".to_string());
+            }
+            if out_file.write_all(&buf[..n]).is_err() {
+                drop(out_file);
+                let _ = fs::remove_file(&part_clone);
+                return Err("Failed writing update file to temporary storage.".to_string());
+            }
             if total > 0 {
                 let pct = ((downloaded * 100) / total).min(100) as i32;
                 if pct != last_pct {
@@ -1342,22 +2273,50 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
                 }
             }
         }
-        out_file.flush().map_err(|e| e.to_string())?;
-        Ok(())
+        out_file
+            .flush()
+            .map_err(|_| "Failed finalizing downloaded update file.".to_string())?;
+        drop(out_file);
+
+        let verified_digest = match verify_file_integrity(
+            &part_clone,
+            expected_clone.as_deref(),
+            if total > 0 { Some(total) } else { None },
+        ) {
+            Ok(d) => d,
+            Err(err_msg) => {
+                let _ = fs::remove_file(&part_clone);
+                return Err(err_msg);
+            }
+        };
+
+        let _ = fs::remove_file(&final_clone);
+        if fs::rename(&part_clone, &final_clone).is_err() {
+            let _ = fs::remove_file(&part_clone);
+            return Err("Could not finalize verified installer file.".to_string());
+        }
+
+        Ok(verified_digest)
     })
     .await
     .map_err(|e| e.to_string())?;
 
     match result {
-        Ok(()) => {
-            *state.downloaded_installer.lock().unwrap() = Some(dest_path);
+        Ok(verified_digest) => {
+            if let Ok(mut g) = state.downloaded_installer.lock() {
+                *g = Some(final_path);
+            }
+            if let Ok(mut g) = state.downloaded_installer_sha256.lock() {
+                *g = Some(verified_digest);
+            }
             let _ = app.emit(
                 "aaz:update-status",
-                serde_json::json!({ "status": "downloaded", "version": ver }),
+                serde_json::json!({ "status": "downloaded", "version": raw_ver }),
             );
             Ok(true)
         }
         Err(msg) => {
+            let _ = fs::remove_file(&part_path);
             let _ = app.emit(
                 "aaz:update-status",
                 serde_json::json!({ "status": "error", "message": msg }),
@@ -1369,11 +2328,31 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
 
 #[tauri::command]
 fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
-    let installer = state.downloaded_installer.lock().unwrap().clone();
+    let installer = state
+        .downloaded_installer
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
+    let expected_digest = state
+        .downloaded_installer_sha256
+        .lock()
+        .ok()
+        .and_then(|g| g.clone());
     let Some(path) = installer else {
         return false;
     };
+    let Some(digest) = expected_digest else {
+        return false;
+    };
+
+    // Re-verify integrity immediately prior to execution to guard against temp-dir tampering
+    if verify_file_integrity(&path, Some(&digest), None).is_err() {
+        let _ = fs::remove_file(&path);
+        return false;
+    }
+
     if Command::new(&path).spawn().is_ok() {
+        stop_cast_server_for_app(&app);
         app.exit(0);
         true
     } else {
@@ -1389,9 +2368,10 @@ fn detect_local_lan_ip() -> String {
     if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
         if sock.connect("8.8.8.8:80").is_ok() {
             if let Ok(addr) = sock.local_addr() {
-                let ip = addr.ip().to_string();
-                if !ip.starts_with("127.") {
-                    return ip;
+                if let std::net::IpAddr::V4(v4) = addr.ip() {
+                    if v4.is_private() && !v4.is_loopback() {
+                        return v4.to_string();
+                    }
                 }
             }
         }
@@ -1429,25 +2409,28 @@ fn extract_avtransport_control_url(xml: &str, location: &str) -> Option<String> 
         let svc_lower = svc_slice.to_lowercase();
         if svc_lower.contains("avtransport") {
             if let Some(ctrl) = extract_xml_tag(svc_slice, "controlURL") {
-                if ctrl.starts_with("http://") || ctrl.starts_with("https://") {
-                    return Some(ctrl);
-                }
-                let origin = if let Some(scheme_end) = location.find("://") {
-                    let after = &location[scheme_end + 3..];
-                    if let Some(slash) = after.find('/') {
-                        &location[..scheme_end + 3 + slash]
+                let candidate = if ctrl.starts_with("http://") || ctrl.starts_with("https://") {
+                    ctrl
+                } else {
+                    let origin = if let Some(scheme_end) = location.find("://") {
+                        let after = &location[scheme_end + 3..];
+                        if let Some(slash) = after.find('/') {
+                            &location[..scheme_end + 3 + slash]
+                        } else {
+                            location
+                        }
                     } else {
                         location
+                    };
+                    if ctrl.starts_with('/') {
+                        format!("{origin}{ctrl}")
+                    } else {
+                        format!("{origin}/{ctrl}")
                     }
-                } else {
-                    location
                 };
-                let joined = if ctrl.starts_with('/') {
-                    format!("{origin}{ctrl}")
-                } else {
-                    format!("{origin}/{ctrl}")
-                };
-                return Some(joined);
+                if let Ok(validated) = validate_lan_http_url(&candidate) {
+                    return Some(validated);
+                }
             }
         }
         cursor = svc_start + svc_end_rel + 10;
@@ -1455,12 +2438,48 @@ fn extract_avtransport_control_url(xml: &str, location: &str) -> Option<String> 
     None
 }
 
-fn build_cast_receiver_html(title: &str, has_sub: bool) -> String {
+fn extract_query_param(raw_target: &str, key: &str) -> Option<String> {
+    let query = raw_target.split_once('?')?.1;
+    for pair in query.split('&') {
+        if let Some((k, v)) = pair.split_once('=') {
+            if k == key {
+                return Some(percent_decode_str(v).decode_utf8_lossy().into_owned());
+            }
+        }
+    }
+    None
+}
+
+fn authorize_cast_request(
+    raw_target: &str,
+    header_token: Option<&str>,
+    expected_token: &str,
+) -> bool {
+    if expected_token.is_empty() {
+        return false;
+    }
+    if let Some(q_tok) = extract_query_param(raw_target, "token") {
+        if constant_time_eq(&q_tok, expected_token) {
+            return true;
+        }
+    }
+    if let Some(h_tok) = header_token {
+        if constant_time_eq(h_tok.trim(), expected_token) {
+            return true;
+        }
+    }
+    false
+}
+
+fn build_cast_receiver_html(title: &str, has_sub: bool, token: &str) -> String {
     let safe_title = xml_escape(title);
+    let safe_token = xml_escape(token);
     let track_tag = if has_sub {
-        r#"<track kind="subtitles" srclang="ar" label="Subtitles" src="/sub.vtt" default>"#
+        format!(
+            r#"<track kind="subtitles" srclang="ar" label="Subtitles" src="/sub.vtt?token={safe_token}" default>"#
+        )
     } else {
-        ""
+        String::new()
     };
     format!(
         r#"<!doctype html>
@@ -1483,7 +2502,7 @@ fn build_cast_receiver_html(title: &str, has_sub: bool) -> String {
 <body>
   <div class="wrap">
     <div class="hud" id="hud"><div class="pill"><span class="dot"></span><span>AAZ Cast — {safe_title}</span></div></div>
-    <video id="v" controls autoplay playsinline crossorigin="anonymous" src="/media">{track_tag}</video>
+    <video id="v" controls autoplay playsinline crossorigin="anonymous" src="/media?token={safe_token}">{track_tag}</video>
   </div>
   <script>
     const hud=document.getElementById('hud');
@@ -1497,7 +2516,8 @@ fn build_cast_receiver_html(title: &str, has_sub: bool) -> String {
 
 fn handle_cast_http_client(
     mut stream: TcpStream,
-    media_path: Arc<Mutex<Option<String>>>,
+    session_token: Arc<Mutex<String>>,
+    media_path: Arc<Mutex<Option<PathBuf>>>,
     media_title: Arc<Mutex<String>>,
     subtitle_vtt: Arc<Mutex<Option<String>>>,
 ) {
@@ -1510,44 +2530,109 @@ fn handle_cast_http_client(
     });
 
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
-        return;
+    match reader.read_line(&mut request_line) {
+        Ok(0) | Err(_) => return,
+        Ok(n) if n > 2048 => {
+            let _ = stream.write_all(
+                b"HTTP/1.1 414 URI Too Long\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+        Ok(_) => {}
     }
 
     let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or("GET").to_uppercase();
-    let raw_target = parts.next().unwrap_or("/");
+    let Some(method_raw) = parts.next() else {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    };
+    let Some(raw_target) = parts.next() else {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    };
+    let Some(http_ver) = parts.next() else {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    };
+    if !http_ver.starts_with("HTTP/1.") || !raw_target.starts_with('/') {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    }
+
+    let method = method_raw.to_ascii_uppercase();
+    if !matches!(method.as_str(), "GET" | "HEAD" | "OPTIONS") {
+        let _ = stream.write_all(
+            b"HTTP/1.1 405 Method Not Allowed\r\nAllow: GET, HEAD, OPTIONS\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    }
+
     let path_only = raw_target.split('?').next().unwrap_or("/");
 
     let mut range_header: Option<String> = None;
+    let mut header_token: Option<String> = None;
+    let mut header_count: usize = 0;
+    let mut total_header_bytes: usize = request_line.len();
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            break;
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                total_header_bytes = total_header_bytes.saturating_add(n);
+                if total_header_bytes > MAX_HTTP_HEADER_BYTES || header_count >= MAX_HTTP_HEADERS {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    );
+                    return;
+                }
+            }
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
             break;
         }
+        header_count += 1;
         if let Some((k, v)) = trimmed.split_once(':') {
-            if k.trim().eq_ignore_ascii_case("range") {
+            let key = k.trim();
+            if key.eq_ignore_ascii_case("range") {
                 range_header = Some(v.trim().to_string());
+            } else if key.eq_ignore_ascii_case("x-aaz-token") {
+                header_token = Some(v.trim().to_string());
             }
         }
     }
 
     if method == "OPTIONS" {
-        let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type\r\nConnection: close\r\n\r\n";
+        let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AAZ-Token\r\nConnection: close\r\n\r\n";
         let _ = stream.write_all(resp.as_bytes());
         return;
     }
 
+    let expected_token = session_token
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
+    if !authorize_cast_request(raw_target, header_token.as_deref(), &expected_token) {
+        let _ = stream.write_all(
+            b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 27\r\nConnection: close\r\n\r\nInvalid or missing session.",
+        );
+        return;
+    }
+
     if path_only == "/" || path_only == "/index.html" {
-        let title = media_title.lock().unwrap().clone();
-        let has_sub = subtitle_vtt.lock().unwrap().is_some();
-        let html = build_cast_receiver_html(&title, has_sub);
+        let title = media_title.lock().map(|g| g.clone()).unwrap_or_default();
+        let has_sub = subtitle_vtt.lock().map(|g| g.is_some()).unwrap_or(false);
+        let html = build_cast_receiver_html(&title, has_sub, &expected_token);
         let header = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
             html.len()
         );
         let _ = stream.write_all(header.as_bytes());
@@ -1558,10 +2643,10 @@ fn handle_cast_http_client(
     }
 
     if path_only == "/sub.vtt" {
-        let sub_opt = subtitle_vtt.lock().unwrap().clone();
+        let sub_opt = subtitle_vtt.lock().ok().and_then(|g| g.clone());
         if let Some(vtt) = sub_opt {
             let header = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/vtt; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/vtt; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
                 vtt.len()
             );
             let _ = stream.write_all(header.as_bytes());
@@ -1569,17 +2654,19 @@ fn handle_cast_http_client(
                 let _ = stream.write_all(vtt.as_bytes());
             }
         } else {
-            let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            let _ = stream.write_all(
+                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
         }
         return;
     }
 
     if path_only == "/info" {
-        let title = media_title.lock().unwrap().clone();
-        let has_sub = subtitle_vtt.lock().unwrap().is_some();
+        let title = media_title.lock().map(|g| g.clone()).unwrap_or_default();
+        let has_sub = subtitle_vtt.lock().map(|g| g.is_some()).unwrap_or(false);
         let json = serde_json::json!({ "title": title, "hasSubtitle": has_sub }).to_string();
         let header = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
             json.len()
         );
         let _ = stream.write_all(header.as_bytes());
@@ -1589,53 +2676,53 @@ fn handle_cast_http_client(
         return;
     }
 
-    if path_only.starts_with("/media") {
-        let active_path = match media_path.lock().unwrap().clone() {
+    if path_only == "/media" {
+        let active_path = match media_path.lock().ok().and_then(|g| g.clone()) {
             Some(p) => p,
             None => {
-                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                let _ = stream.write_all(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
                 return;
             }
         };
-        let path = Path::new(&active_path);
-        let mut file = match File::open(path) {
+        let mut file = match File::open(&active_path) {
             Ok(f) => f,
             Err(_) => {
-                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                let _ = stream.write_all(
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
                 return;
             }
         };
-        let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
-        let ext = path_ext_lower(path);
+        let file_len = match file.metadata() {
+            Ok(m) if m.is_file() => m.len(),
+            _ => {
+                let _ = stream.write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+                return;
+            }
+        };
+        let ext = path_ext_lower(&active_path);
         let mime = mime_for_ext(&ext);
 
         let (status, start, end) = if let Some(ref rng) = range_header {
-            if let Some(spec) = rng.strip_prefix("bytes=") {
-                let first = spec.split(',').next().unwrap_or("").trim();
-                if let Some((s_str, e_str)) = first.split_once('-') {
-                    if s_str.is_empty() {
-                        let suffix = e_str.parse::<u64>().unwrap_or(0);
-                        let s = file_len.saturating_sub(suffix);
-                        ("206 Partial Content", s, file_len.saturating_sub(1))
-                    } else {
-                        let s = s_str.parse::<u64>().unwrap_or(0);
-                        if s >= file_len {
-                            let resp = format!("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{file_len}\r\nConnection: close\r\n\r\n");
-                            let _ = stream.write_all(resp.as_bytes());
-                            return;
-                        }
-                        let e = if e_str.is_empty() {
-                            file_len.saturating_sub(1)
-                        } else {
-                            e_str.parse::<u64>().unwrap_or(file_len.saturating_sub(1)).min(file_len.saturating_sub(1))
-                        };
-                        ("206 Partial Content", s, e.max(s))
-                    }
-                } else {
-                    ("200 OK", 0, file_len.saturating_sub(1))
+            match parse_http_range(rng, file_len, None) {
+                Ok((s, e)) => ("206 Partial Content", s, e),
+                Err(HttpRangeError::Malformed) => {
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    );
+                    return;
                 }
-            } else {
-                ("200 OK", 0, file_len.saturating_sub(1))
+                Err(HttpRangeError::Unsatisfiable) => {
+                    let resp = format!(
+                        "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{file_len}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    let _ = stream.write_all(resp.as_bytes());
+                    return;
+                }
             }
         } else {
             ("200 OK", 0, file_len.saturating_sub(1))
@@ -1678,7 +2765,32 @@ fn handle_cast_http_client(
         return;
     }
 
-    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    let _ = stream
+        .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+}
+
+fn stop_cast_server_inner(state: &AppState) -> bool {
+    if let Ok(mut guard) = state.cast_server.lock() {
+        if let Some(srv) = guard.take() {
+            srv.running.store(false, Ordering::SeqCst);
+            if let Ok(mut p) = srv.media_path.lock() {
+                *p = None;
+            }
+            if let Ok(mut s) = srv.subtitle_vtt.lock() {
+                *s = None;
+            }
+            if let Ok(mut tok) = srv.session_token.lock() {
+                tok.clear();
+            }
+            return true;
+        }
+    }
+    false
+}
+
+fn stop_cast_server_for_app(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let _ = stop_cast_server_inner(&state);
 }
 
 #[tauri::command]
@@ -1688,51 +2800,79 @@ fn aaz_cast_start_server(
     title: String,
     subtitle_vtt: Option<String>,
 ) -> Result<CastServerInfo, String> {
-    if !Path::new(&media_path).exists() {
-        return Err("Media file not found on disk.".to_string());
-    }
+    let canon_media = {
+        let auth_files = state.authorized_files.lock().map_err(|e| e.to_string())?;
+        let auth_dirs = state.authorized_dirs.lock().map_err(|e| e.to_string())?;
+        validate_authorized_media_path(&media_path, &auth_files, &auth_dirs, true)
+            .map_err(|_| "Media file is not authorized or not supported for casting.".to_string())?
+    };
 
-    let mut guard = state.cast_server.lock().unwrap();
+    let mut guard = state.cast_server.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = guard.as_ref() {
-        if existing.running.load(Ordering::Relaxed) {
-            *existing.media_path.lock().unwrap() = Some(media_path);
-            *existing.media_title.lock().unwrap() = title;
-            *existing.subtitle_vtt.lock().unwrap() = subtitle_vtt;
+        if existing.running.load(Ordering::SeqCst) {
+            if let Ok(mut mp) = existing.media_path.lock() {
+                *mp = Some(canon_media);
+            }
+            if let Ok(mut mt) = existing.media_title.lock() {
+                *mt = title;
+            }
+            if let Ok(mut sv) = existing.subtitle_vtt.lock() {
+                *sv = subtitle_vtt;
+            }
+            let tok = existing
+                .session_token
+                .lock()
+                .map(|g| g.clone())
+                .unwrap_or_default();
             let base = format!("http://{}:{}", existing.lan_ip, existing.port);
             return Ok(CastServerInfo {
                 lan_ip: existing.lan_ip.clone(),
                 port: existing.port,
-                receiver_url: format!("{base}/"),
-                media_url: format!("{base}/media"),
-                subtitle_url: format!("{base}/sub.vtt"),
+                receiver_url: format!("{base}/?token={tok}"),
+                media_url: format!("{base}/media?token={tok}"),
+                subtitle_url: format!("{base}/sub.vtt?token={tok}"),
             });
         }
     }
 
-    let listener = TcpListener::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let detected_ip = detect_local_lan_ip();
+    let (listener, bound_ip) = match TcpListener::bind(format!("{detected_ip}:0")) {
+        Ok(l) => (l, detected_ip),
+        Err(_) => {
+            let l = TcpListener::bind("127.0.0.1:0")
+                .map_err(|_| "Could not start local streaming listener.".to_string())?;
+            (l, "127.0.0.1".to_string())
+        }
+    };
+    let port = listener
+        .local_addr()
+        .map_err(|_| "Could not determine listener port.".to_string())?
+        .port();
     let _ = listener.set_nonblocking(true);
-    let lan_ip = detect_local_lan_ip();
 
+    let token = generate_session_token()?;
     let running = Arc::new(AtomicBool::new(true));
-    let path_arc = Arc::new(Mutex::new(Some(media_path)));
+    let token_arc = Arc::new(Mutex::new(token.clone()));
+    let path_arc = Arc::new(Mutex::new(Some(canon_media)));
     let title_arc = Arc::new(Mutex::new(title));
     let sub_arc = Arc::new(Mutex::new(subtitle_vtt));
 
     let r_flag = running.clone();
+    let tok_clone = token_arc.clone();
     let p_clone = path_arc.clone();
     let t_clone = title_arc.clone();
     let s_clone = sub_arc.clone();
 
     std::thread::spawn(move || {
-        while r_flag.load(Ordering::Relaxed) {
+        while r_flag.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((stream, _addr)) => {
                     let _ = stream.set_nonblocking(false);
+                    let tk = tok_clone.clone();
                     let mp = p_clone.clone();
                     let mt = t_clone.clone();
                     let sv = s_clone.clone();
-                    std::thread::spawn(move || handle_cast_http_client(stream, mp, mt, sv));
+                    std::thread::spawn(move || handle_cast_http_client(stream, tk, mp, mt, sv));
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(35));
@@ -1745,36 +2885,31 @@ fn aaz_cast_start_server(
     *guard = Some(CastServerState {
         running,
         port,
-        lan_ip: lan_ip.clone(),
+        lan_ip: bound_ip.clone(),
+        session_token: token_arc,
         media_path: path_arc,
         media_title: title_arc,
         subtitle_vtt: sub_arc,
     });
 
-    let base = format!("http://{lan_ip}:{port}");
+    let base = format!("http://{bound_ip}:{port}");
     Ok(CastServerInfo {
-        lan_ip,
+        lan_ip: bound_ip,
         port,
-        receiver_url: format!("{base}/"),
-        media_url: format!("{base}/media"),
-        subtitle_url: format!("{base}/sub.vtt"),
+        receiver_url: format!("{base}/?token={token}"),
+        media_url: format!("{base}/media?token={token}"),
+        subtitle_url: format!("{base}/sub.vtt?token={token}"),
     })
 }
 
 #[tauri::command]
 fn aaz_cast_stop_server(state: State<'_, AppState>) -> bool {
-    let mut guard = state.cast_server.lock().unwrap();
-    if let Some(srv) = guard.take() {
-        srv.running.store(false, Ordering::Relaxed);
-        true
-    } else {
-        false
-    }
+    stop_cast_server_inner(&state)
 }
 
 #[tauri::command]
-async fn aaz_cast_discover_devices() -> Vec<CastDevice> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn aaz_cast_discover_devices(state: State<'_, AppState>) -> Result<Vec<CastDevice>, String> {
+    let devices = tauri::async_runtime::spawn_blocking(|| {
         let mut locations = HashSet::new();
         if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
             let _ = sock.set_read_timeout(Some(Duration::from_millis(300)));
@@ -1791,39 +2926,42 @@ async fn aaz_cast_discover_devices() -> Vec<CastDevice> {
             let deadline = Instant::now() + Duration::from_millis(1600);
             let mut buf = [0u8; 4096];
             while Instant::now() < deadline {
-                match sock.recv_from(&mut buf) {
-                    Ok((n, _)) => {
-                        let text = String::from_utf8_lossy(&buf[..n]);
-                        for line in text.lines() {
-                            if let Some((k, v)) = line.split_once(':') {
-                                if k.trim().eq_ignore_ascii_case("location") {
-                                    let loc = v.trim().to_string();
-                                    if loc.starts_with("http://") || loc.starts_with("https://") {
-                                        locations.insert(loc);
-                                    }
+                if let Ok((n, _)) = sock.recv_from(&mut buf) {
+                    let text = String::from_utf8_lossy(&buf[..n]);
+                    for line in text.lines() {
+                        if let Some((k, v)) = line.split_once(':') {
+                            if k.trim().eq_ignore_ascii_case("location") {
+                                if let Ok(valid_loc) = validate_lan_http_url(v.trim()) {
+                                    locations.insert(valid_loc);
                                 }
                             }
                         }
                     }
-                    Err(_) => {}
                 }
             }
         }
 
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(2))
+            .timeout_read(Duration::from_secs(2))
+            .redirects(0)
+            .build();
+
         let mut devices = Vec::new();
         for loc in locations {
-            let resp = match ureq::get(&loc).timeout(Duration::from_secs(2)).call() {
+            let resp = match agent.get(&loc).call() {
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            let xml = match resp.into_string() {
+            let xml = match read_bounded_string(resp, MAX_DLNA_XML_BYTES) {
                 Ok(s) => s,
                 Err(_) => continue,
             };
             let Some(control_url) = extract_avtransport_control_url(&xml, &loc) else {
                 continue;
             };
-            let name = extract_xml_tag(&xml, "friendlyName").unwrap_or_else(|| "Smart TV".to_string());
+            let name =
+                extract_xml_tag(&xml, "friendlyName").unwrap_or_else(|| "Smart TV".to_string());
             let manufacturer = extract_xml_tag(&xml, "manufacturer").unwrap_or_default();
             devices.push(CastDevice {
                 id: control_url.clone(),
@@ -1837,30 +2975,56 @@ async fn aaz_cast_discover_devices() -> Vec<CastDevice> {
         devices
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default();
+
+    if let Ok(mut guard) = state.discovered_dlna_controls.lock() {
+        for dev in &devices {
+            guard.insert(dev.control_url.clone());
+        }
+    }
+    Ok(devices)
 }
 
 fn send_avtransport_soap(control_url: &str, action: &str, inner_xml: &str) -> Result<(), String> {
+    let valid_url = validate_lan_http_url(control_url)?;
     let envelope = format!(
         r#"<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>{inner_xml}</s:Body></s:Envelope>"#
     );
     let soap_action = format!("\"urn:schemas-upnp-org:service:AVTransport:1#{action}\"");
-    ureq::post(control_url)
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(2))
+        .timeout_read(Duration::from_secs(4))
+        .redirects(0)
+        .build();
+    let resp = agent
+        .post(&valid_url)
         .set("Content-Type", "text/xml; charset=\"utf-8\"")
         .set("SOAPAction", &soap_action)
-        .timeout(Duration::from_secs(4))
         .send_string(&envelope)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|_| "Could not reach the TV over local Wi-Fi.".to_string())?;
+    let _ = read_bounded_string(resp, MAX_DLNA_XML_BYTES);
+    Ok(())
 }
 
 #[tauri::command]
 async fn aaz_cast_to_dlna(
+    state: State<'_, AppState>,
     control_url: String,
     media_url: String,
     title: String,
     mime_type: String,
 ) -> Result<bool, String> {
+    let valid_control = validate_lan_http_url(&control_url)?;
+    let valid_media = validate_lan_http_url(&media_url)?;
+    let known = state
+        .discovered_dlna_controls
+        .lock()
+        .map(|g| g.contains(&valid_control))
+        .unwrap_or(false);
+    if !known {
+        return Err("Target TV was not discovered on the local network.".to_string());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let upnp_class = if mime_type.starts_with("audio/") {
             "object.item.audioItem.musicTrack"
@@ -1872,17 +3036,17 @@ async fn aaz_cast_to_dlna(
             xml_escape(&title),
             upnp_class,
             xml_escape(&mime_type),
-            xml_escape(&media_url)
+            xml_escape(&valid_media)
         );
         let set_body = format!(
             r#"<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>{}</CurrentURI><CurrentURIMetaData>{}</CurrentURIMetaData></u:SetAVTransportURI>"#,
-            xml_escape(&media_url),
+            xml_escape(&valid_media),
             xml_escape(&didl)
         );
-        send_avtransport_soap(&control_url, "SetAVTransportURI", &set_body)?;
+        send_avtransport_soap(&valid_control, "SetAVTransportURI", &set_body)?;
 
         let play_body = r#"<u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>"#;
-        send_avtransport_soap(&control_url, "Play", play_body)?;
+        send_avtransport_soap(&valid_control, "Play", play_body)?;
         Ok(true)
     })
     .await
@@ -1891,23 +3055,34 @@ async fn aaz_cast_to_dlna(
 
 #[tauri::command]
 async fn aaz_cast_dlna_control(
+    state: State<'_, AppState>,
     control_url: String,
     action: String,
     seek_target: Option<String>,
 ) -> Result<bool, String> {
+    let valid_control = validate_lan_http_url(&control_url)?;
+    let known = state
+        .discovered_dlna_controls
+        .lock()
+        .map(|g| g.contains(&valid_control))
+        .unwrap_or(false);
+    if !known {
+        return Err("Target TV was not discovered on the local network.".to_string());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         match action.as_str() {
             "play" => {
                 let body = r#"<u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>"#;
-                send_avtransport_soap(&control_url, "Play", body)?;
+                send_avtransport_soap(&valid_control, "Play", body)?;
             }
             "pause" => {
                 let body = r#"<u:Pause xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:Pause>"#;
-                send_avtransport_soap(&control_url, "Pause", body)?;
+                send_avtransport_soap(&valid_control, "Pause", body)?;
             }
             "stop" => {
                 let body = r#"<u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:Stop>"#;
-                send_avtransport_soap(&control_url, "Stop", body)?;
+                send_avtransport_soap(&valid_control, "Stop", body)?;
             }
             "seek" => {
                 let target = seek_target.unwrap_or_else(|| "00:00:00".to_string());
@@ -1915,7 +3090,7 @@ async fn aaz_cast_dlna_control(
                     r#"<u:Seek xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target></u:Seek>"#,
                     xml_escape(&target)
                 );
-                send_avtransport_soap(&control_url, "Seek", &body)?;
+                send_avtransport_soap(&valid_control, "Seek", &body)?;
             }
             _ => return Err("Unsupported DLNA control action".to_string()),
         }
@@ -1947,13 +3122,34 @@ pub fn run() {
 
     let app_state = AppState::default();
     if !initial_files.is_empty() {
-        *app_state.launch_files.lock().unwrap() = initial_files;
+        for raw in &initial_files {
+            let p = Path::new(raw);
+            if p.is_dir() {
+                authorize_dir_path(&app_state, p);
+            } else {
+                authorize_file_path(&app_state, p);
+            }
+        }
+        if let Ok(mut guard) = app_state.launch_files.lock() {
+            *guard = initial_files;
+        }
     }
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(app_state)
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let files = extract_supported_paths_from_argv(&argv);
+            if !files.is_empty() {
+                let state = app.state::<AppState>();
+                for raw in &files {
+                    let p = Path::new(raw);
+                    if p.is_dir() {
+                        authorize_dir_path(&state, p);
+                    } else {
+                        authorize_file_path(&state, p);
+                    }
+                }
+            }
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.unminimize();
                 let _ = win.set_focus();
@@ -1962,7 +3158,9 @@ pub fn run() {
                 let _ = app.emit("aaz:open-external", files);
             }
         }))
-        .register_uri_scheme_protocol("aazmedia", |_ctx, req| handle_aazmedia_protocol(req))
+        .register_uri_scheme_protocol("aazmedia", |ctx, req| {
+            handle_aazmedia_protocol(ctx.app_handle(), req)
+        })
         .invoke_handler(tauri::generate_handler![
             aaz_get_app_version,
             aaz_get_launch_files,
@@ -1981,6 +3179,9 @@ pub fn run() {
             aaz_win_is_maximized,
             aaz_win_close,
             aaz_win_start_drag,
+            aaz_get_window_geometry,
+            aaz_apply_window_geometry,
+            aaz_set_mini_mode,
             aaz_save_snapshot,
             aaz_list_system_fonts,
             aaz_check_updates,
@@ -1993,6 +3194,269 @@ pub fn run() {
             aaz_cast_dlna_control,
             aaz_cast_open_windows_cast
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running AAZ Player");
+        .build(tauri::generate_context!())
+        .expect("error while building AAZ Player");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            stop_cast_server_for_app(app_handle);
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH as TEST_EPOCH};
+
+    fn make_temp_test_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(TEST_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("aaz_test_{prefix}_{nanos}"));
+        fs::create_dir_all(&dir).expect("create temp test dir");
+        dir
+    }
+
+    #[test]
+    fn media_protocol_rejects_unauthorized_and_non_media_paths() {
+        let dir = make_temp_test_dir("media_auth");
+        let secret_txt = dir.join("secret.txt");
+        let unauth_mp4 = dir.join("unauth.mp4");
+        fs::write(&secret_txt, b"private key").unwrap();
+        fs::write(&unauth_mp4, b"fake video data").unwrap();
+
+        let auth_files = HashSet::new();
+        let mut auth_dirs = HashSet::new();
+
+        // Empty & null byte paths rejected as 400
+        assert_eq!(
+            validate_authorized_media_path("", &auth_files, &auth_dirs, false),
+            Err(StatusCode::BAD_REQUEST)
+        );
+        assert_eq!(
+            validate_authorized_media_path("bad\0path.mp4", &auth_files, &auth_dirs, false),
+            Err(StatusCode::BAD_REQUEST)
+        );
+
+        // Unauthorized media file rejected as 403
+        assert_eq!(
+            validate_authorized_media_path(
+                unauth_mp4.to_str().unwrap(),
+                &auth_files,
+                &auth_dirs,
+                false
+            ),
+            Err(StatusCode::FORBIDDEN)
+        );
+
+        // Even inside an authorized directory, non-media extensions (.txt) are forbidden
+        auth_dirs.insert(fs::canonicalize(&dir).unwrap());
+        assert_eq!(
+            validate_authorized_media_path(
+                secret_txt.to_str().unwrap(),
+                &auth_files,
+                &auth_dirs,
+                false
+            ),
+            Err(StatusCode::FORBIDDEN)
+        );
+
+        // Traversal outside authorized directory is forbidden
+        let outside_dir = make_temp_test_dir("outside");
+        let outside_mp4 = outside_dir.join("outside.mp4");
+        fs::write(&outside_mp4, b"outside").unwrap();
+        let traversal = format!(
+            "{}/../{}/outside.mp4",
+            dir.to_str().unwrap(),
+            outside_dir.file_name().unwrap().to_str().unwrap()
+        );
+        assert_eq!(
+            validate_authorized_media_path(&traversal, &auth_files, &auth_dirs, false),
+            Err(StatusCode::FORBIDDEN)
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&outside_dir);
+    }
+
+    #[test]
+    fn media_protocol_allows_authorized_media_and_subtitles() {
+        let dir = make_temp_test_dir("media_ok");
+        let movie = dir.join("clip.mp4");
+        let sub = dir.join("clip.srt");
+        fs::write(&movie, b"mp4bytes").unwrap();
+        fs::write(&sub, b"1\n00:00:01,000 --> 00:00:02,000\nHi\n").unwrap();
+
+        let mut auth_files = HashSet::new();
+        let auth_dirs = HashSet::new();
+        let canon_movie = fs::canonicalize(&movie).unwrap();
+        let canon_sub = fs::canonicalize(&sub).unwrap();
+        auth_files.insert(canon_movie.clone());
+        auth_files.insert(canon_sub.clone());
+
+        assert_eq!(
+            validate_authorized_media_path(movie.to_str().unwrap(), &auth_files, &auth_dirs, false),
+            Ok(canon_movie)
+        );
+        assert_eq!(
+            validate_authorized_media_path(sub.to_str().unwrap(), &auth_files, &auth_dirs, false),
+            Ok(canon_sub)
+        );
+        // Subtitles rejected when audio/video only is required (e.g. Cast media endpoint)
+        assert_eq!(
+            validate_authorized_media_path(sub.to_str().unwrap(), &auth_files, &auth_dirs, true),
+            Err(StatusCode::FORBIDDEN)
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn http_range_parsing_handles_valid_and_invalid_ranges() {
+        assert_eq!(parse_http_range("bytes=0-99", 1000, None), Ok((0, 99)));
+        assert_eq!(parse_http_range("bytes=100-", 1000, Some(200)), Ok((100, 299)));
+        assert_eq!(parse_http_range("bytes=-50", 1000, None), Ok((950, 999)));
+
+        assert_eq!(
+            parse_http_range("bytes=abc-def", 1000, None),
+            Err(HttpRangeError::Malformed)
+        );
+        assert_eq!(
+            parse_http_range("items=0-10", 1000, None),
+            Err(HttpRangeError::Malformed)
+        );
+        assert_eq!(
+            parse_http_range("bytes=1000-1200", 1000, None),
+            Err(HttpRangeError::Unsatisfiable)
+        );
+        assert_eq!(
+            parse_http_range("bytes=500-100", 1000, None),
+            Err(HttpRangeError::Unsatisfiable)
+        );
+        assert_eq!(
+            parse_http_range("bytes=-0", 1000, None),
+            Err(HttpRangeError::Unsatisfiable)
+        );
+    }
+
+    #[test]
+    fn cast_session_token_authorization_enforces_exact_match() {
+        let tok = generate_session_token().expect("generate token");
+        assert_eq!(tok.len(), 64);
+
+        let valid_target = format!("/media?token={tok}&t=123456");
+        assert!(authorize_cast_request(&valid_target, None, &tok));
+        assert!(authorize_cast_request("/media", Some(&tok), &tok));
+        assert!(!authorize_cast_request("/media", None, &tok));
+        assert!(!authorize_cast_request("/media?token=wrong", None, &tok));
+        assert!(!authorize_cast_request("/media?token=", Some(""), &tok));
+    }
+
+    #[test]
+    fn update_url_and_version_validation_blocks_untrusted_sources() {
+        let repo = "ahmedzoraa0/aaz-player";
+        assert!(validate_update_download_url(
+            "https://github.com/ahmedzoraa0/aaz-player/releases/download/v1.5.0/AAZ-Player-Setup-1.5.0.exe",
+            repo
+        )
+        .is_ok());
+        assert!(validate_update_download_url(
+            "https://objects.githubusercontent.com/github-production-release-asset-123/setup.exe",
+            repo
+        )
+        .is_ok());
+
+        // Plain HTTP, wrong repo, arbitrary host, userinfo, and traversal must fail
+        assert!(validate_update_download_url(
+            "http://github.com/ahmedzoraa0/aaz-player/releases/download/v1.5.0/setup.exe",
+            repo
+        )
+        .is_err());
+        assert!(validate_update_download_url(
+            "https://github.com/attacker/evil/releases/download/v1.5.0/setup.exe",
+            repo
+        )
+        .is_err());
+        assert!(validate_update_download_url("https://evil.example.com/setup.exe", repo).is_err());
+        assert!(validate_update_download_url(
+            "https://github.com@evil.com/ahmedzoraa0/aaz-player/releases/download/v1.5.0/s.exe",
+            repo
+        )
+        .is_err());
+        assert_eq!(sanitize_version_for_filename("../../evil"), "latest");
+        assert_eq!(sanitize_version_for_filename("1.5.0"), "1.5.0");
+    }
+
+    #[test]
+    fn update_file_integrity_detects_corruption_and_hash_mismatch() {
+        let dir = make_temp_test_dir("updater");
+        let good_exe = dir.join("good.exe");
+        let mut payload = vec![b'M', b'Z'];
+        payload.extend_from_slice(&[0x90u8; 128]);
+        fs::write(&good_exe, &payload).unwrap();
+
+        let digest = verify_file_integrity(&good_exe, None, Some(payload.len() as u64))
+            .expect("valid PE passes");
+        assert!(verify_file_integrity(&good_exe, Some(&digest), Some(payload.len() as u64)).is_ok());
+
+        // Wrong checksum fails
+        let bad_hash = "0".repeat(64);
+        assert!(verify_file_integrity(&good_exe, Some(&bad_hash), None).is_err());
+
+        // Truncated Content-Length fails
+        assert!(verify_file_integrity(&good_exe, Some(&digest), Some(9999)).is_err());
+
+        // Non-PE payload fails
+        let bad_file = dir.join("not_pe.exe");
+        fs::write(&bad_file, vec![b'X'; 128]).unwrap();
+        assert!(verify_file_integrity(&bad_file, None, None).is_err());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dlna_url_validation_restricts_to_private_lan_ipv4() {
+        assert!(validate_lan_http_url("http://192.168.1.50:9197/upnp/control/AVTransport1").is_ok());
+        assert!(validate_lan_http_url("http://10.0.0.15:1400/MediaRenderer/AVTransport/Control").is_ok());
+        assert!(validate_lan_http_url("http://172.16.5.20:8080/ctl").is_ok());
+
+        // Loopback, link-local metadata, public IPs, DNS hosts, file://, and userinfo blocked
+        assert!(validate_lan_http_url("http://127.0.0.1:8080/admin").is_err());
+        assert!(validate_lan_http_url("http://169.254.169.254/latest/meta-data/").is_err());
+        assert!(validate_lan_http_url("http://8.8.8.8/ctl").is_err());
+        assert!(validate_lan_http_url("http://evil.example.com/ctl").is_err());
+        assert!(validate_lan_http_url("file:///etc/passwd").is_err());
+        assert!(validate_lan_http_url("http://user:pass@192.168.1.50/ctl").is_err());
+    }
+
+    #[test]
+    fn window_geometry_clamps_safely_within_monitors() {
+        let monitors = vec![
+            MonitorRect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            },
+            MonitorRect {
+                x: 1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            },
+        ];
+
+        // Disconnected 3rd monitor position safely clamped back to primary monitor
+        let (x, y, w, h) =
+            clamp_window_geometry_to_monitors(5000, -400, 1200, 780, 460, 540, &monitors);
+        assert!(x >= 0 && x + w as i32 <= 1920);
+        assert!(y >= 0 && y + h as i32 <= 1080);
+
+        // Valid secondary monitor position preserved
+        let (x2, y2, w2, h2) =
+            clamp_window_geometry_to_monitors(2000, 100, 1000, 700, 460, 540, &monitors);
+        assert_eq!((x2, y2, w2, h2), (2000, 100, 1000, 700));
+    }
 }

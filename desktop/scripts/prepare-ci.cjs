@@ -8,10 +8,19 @@ const appDir = path.join(desktopDir, 'app');
 const tauriDir = path.join(desktopDir, 'src-tauri');
 const tauriIconsDir = path.join(tauriDir, 'icons');
 
-// 1. Copy latest single-file frontend into desktop/app/index.html
+function copyDirClean(src, dest) {
+  if (!fs.existsSync(src)) return;
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  fs.cpSync(src, dest, { recursive: true, force: true });
+}
+
+// 1. Copy modular frontend (index.html + css/ + js/) into desktop/app/
 fs.mkdirSync(appDir, { recursive: true });
 fs.copyFileSync(path.join(rootDir, 'index.html'), path.join(appDir, 'index.html'));
-console.log('[prepare-ci] Copied index.html -> desktop/app/index.html');
+copyDirClean(path.join(rootDir, 'css'), path.join(appDir, 'css'));
+copyDirClean(path.join(rootDir, 'js'), path.join(appDir, 'js'));
+console.log('[prepare-ci] Synced index.html, css/, and js/ -> desktop/app/');
 
 // 2. Sync version from desktop/package.json -> tauri.conf.json & Cargo.toml
 const pkgPath = path.join(desktopDir, 'package.json');

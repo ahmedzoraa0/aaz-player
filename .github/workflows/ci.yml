@@ -1,0 +1,70 @@
+name: CI — Lint, Security & Automated Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'security/**'
+      - 'refactor/**'
+      - 'features/**'
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  frontend-tests:
+    name: Frontend Syntax, Security & Module Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sync frontend assets into desktop/app
+        run: node desktop/scripts/prepare-ci.cjs
+
+      - name: Run automated JavaScript test suite
+        run: node tests/run-tests.cjs
+
+  rust-checks:
+    name: Rust Format, Clippy & Unit Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/src-tauri -> target"
+
+      - name: Sync frontend assets
+        run: node desktop/scripts/prepare-ci.cjs
+
+      - name: Check Rust formatting
+        working-directory: desktop/src-tauri
+        run: cargo fmt -- --check
+
+      - name: Run Clippy lints
+        working-directory: desktop/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust unit & security tests
+        working-directory: desktop/src-tauri
+        run: cargo test -- --nocapture
