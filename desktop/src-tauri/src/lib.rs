@@ -612,9 +612,7 @@ fn verify_file_integrity(
         .collect();
 
     if !constant_time_eq(&digest, &expected_sha256) {
-        return Err(
-            "Update checksum mismatch — file may be corrupted or tampered.".to_string(),
-        );
+        return Err("Update checksum mismatch — file may be corrupted or tampered.".to_string());
     }
 
     Ok(digest)
