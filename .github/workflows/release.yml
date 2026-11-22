@@ -185,7 +185,14 @@ jobs:
             if (Test-Path $minisignDir) { Remove-Item -Path $minisignDir -Recurse -Force }
             Invoke-WebRequest -Uri "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip" -OutFile $minisignZip
             Expand-Archive -Path $minisignZip -DestinationPath $minisignDir -Force
-            $minisignBin = Get-ChildItem -Path $minisignDir -Filter "minisign.exe" -Recurse | Select-Object -First 1
+            $minisignBin = Get-ChildItem -Path $minisignDir -Filter "minisign.exe" -Recurse |
+              Where-Object { $_.FullName -match 'x86_64' } |
+              Select-Object -First 1
+            if (-not $minisignBin) {
+              $minisignBin = Get-ChildItem -Path $minisignDir -Filter "minisign.exe" -Recurse |
+                Where-Object { $_.FullName -notmatch 'aarch64|arm64' } |
+                Select-Object -First 1
+            }
             if (-not $minisignBin) {
               Write-Error "Could not locate minisign.exe in downloaded Minisign 0.12 archive"
               exit 1
