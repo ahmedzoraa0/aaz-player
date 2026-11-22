@@ -22,6 +22,7 @@ export const TAB_TO_SHELL_TYPES = Object.freeze(
     'aaz-shell-fullscreen',
     'aaz-sync-prefs',
     'aaz-tab-mini-mode',
+    'aaz-window-action',
   ])
 );
 
@@ -31,12 +32,15 @@ export const SHELL_TO_TAB_TYPES = Object.freeze(
     'aaz-apply-prefs',
     'aaz-update-status',
     'aaz-shell-mini-state',
+    'aaz-taskbar-action',
   ])
 );
 
 const ALLOWED_THEMES = new Set(['dark', 'light']);
 const ALLOWED_LANGS = new Set(['en', 'ar']);
 const ALLOWED_KINDS = new Set(['', 'audio', 'video']);
+const ALLOWED_WINDOW_ACTIONS = new Set(['minimize', 'close', 'mini-preset', 'mini-drag-end']);
+const ALLOWED_TASKBAR_ACTIONS = new Set(['prev', 'toggle-play', 'next']);
 
 function sanitizeString(val, maxLen = 256) {
   if (typeof val !== 'string') return '';
@@ -117,6 +121,8 @@ export function validateTabToShellMessage(data, expectedTabId) {
         title: sanitizeString(data.title, 200),
         isPlaying: Boolean(data.isPlaying),
         hasMedia: Boolean(data.hasMedia),
+        canPrev: Boolean(data.canPrev),
+        canNext: Boolean(data.canNext),
         kind,
         sinkLabel: sanitizeString(data.sinkLabel, 120),
       };
@@ -151,6 +157,20 @@ export function validateTabToShellMessage(data, expectedTabId) {
         enabled: Boolean(data.enabled),
         alwaysOnTop: typeof data.alwaysOnTop === 'boolean' ? data.alwaysOnTop : undefined,
       };
+
+    case 'aaz-window-action': {
+      const action = typeof data.action === 'string' ? data.action.trim() : '';
+      if (!ALLOWED_WINDOW_ACTIONS.has(action)) return null;
+      const out = { type, tabId, action };
+      if (action === 'mini-preset') {
+        const width = Number(data.width);
+        const height = Number(data.height);
+        if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+        out.width = Math.min(960, Math.max(300, Math.round(width)));
+        out.height = Math.min(640, Math.max(150, Math.round(height)));
+      }
+      return out;
+    }
 
     default:
       return null;
@@ -210,6 +230,12 @@ export function validateShellToTabMessage(data) {
         enabled: Boolean(data.enabled),
         alwaysOnTop: typeof data.alwaysOnTop === 'boolean' ? data.alwaysOnTop : undefined,
       };
+
+    case 'aaz-taskbar-action': {
+      const action = typeof data.action === 'string' ? data.action.trim() : '';
+      if (!ALLOWED_TASKBAR_ACTIONS.has(action)) return null;
+      return { type, action };
+    }
 
     default:
       return null;

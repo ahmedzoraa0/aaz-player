@@ -2546,8 +2546,29 @@ html[dir="rtl"][data-skin="pebble"] {
 
 @media (prefers-reduced-motion: reduce) {
   .theme-card,
-  .theme-mode-pill {
+  .theme-mode-pill,
+  .mini-player-hud {
     transition: none !important;
     transform: none !important;
   }
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-skin="glass"] .topbar,
+  :root[data-skin="glass"] .sidebar-pane,
+  :root[data-skin="glass"] .transport-dock,
+  :root[data-skin="glass"] .modal-card,
+  :root[data-skin="glass"] .menu-dropdown,
+  .mini-hud-top,
+  .mini-hud-bottom {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  :root[data-skin="glass"] .topbar,
+  :root[data-skin="glass"] .sidebar-pane,
+  :root[data-skin="glass"] .transport-dock,
+  :root[data-skin="glass"] .modal-card {
+    background: var(--surface) !important;
+  }
+}
+

@@ -19,6 +19,8 @@ use tauri::{
     State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+mod taskbar;
+
 const REPO_CONFIG_JSON: &str = include_str!("repo_config.json");
 
 static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -29,6 +31,8 @@ const MAX_DLNA_XML_BYTES: u64 = 256 * 1024; // 256 KB max UPnP XML description
 const MAX_HTTP_HEADERS: usize = 32;
 const MAX_HTTP_HEADER_BYTES: usize = 8192;
 const MAX_CAST_CONCURRENT_CONNECTIONS: usize = 8;
+const MAX_DIR_SCAN_DEPTH: usize = 24;
+const MAX_DIR_SCAN_ENTRIES: usize = 25_000;
 
 const AUDIO_EXTS: &[&str] = &[
     "mp3", "wav", "flac", "ogg", "oga", "m4a", "aac", "opus", "wma", "aiff", "aif", "aifc", "alac",
@@ -127,11 +131,15 @@ struct AppState {
     cached_fonts: Mutex<Option<Vec<String>>>,
     pending_update_url: Mutex<Option<String>>,
     pending_update_version: Mutex<Option<String>>,
+    pending_update_asset_name: Mutex<Option<String>>,
     pending_update_sha256: Mutex<Option<String>>,
     pending_update_signature: Mutex<Option<String>>,
     downloaded_installer: Mutex<Option<PathBuf>>,
+    downloaded_installer_version: Mutex<Option<String>>,
+    downloaded_installer_asset_name: Mutex<Option<String>>,
     downloaded_installer_sha256: Mutex<Option<String>>,
     downloaded_installer_signature: Mutex<Option<String>>,
+    update_downloading: AtomicBool,
     cast_server: Mutex<Option<CastServerState>>,
     authorized_files: Mutex<HashSet<PathBuf>>,
     authorized_dirs: Mutex<HashSet<PathBuf>>,
@@ -640,6 +648,62 @@ fn verify_file_integrity(
     Ok(digest)
 }
 
+fn validate_minisign_trusted_comment(
+    trusted_comment: &str,
+    expected_version: &str,
+    expected_asset_name: &str,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    let trimmed = trusted_comment.trim();
+    if let Some(rest) = trimmed.strip_prefix("aaz-player|") {
+        let mut seen_version: Option<&str> = None;
+        let mut seen_file: Option<&str> = None;
+        let mut seen_sha256: Option<&str> = None;
+        for part in rest.split('|') {
+            if let Some((k, v)) = part.split_once('=') {
+                match k.trim() {
+                    "version" => seen_version = Some(v.trim()),
+                    "file" => seen_file = Some(v.trim()),
+                    "sha256" => seen_sha256 = Some(v.trim()),
+                    _ => {}
+                }
+            }
+        }
+        let exp_ver = expected_version.trim().trim_start_matches(['v', 'V']);
+        let exp_sha = expected_sha256.trim().to_ascii_lowercase();
+        let ver_ok = seen_version
+            .map(|v| v.trim_start_matches(['v', 'V']).eq_ignore_ascii_case(exp_ver))
+            .unwrap_or(false);
+        let file_ok = seen_file
+            .map(|f| f.eq_ignore_ascii_case(expected_asset_name.trim()))
+            .unwrap_or(false);
+        let sha_ok = seen_sha256
+            .and_then(parse_sha256_hex)
+            .map(|h| constant_time_eq(&h, &exp_sha))
+            .unwrap_or(false);
+        if !ver_ok || !file_ok || !sha_ok {
+            return Err(
+                "Update refused: signed metadata does not match release version, file, or digest."
+                    .to_string(),
+            );
+        }
+        return Ok(());
+    }
+
+    // Standard minisign trusted comments (e.g. "timestamp:...\tfile:NAME") are checked if file: is present
+    for token in trimmed.split(['\t', ' ']) {
+        if let Some(signed_file) = token.strip_prefix("file:") {
+            if !signed_file.eq_ignore_ascii_case(expected_asset_name.trim()) {
+                return Err(
+                    "Update refused: signed filename does not match the release installer."
+                        .to_string(),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 fn verify_file_minisign(
     path: &Path,
     signature_text: &str,
@@ -669,6 +733,25 @@ fn verify_file_minisign(
     verifier.finalize().map_err(|_| {
         "Update cryptographic signature verification failed — file may be untrusted.".to_string()
     })
+}
+
+fn verify_file_minisign_with_metadata(
+    path: &Path,
+    signature_text: &str,
+    public_key: &PublicKey,
+    expected_version: &str,
+    expected_asset_name: &str,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    verify_file_minisign(path, signature_text, public_key)?;
+    let signature = Signature::decode(signature_text.trim())
+        .map_err(|_| "Update refused: malformed cryptographic signature.".to_string())?;
+    validate_minisign_trusted_comment(
+        signature.trusted_comment(),
+        expected_version,
+        expected_asset_name,
+        expected_sha256,
+    )
 }
 
 fn is_cgnat_ipv4(ip: Ipv4Addr) -> bool {
@@ -834,12 +917,27 @@ fn decode_text_smart(bytes: &[u8]) -> String {
 }
 
 fn scan_local_directory(current_dir: &Path, rel_prefix: &str, out: &mut Vec<MediaEntry>) {
+    scan_local_directory_inner(current_dir, rel_prefix, 0, out);
+}
+
+fn scan_local_directory_inner(
+    current_dir: &Path,
+    rel_prefix: &str,
+    depth: usize,
+    out: &mut Vec<MediaEntry>,
+) {
+    if depth >= MAX_DIR_SCAN_DEPTH || out.len() >= MAX_DIR_SCAN_ENTRIES {
+        return;
+    }
     let entries = match fs::read_dir(current_dir) {
         Ok(rd) => rd,
         Err(_) => return,
     };
 
     for entry in entries.flatten() {
+        if out.len() >= MAX_DIR_SCAN_ENTRIES {
+            break;
+        }
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('.') {
             continue;
@@ -852,7 +950,7 @@ fn scan_local_directory(current_dir: &Path, rel_prefix: &str, out: &mut Vec<Medi
 
         if file_type.is_dir() {
             let next_prefix = format!("{rel_prefix}{name}/");
-            scan_local_directory(&full_path, &next_prefix, out);
+            scan_local_directory_inner(&full_path, &next_prefix, depth + 1, out);
         } else if file_type.is_file() {
             let ext = path_ext_lower(&full_path);
             let kind = if is_ext_in(&ext, VIDEO_EXTS) {
@@ -965,12 +1063,17 @@ fn inspect_path_list(paths: Vec<String>) -> InspectResult {
                 .unwrap_or_default();
             let ext = path_ext_lower(&path);
             if is_ext_in(&ext, PLAYLIST_EXTS) {
-                if let Ok(bytes) = fs::read(&path) {
-                    playlists.push(PlaylistEntry {
-                        name,
-                        full_path: p_str,
-                        content: decode_text_smart(&bytes),
-                    });
+                let within_limit = fs::metadata(&path)
+                    .map(|m| m.is_file() && m.len() <= MAX_TEXT_FILE_BYTES)
+                    .unwrap_or(false);
+                if within_limit {
+                    if let Ok(bytes) = fs::read(&path) {
+                        playlists.push(PlaylistEntry {
+                            name,
+                            full_path: p_str,
+                            content: decode_text_smart(&bytes),
+                        });
+                    }
                 }
                 continue;
             }
@@ -1535,12 +1638,14 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
         .min_inner_size(460.0, 540.0)
         .resizable(true)
         .decorations(false)
-        .shadow(true);
+        .shadow(true)
+        .background_color(tauri::window::Color(6, 11, 8, 255));
 
     #[cfg(target_os = "windows")]
     let builder = builder.additional_browser_args("--autoplay-policy=no-user-gesture-required");
 
-    builder.build().map_err(|e| e.to_string())?;
+    let win = builder.build().map_err(|e| e.to_string())?;
+    taskbar::attach_taskbar_controls(&win);
     Ok(true)
 }
 
@@ -1691,11 +1796,21 @@ async fn aaz_find_nearby_subtitle(
     state: State<'_, AppState>,
     video_full_path: String,
 ) -> Result<Option<NearbySubtitle>, String> {
+    let canon_video = match fs::canonicalize(Path::new(video_full_path.trim())) {
+        Ok(p) if p.is_file() => p,
+        _ => return Ok(None),
+    };
+    let allowed = {
+        let files = state.authorized_files.lock().map_err(|e| e.to_string())?;
+        let dirs = state.authorized_dirs.lock().map_err(|e| e.to_string())?;
+        files.contains(&canon_video) || dirs.iter().any(|d| canon_video.starts_with(d))
+    };
+    if !allowed {
+        return Ok(None);
+    }
+
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let video_path = PathBuf::from(&video_full_path);
-        if !video_path.exists() {
-            return None;
-        }
+        let video_path = canon_video;
         let video_dir = video_path.parent()?.to_path_buf();
         let video_name = video_path.file_name()?.to_string_lossy().into_owned();
         let v_norm = normalize_media_name(&video_name);
@@ -1810,6 +1925,10 @@ async fn aaz_find_nearby_subtitle(
         }
 
         let (score, name, full_path) = best?;
+        let meta = fs::metadata(&full_path).ok()?;
+        if !meta.is_file() || meta.len() > MAX_TEXT_FILE_BYTES {
+            return None;
+        }
         let bytes = fs::read(&full_path).ok()?;
         let text = decode_text_smart(&bytes);
         Some(NearbySubtitle {
@@ -1904,27 +2023,30 @@ fn aaz_win_start_drag(window: WebviewWindow) -> bool {
     window.start_dragging().is_ok()
 }
 
+fn collect_monitor_work_areas(window: &WebviewWindow) -> Vec<MonitorRect> {
+    window
+        .available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| {
+            let wa = m.work_area();
+            MonitorRect {
+                x: wa.position.x,
+                y: wa.position.y,
+                width: wa.size.width,
+                height: wa.size.height,
+            }
+        })
+        .collect()
+}
+
 #[tauri::command]
 fn aaz_get_window_geometry(window: WebviewWindow) -> Option<WindowGeometry> {
     let pos = window.outer_position().ok()?;
     let size = window.inner_size().ok()?;
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let maximized = window.is_maximized().unwrap_or(false);
-    let monitors: Vec<MonitorRect> = window
-        .available_monitors()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| {
-            let mp = m.position();
-            let ms = m.size();
-            MonitorRect {
-                x: mp.x,
-                y: mp.y,
-                width: ms.width,
-                height: ms.height,
-            }
-        })
-        .collect();
+    let monitors = collect_monitor_work_areas(&window);
 
     Some(WindowGeometry {
         x: pos.x,
@@ -1946,24 +2068,13 @@ fn aaz_apply_window_geometry(
     height: u32,
     maximized: bool,
 ) -> bool {
-    let monitors: Vec<MonitorRect> = window
-        .available_monitors()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| {
-            let mp = m.position();
-            let ms = m.size();
-            MonitorRect {
-                x: mp.x,
-                y: mp.y,
-                width: ms.width,
-                height: ms.height,
-            }
-        })
-        .collect();
+    let monitors = collect_monitor_work_areas(&window);
+    let scale = window.scale_factor().unwrap_or(1.0).max(0.5);
+    let min_w = (460.0 * scale).round() as u32;
+    let min_h = (540.0 * scale).round() as u32;
 
     let (cx, cy, cw, ch) =
-        clamp_window_geometry_to_monitors(x, y, width, height, 460, 540, &monitors);
+        clamp_window_geometry_to_monitors(x, y, width, height, min_w, min_h, &monitors);
     let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
     let _ = window.set_position(Position::Physical(PhysicalPosition::new(cx, cy)));
     if maximized {
@@ -1975,6 +2086,7 @@ fn aaz_apply_window_geometry(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn aaz_set_mini_mode(
     window: WebviewWindow,
     enabled: bool,
@@ -1983,22 +2095,10 @@ fn aaz_set_mini_mode(
     width: Option<u32>,
     height: Option<u32>,
     always_on_top: Option<bool>,
+    maximized: Option<bool>,
 ) -> bool {
-    let monitors: Vec<MonitorRect> = window
-        .available_monitors()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| {
-            let mp = m.position();
-            let ms = m.size();
-            MonitorRect {
-                x: mp.x,
-                y: mp.y,
-                width: ms.width,
-                height: ms.height,
-            }
-        })
-        .collect();
+    let monitors = collect_monitor_work_areas(&window);
+    let scale = window.scale_factor().unwrap_or(1.0).max(0.5);
 
     if enabled {
         if window.is_fullscreen().unwrap_or(false) {
@@ -2007,24 +2107,29 @@ fn aaz_set_mini_mode(
         if window.is_maximized().unwrap_or(false) {
             let _ = window.unmaximize();
         }
-        let _ = window.set_min_size(Some(Size::Logical(LogicalSize::new(300.0, 190.0))));
-        let target_w = width.unwrap_or(420).max(300);
-        let target_h = height.unwrap_or(260).max(190);
+        let _ = window.set_min_size(Some(Size::Logical(LogicalSize::new(300.0, 160.0))));
+        let min_w = (300.0 * scale).round() as u32;
+        let min_h = (160.0 * scale).round() as u32;
+        let def_w = (480.0 * scale).round() as u32;
+        let def_h = (270.0 * scale).round() as u32;
+        let margin = (24.0 * scale).round() as u32;
+        let target_w = width.unwrap_or(def_w).max(min_w);
+        let target_h = height.unwrap_or(def_h).max(min_h);
         let default_x = monitors
             .first()
-            .map(|m| m.x + m.width.saturating_sub(target_w + 28) as i32)
+            .map(|m| m.x + m.width.saturating_sub(target_w + margin) as i32)
             .unwrap_or(60);
         let default_y = monitors
             .first()
-            .map(|m| m.y + m.height.saturating_sub(target_h + 64) as i32)
+            .map(|m| m.y + m.height.saturating_sub(target_h + margin) as i32)
             .unwrap_or(60);
         let (cx, cy, cw, ch) = clamp_window_geometry_to_monitors(
             x.unwrap_or(default_x),
             y.unwrap_or(default_y),
             target_w,
             target_h,
-            300,
-            190,
+            min_w,
+            min_h,
             &monitors,
         );
         let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
@@ -2034,16 +2139,43 @@ fn aaz_set_mini_mode(
         }
     } else {
         let _ = window.set_min_size(Some(Size::Logical(LogicalSize::new(460.0, 540.0))));
+        let min_w = (460.0 * scale).round() as u32;
+        let min_h = (540.0 * scale).round() as u32;
         if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
             let (cx, cy, cw, ch) =
-                clamp_window_geometry_to_monitors(rx, ry, rw, rh, 460, 540, &monitors);
+                clamp_window_geometry_to_monitors(rx, ry, rw, rh, min_w, min_h, &monitors);
             let _ = window.set_size(Size::Physical(PhysicalSize::new(cw, ch)));
             let _ = window.set_position(Position::Physical(PhysicalPosition::new(cx, cy)));
         }
         if let Some(pin) = always_on_top {
             let _ = window.set_always_on_top(pin);
         }
+        if maximized == Some(true) {
+            let _ = window.maximize();
+        }
     }
+    true
+}
+
+#[tauri::command]
+fn aaz_taskbar_update_state(
+    window: WebviewWindow,
+    has_media: bool,
+    is_playing: bool,
+    can_prev: bool,
+    can_next: bool,
+    lang: String,
+) -> bool {
+    taskbar::update_taskbar_state(
+        &window,
+        taskbar::TaskbarMediaState {
+            has_media,
+            is_playing,
+            can_prev,
+            can_next,
+            is_arabic: lang.eq_ignore_ascii_case("ar"),
+        },
+    );
     true
 }
 
@@ -2450,6 +2582,9 @@ async fn aaz_check_updates(
     if let Ok(mut g) = state.pending_update_version.lock() {
         *g = Some(remote_ver.clone());
     }
+    if let Ok(mut g) = state.pending_update_asset_name.lock() {
+        *g = Some(asset_name);
+    }
     if let Ok(mut g) = state.pending_update_sha256.lock() {
         *g = Some(verified_expected_sha256);
     }
@@ -2469,8 +2604,46 @@ async fn aaz_check_updates(
     Ok(serde_json::json!({ "status": "started" }))
 }
 
+struct AtomicFlagGuard<'a>(&'a AtomicBool);
+
+impl Drop for AtomicFlagGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+fn resolve_update_cache_dir(app: &AppHandle) -> PathBuf {
+    let base = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("aaz-player"));
+    let dir = base.join("updates");
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
+fn sweep_old_update_installers(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for ent in entries.flatten() {
+            let name = ent.file_name().to_string_lossy().into_owned();
+            if name.starts_with("AAZ-Player-Setup-") {
+                let _ = fs::remove_file(ent.path());
+            }
+        }
+    }
+}
+
 #[tauri::command]
 async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+    if state
+        .update_downloading
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Ok(false);
+    }
+    let _dl_guard = AtomicFlagGuard(&state.update_downloading);
+
     let repo = match get_configured_repo() {
         Some(r) => r,
         None => return Ok(false),
@@ -2496,6 +2669,12 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
         .map_err(|e| e.to_string())?
         .clone()
         .unwrap_or_else(|| "latest".to_string());
+    let asset_name = state
+        .pending_update_asset_name
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .unwrap_or_default();
     let expected_sha256 = state
         .pending_update_sha256
         .lock()
@@ -2543,12 +2722,16 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
     let nonce = generate_session_token()
         .map(|s| s[..12].to_string())
         .unwrap_or_else(|_| "tmp".to_string());
-    let part_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{safe_ver}-{nonce}.part"));
-    let final_path = std::env::temp_dir().join(format!("AAZ-Player-Setup-{safe_ver}.exe"));
+    let updates_dir = resolve_update_cache_dir(&app);
+    sweep_old_update_installers(&updates_dir);
+    let part_path = updates_dir.join(format!("AAZ-Player-Setup-{safe_ver}-{nonce}.part"));
+    let final_path = updates_dir.join(format!("AAZ-Player-Setup-{safe_ver}-{nonce}.exe"));
     let part_clone = part_path.clone();
     let final_clone = final_path.clone();
     let sha_clone = sha256_str.clone();
     let sig_clone = sig_text.clone();
+    let ver_clone = raw_ver.clone();
+    let asset_clone = asset_name.clone();
     let app_clone = app.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
@@ -2625,7 +2808,14 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
             }
         };
 
-        if let Err(err_msg) = verify_file_minisign(&part_clone, &sig_clone, &pubkey) {
+        if let Err(err_msg) = verify_file_minisign_with_metadata(
+            &part_clone,
+            &sig_clone,
+            &pubkey,
+            &ver_clone,
+            &asset_clone,
+            &verified_digest,
+        ) {
             let _ = fs::remove_file(&part_clone);
             return Err(err_msg);
         }
@@ -2645,6 +2835,12 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
         Ok(verified_digest) => {
             if let Ok(mut g) = state.downloaded_installer.lock() {
                 *g = Some(final_path);
+            }
+            if let Ok(mut g) = state.downloaded_installer_version.lock() {
+                *g = Some(raw_ver.clone());
+            }
+            if let Ok(mut g) = state.downloaded_installer_asset_name.lock() {
+                *g = Some(asset_name);
             }
             if let Ok(mut g) = state.downloaded_installer_sha256.lock() {
                 *g = Some(verified_digest);
@@ -2671,14 +2867,37 @@ async fn aaz_download_update(app: AppHandle, state: State<'_, AppState>) -> Resu
 
 #[tauri::command]
 fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
-    let Ok(pubkey) = get_configured_updater_pubkey() else {
-        return false;
+    let emit_err = |msg: &str| {
+        let _ = app.emit(
+            "aaz:update-status",
+            serde_json::json!({ "status": "error", "message": msg }),
+        );
+    };
+
+    let pubkey = match get_configured_updater_pubkey() {
+        Ok(k) => k,
+        Err(msg) => {
+            emit_err(&msg);
+            return false;
+        }
     };
     let installer = state
         .downloaded_installer
         .lock()
         .ok()
         .and_then(|g| g.clone());
+    let expected_ver = state
+        .downloaded_installer_version
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_default();
+    let expected_asset = state
+        .downloaded_installer_asset_name
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())
+        .unwrap_or_default();
     let expected_digest = state
         .downloaded_installer_sha256
         .lock()
@@ -2689,21 +2908,28 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
         .lock()
         .ok()
         .and_then(|g| g.clone());
-    let Some(path) = installer else {
-        return false;
-    };
-    let Some(digest) = expected_digest else {
-        return false;
-    };
-    let Some(signature) = expected_sig else {
+    let (Some(path), Some(digest), Some(signature)) = (installer, expected_digest, expected_sig)
+    else {
+        emit_err("No verified installer is ready to launch.");
         return false;
     };
 
-    // Re-verify both SHA-256 and Minisign signature immediately prior to execution
-    if verify_file_integrity(&path, &digest, None).is_err()
-        || verify_file_minisign(&path, &signature, &pubkey).is_err()
-    {
+    // Re-verify SHA-256, Minisign signature, and trusted metadata immediately prior to execution
+    if let Err(msg) = verify_file_integrity(&path, &digest, None) {
         let _ = fs::remove_file(&path);
+        emit_err(&msg);
+        return false;
+    }
+    if let Err(msg) = verify_file_minisign_with_metadata(
+        &path,
+        &signature,
+        &pubkey,
+        &expected_ver,
+        &expected_asset,
+        &digest,
+    ) {
+        let _ = fs::remove_file(&path);
+        emit_err(&msg);
         return false;
     }
 
@@ -2712,6 +2938,7 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
         app.exit(0);
         true
     } else {
+        emit_err("Failed to launch the update installer.");
         false
     }
 }
@@ -3432,6 +3659,7 @@ async fn aaz_cast_discover_devices(state: State<'_, AppState>) -> Result<Vec<Cas
     .unwrap_or_default();
 
     if let Ok(mut guard) = state.discovered_dlna_controls.lock() {
+        guard.clear();
         for dev in &devices {
             guard.insert(dev.control_url.clone());
         }
@@ -3591,6 +3819,12 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .manage(app_state)
+        .setup(|app| {
+            if let Some(win) = app.get_webview_window("main") {
+                taskbar::attach_taskbar_controls(&win);
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let files = extract_supported_paths_from_argv(&argv);
             if !files.is_empty() {
@@ -3604,7 +3838,10 @@ pub fn run() {
                     }
                 }
             }
-            if let Some(win) = app.get_webview_window("main") {
+            if let Some(win) = app
+                .get_webview_window("main")
+                .or_else(|| app.webview_windows().values().next().cloned())
+            {
                 let _ = win.unminimize();
                 let _ = win.set_focus();
             }
@@ -3636,6 +3873,7 @@ pub fn run() {
             aaz_get_window_geometry,
             aaz_apply_window_geometry,
             aaz_set_mini_mode,
+            aaz_taskbar_update_state,
             aaz_save_snapshot,
             aaz_list_system_fonts,
             aaz_check_updates,
@@ -4035,5 +4273,48 @@ mod tests {
         let (x2, y2, w2, h2) =
             clamp_window_geometry_to_monitors(2000, 100, 1000, 700, 460, 540, &monitors);
         assert_eq!((x2, y2, w2, h2), (2000, 100, 1000, 700));
+    }
+
+    #[test]
+    fn minisign_trusted_comment_blocks_version_file_and_digest_replay() {
+        let digest = "a".repeat(64);
+        let valid = format!(
+            "aaz-player|version=1.7.0|file=AAZ-Player_1.7.0_x64-setup.exe|sha256={digest}"
+        );
+        assert!(validate_minisign_trusted_comment(
+            &valid,
+            "1.7.0",
+            "AAZ-Player_1.7.0_x64-setup.exe",
+            &digest
+        )
+        .is_ok());
+
+        // Version mismatch (downgrade/replay attack) MUST fail
+        assert!(validate_minisign_trusted_comment(
+            &valid,
+            "1.8.0",
+            "AAZ-Player_1.7.0_x64-setup.exe",
+            &digest
+        )
+        .is_err());
+
+        // Filename mismatch MUST fail
+        assert!(validate_minisign_trusted_comment(
+            &valid,
+            "1.7.0",
+            "AAZ-Player_1.7.0_x64-other.exe",
+            &digest
+        )
+        .is_err());
+
+        // Digest mismatch MUST fail
+        let wrong_digest = "b".repeat(64);
+        assert!(validate_minisign_trusted_comment(
+            &valid,
+            "1.7.0",
+            "AAZ-Player_1.7.0_x64-setup.exe",
+            &wrong_digest
+        )
+        .is_err());
     }
 }

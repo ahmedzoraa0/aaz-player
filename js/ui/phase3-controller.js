@@ -34,6 +34,9 @@ const P3_I18N = {
     settingsBtnTitle: 'Playback Settings (Ctrl+,)',
     miniReturn: 'Full Player',
     miniPin: 'Always on Top',
+    miniSizePreset: 'Cycle Mini Size (S / M / L)',
+    miniMinimize: 'Minimize',
+    miniClose: 'Close',
     bufferingLabel: 'Buffering...',
     savedSearchPh: 'Search saved playlists...',
     savedCtxDuplicate: 'Duplicate Playlist',
@@ -44,7 +47,9 @@ const P3_I18N = {
     histPauseOff: 'History Recording: Paused',
     histClearAll: 'Clear Watch History',
     histCleared: 'Watch history cleared.',
+    histRemoveBtn: 'Remove from history',
     histRemoved: 'Removed from history.',
+    histMoreNote: 'Showing latest 20 of {total} items',
     histEmptyTitle: 'No recent items yet',
     histEmptyDesc: 'Recently played tracks will appear here so you can resume where you left off.',
     histPausedNote: 'Watch history recording is paused in privacy mode.',
@@ -73,6 +78,7 @@ const P3_I18N = {
     libFolderAdded: 'Added "{name}" ({count} items) to Media Library.',
     libFolderRescanned: 'Rescanned "{name}" ({count} items).',
     libFolderRemoved: 'Removed "{name}" from Media Library.',
+    libFolderMissing: 'Folder not found on disk: "{name}".',
     libWebUnsupported: 'Persistent folder scanning works in the AAZ Desktop App. Use Open Folder in browser mode.',
     scModalHint: 'Click any shortcut badge and press a new key combination. Press Esc to cancel.',
     scPressKey: 'Press key...',
@@ -115,6 +121,9 @@ const P3_I18N = {
     settingsBtnTitle: 'إعدادات التشغيل (Ctrl+,)',
     miniReturn: 'الوضع الكامل',
     miniPin: 'تثبيت في الأعلى',
+    miniSizePreset: 'تغيير حجم المصغر (S / M / L)',
+    miniMinimize: 'تصغير',
+    miniClose: 'إغلاق',
     bufferingLabel: 'جارٍ التحميل...',
     savedSearchPh: 'ابحث في القوائم المحفوظة...',
     savedCtxDuplicate: 'تكرار القائمة',
@@ -125,7 +134,9 @@ const P3_I18N = {
     histPauseOff: 'تسجيل السجل: متوقف',
     histClearAll: 'مسح سجل المشاهدة',
     histCleared: 'تم مسح سجل المشاهدة.',
+    histRemoveBtn: 'إزالة من السجل',
     histRemoved: 'تمت الإزالة من السجل.',
+    histMoreNote: 'عرض أحدث 20 من أصل {total} عنصر',
     histEmptyTitle: 'لا توجد ملفات أخيرة بعد',
     histEmptyDesc: 'ستظهر المقاطع التي تشغلها هنا لمتابعة المشاهدة من حيث توقفت.',
     histPausedNote: 'تسجيل سجل المشاهدة متوقف مؤقتاً في وضع الخصوصية.',
@@ -154,6 +165,7 @@ const P3_I18N = {
     libFolderAdded: 'تمت إضافة "{name}" ({count} ملف) إلى المكتبة.',
     libFolderRescanned: 'تم تحديث "{name}" ({count} ملف).',
     libFolderRemoved: 'تمت إزالة "{name}" من المكتبة.',
+    libFolderMissing: 'تعذر العثور على المجلد على القرص: "{name}".',
     libWebUnsupported: 'فحص المجلدات الدائم يعمل في تطبيق سطح المكتب AAZ Player. استخدم فتح مجلد في المتصفح.',
     scModalHint: 'انقر على أي اختصار واضغط تركيبة المفاتيح الجديدة. اضغط Esc للإلغاء.',
     scPressKey: 'اضغط مفتاحاً...',
@@ -195,8 +207,14 @@ export function createPhase3Controller(api) {
   let storeCache = api.storageManager.load();
 
   function getStore() {
-    storeCache = api.storageManager.load();
+    if (!storeCache) {
+      storeCache = api.storageManager.load();
+    }
     return storeCache;
+  }
+
+  function invalidateStoreCache() {
+    storeCache = api.storageManager.load();
   }
 
   function persistStore() {
@@ -243,8 +261,16 @@ export function createPhase3Controller(api) {
     pendingConflict: null,
     miniActive: false,
     miniAlwaysOnTop: true,
+    miniSizeIdx: 1,
+    miniSeeking: false,
     lastHistoryPersistAt: 0,
   };
+
+  const MINI_SIZE_PRESETS = [
+    { label: 'S', width: 360, height: 202 },
+    { label: 'M', width: 480, height: 270 },
+    { label: 'L', width: 640, height: 360 },
+  ];
 
   // Grab DOM nodes safely
   const dom = {
@@ -277,14 +303,21 @@ export function createPhase3Controller(api) {
     miniPlayerHud: document.getElementById('miniPlayerHud'),
     miniDragBar: document.getElementById('miniDragBar'),
     miniTrackTitle: document.getElementById('miniTrackTitle'),
+    miniSizeBtn: document.getElementById('miniSizeBtn'),
     miniPinBtn: document.getElementById('miniPinBtn'),
     miniExpandBtn: document.getElementById('miniExpandBtn'),
+    miniMinBtn: document.getElementById('miniMinBtn'),
+    miniCloseBtn: document.getElementById('miniCloseBtn'),
+    miniSeekSlider: document.getElementById('miniSeekSlider'),
+    miniTimeLabel: document.getElementById('miniTimeLabel'),
     miniPrevBtn: document.getElementById('miniPrevBtn'),
     miniPlayBtn: document.getElementById('miniPlayBtn'),
     miniPlayIcon: document.getElementById('miniPlayIcon'),
     miniPauseIcon: document.getElementById('miniPauseIcon'),
     miniNextBtn: document.getElementById('miniNextBtn'),
     miniMuteBtn: document.getElementById('miniMuteBtn'),
+    miniVolIcon: document.getElementById('miniVolIcon'),
+    miniMuteIcon: document.getElementById('miniMuteIcon'),
     miniVolSlider: document.getElementById('miniVolSlider'),
     // Buffering overlay
     stageBuffering: document.getElementById('stageBuffering'),
@@ -329,8 +362,11 @@ export function createPhase3Controller(api) {
     if (dom.libSearchInput) dom.libSearchInput.placeholder = p3t('libSearchPh');
     if (dom.miniPlayerBtn) dom.miniPlayerBtn.title = p3t('miniBtnTitle');
     if (dom.openSettingsBtn) dom.openSettingsBtn.title = p3t('settingsBtnTitle');
+    if (dom.miniSizeBtn) dom.miniSizeBtn.title = p3t('miniSizePreset');
     if (dom.miniPinBtn) dom.miniPinBtn.title = p3t('miniPin');
     if (dom.miniExpandBtn) dom.miniExpandBtn.title = p3t('miniReturn');
+    if (dom.miniMinBtn) dom.miniMinBtn.title = p3t('miniMinimize');
+    if (dom.miniCloseBtn) dom.miniCloseBtn.title = p3t('miniClose');
     if (dom.stageBufferingText) dom.stageBufferingText.textContent = p3t('bufferingLabel');
 
     updateLibSortButtonUI();
@@ -377,9 +413,10 @@ export function createPhase3Controller(api) {
       dom.historyPauseMenuBtn.setAttribute('aria-pressed', String(!isRec));
     }
 
-    const entries = historyManager.getEntries().slice(0, 20);
+    const allEntries = historyManager.getEntries();
+    const entries = allEntries.slice(0, 20);
     if (dom.historyClearMenuBtn) {
-      dom.historyClearMenuBtn.disabled = entries.length === 0;
+      dom.historyClearMenuBtn.disabled = allEntries.length === 0;
     }
 
     const frag = document.createDocumentFragment();
@@ -435,8 +472,8 @@ export function createPhase3Controller(api) {
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'menu-recent-remove';
-      delBtn.title = p3t('histRemoved');
-      delBtn.setAttribute('aria-label', p3t('histRemoved'));
+      delBtn.title = p3t('histRemoveBtn');
+      delBtn.setAttribute('aria-label', p3t('histRemoveBtn'));
       delBtn.textContent = '×';
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -470,6 +507,13 @@ export function createPhase3Controller(api) {
       });
 
       frag.appendChild(row);
+    }
+
+    if (allEntries.length > 20) {
+      const moreNote = document.createElement('div');
+      moreNote.className = 'menu-recent-note';
+      moreNote.textContent = p3t('histMoreNote', { total: allEntries.length });
+      frag.appendChild(moreNote);
     }
 
     dom.recentHistoryList.replaceChildren(frag);
@@ -760,7 +804,11 @@ export function createPhase3Controller(api) {
     if (!api.desktopBridge || !api.desktopBridge.readFolder) return;
     try {
       const res = await api.desktopBridge.readFolder(folderPath);
-      if (!res) return;
+      if (!res) {
+        const existing = libraryManager.getFolders().find((f) => f.path === folderPath);
+        api.showNotice(p3t('libFolderMissing', { name: existing ? existing.name : folderPath }), true);
+        return;
+      }
       const updated = libraryManager.addOrUpdateFolder(
         res.folderPath || folderPath,
         res.folderName,
@@ -907,6 +955,7 @@ export function createPhase3Controller(api) {
       volumeDown: () => api.adjustVolume(-0.05),
       mute: () => api.toggleMute(),
       fullscreen: () => api.toggleFullscreen(),
+      pip: () => api.togglePictureInPicture?.(),
       nextTrack: () => api.playNextTrack(),
       prevTrack: () => api.playPrevTrack(),
       subEarlier: () => api.adjustSubtitleOffset(-0.25),
@@ -936,6 +985,9 @@ export function createPhase3Controller(api) {
     if (typeof alwaysOnTop === 'boolean') uiState.miniAlwaysOnTop = alwaysOnTop;
 
     document.documentElement.classList.toggle('is-mini-player', uiState.miniActive);
+    if (!uiState.miniActive) {
+      document.documentElement.classList.remove('is-mini-audio', 'is-mini-paused');
+    }
     if (dom.miniPlayerHud) dom.miniPlayerHud.hidden = !uiState.miniActive;
     if (dom.miniPlayerBtn) {
       dom.miniPlayerBtn.classList.toggle('is-active', uiState.miniActive);
@@ -944,6 +996,9 @@ export function createPhase3Controller(api) {
     if (dom.miniPinBtn) {
       dom.miniPinBtn.classList.toggle('is-active', uiState.miniAlwaysOnTop);
       dom.miniPinBtn.setAttribute('aria-pressed', String(uiState.miniAlwaysOnTop));
+    }
+    if (dom.miniSizeBtn) {
+      dom.miniSizeBtn.textContent = MINI_SIZE_PRESETS[uiState.miniSizeIdx]?.label || 'M';
     }
     syncMiniPlayerPlaybackUI();
   }
@@ -966,6 +1021,30 @@ export function createPhase3Controller(api) {
     api.postToShell('aaz-tab-mini-mode', { enabled: uiState.miniActive, alwaysOnTop: nextPin });
   }
 
+  function cycleMiniSizePreset() {
+    uiState.miniSizeIdx = (uiState.miniSizeIdx + 1) % MINI_SIZE_PRESETS.length;
+    const preset = MINI_SIZE_PRESETS[uiState.miniSizeIdx];
+    if (dom.miniSizeBtn) dom.miniSizeBtn.textContent = preset.label;
+    api.postToShell('aaz-window-action', {
+      action: 'mini-preset',
+      width: preset.width,
+      height: preset.height,
+    });
+  }
+
+  function syncMiniPlayerTimeUI() {
+    if (!uiState.miniActive) return;
+    const cur = Number.isFinite(api.media.currentTime) ? api.media.currentTime : 0;
+    const dur = Number.isFinite(api.media.duration) && api.media.duration > 0 ? api.media.duration : 0;
+    if (dom.miniSeekSlider && !uiState.miniSeeking) {
+      dom.miniSeekSlider.disabled = dur <= 0;
+      dom.miniSeekSlider.value = dur > 0 ? String(Math.round((cur / dur) * 1000)) : '0';
+    }
+    if (dom.miniTimeLabel) {
+      dom.miniTimeLabel.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    }
+  }
+
   function syncMiniPlayerPlaybackUI() {
     if (!dom.miniPlayerHud) return;
     const track = api.getCurrentTrack();
@@ -973,14 +1052,23 @@ export function createPhase3Controller(api) {
       dom.miniTrackTitle.textContent = track ? track.displayName || track.name : 'AAZ Player';
     }
     const isPaused = api.media.paused;
+    const isAudioMode = !track || track.kind !== 'video';
+    if (uiState.miniActive) {
+      document.documentElement.classList.toggle('is-mini-audio', isAudioMode);
+      document.documentElement.classList.toggle('is-mini-paused', isPaused);
+    }
     if (dom.miniPlayIcon) dom.miniPlayIcon.style.display = isPaused ? '' : 'none';
     if (dom.miniPauseIcon) dom.miniPauseIcon.style.display = isPaused ? 'none' : '';
+    const isMuted = api.media.muted || api.media.volume === 0;
+    if (dom.miniVolIcon) dom.miniVolIcon.style.display = isMuted ? 'none' : '';
+    if (dom.miniMuteIcon) dom.miniMuteIcon.style.display = isMuted ? '' : 'none';
     if (dom.miniVolSlider) {
       dom.miniVolSlider.value = String(api.media.muted ? 0 : api.media.volume);
     }
     if (dom.miniMuteBtn) {
-      dom.miniMuteBtn.classList.toggle('is-active', api.media.muted || api.media.volume === 0);
+      dom.miniMuteBtn.classList.toggle('is-active', isMuted);
     }
+    syncMiniPlayerTimeUI();
   }
 
   /* -------------------------------------------------------------------------
@@ -1084,6 +1172,7 @@ export function createPhase3Controller(api) {
       syncMiniPlayerPlaybackUI();
     });
     api.media.addEventListener('timeupdate', () => {
+      syncMiniPlayerTimeUI();
       const now = Date.now();
       if (now - uiState.lastHistoryPersistAt < 4000) return;
       const tr = api.getCurrentTrack();
@@ -1179,8 +1268,47 @@ export function createPhase3Controller(api) {
     if (dom.miniExpandBtn) {
       dom.miniExpandBtn.addEventListener('click', () => toggleMiniPlayer(false));
     }
+    if (dom.miniSizeBtn) {
+      dom.miniSizeBtn.addEventListener('click', cycleMiniSizePreset);
+    }
     if (dom.miniPinBtn) {
       dom.miniPinBtn.addEventListener('click', toggleMiniAlwaysOnTop);
+    }
+    if (dom.miniMinBtn) {
+      dom.miniMinBtn.addEventListener('click', () => {
+        api.postToShell('aaz-window-action', { action: 'minimize' });
+      });
+    }
+    if (dom.miniCloseBtn) {
+      dom.miniCloseBtn.addEventListener('click', () => {
+        api.postToShell('aaz-window-action', { action: 'close' });
+      });
+    }
+    if (dom.miniSeekSlider) {
+      const commitMiniSeek = () => {
+        const dur = Number.isFinite(api.media.duration) && api.media.duration > 0 ? api.media.duration : 0;
+        if (dur > 0) {
+          const frac = Math.max(0, Math.min(1, Number(dom.miniSeekSlider.value) / 1000));
+          api.media.currentTime = frac * dur;
+        }
+        uiState.miniSeeking = false;
+        syncMiniPlayerTimeUI();
+      };
+      dom.miniSeekSlider.addEventListener('pointerdown', () => {
+        uiState.miniSeeking = true;
+      });
+      dom.miniSeekSlider.addEventListener('input', () => {
+        uiState.miniSeeking = true;
+        const dur = Number.isFinite(api.media.duration) && api.media.duration > 0 ? api.media.duration : 0;
+        if (dur > 0 && dom.miniTimeLabel) {
+          const preview = (Number(dom.miniSeekSlider.value) / 1000) * dur;
+          dom.miniTimeLabel.textContent = `${formatTime(preview)} / ${formatTime(dur)}`;
+        }
+      });
+      dom.miniSeekSlider.addEventListener('change', commitMiniSeek);
+      dom.miniSeekSlider.addEventListener('pointerup', () => {
+        if (uiState.miniSeeking) commitMiniSeek();
+      });
     }
     if (dom.miniPlayBtn) {
       dom.miniPlayBtn.addEventListener('click', () => api.togglePlayPause());
@@ -1199,10 +1327,47 @@ export function createPhase3Controller(api) {
         api.setVolume(parseFloat(e.target.value));
       });
     }
-    if (dom.miniDragBar && api.desktopBridge && api.desktopBridge.startWindowDrag) {
+    if (dom.miniDragBar) {
+      let dragArmed = null;
+      const cleanupMiniDrag = () => {
+        dragArmed = null;
+        window.removeEventListener('mousemove', onMiniMove);
+        window.removeEventListener('mouseup', cleanupMiniDrag);
+        window.removeEventListener('blur', cleanupMiniDrag);
+      };
+      const onMiniMove = (ev) => {
+        if (!dragArmed) return;
+        if ((ev.buttons & 1) === 0) {
+          cleanupMiniDrag();
+          return;
+        }
+        if (Math.hypot(ev.screenX - dragArmed.x, ev.screenY - dragArmed.y) >= 5) {
+          cleanupMiniDrag();
+          if (api.desktopBridge && api.desktopBridge.startWindowDrag) {
+            api.desktopBridge
+              .startWindowDrag()
+              .then(() => api.postToShell('aaz-window-action', { action: 'mini-drag-end' }))
+              .catch(() => {});
+          }
+        }
+      };
       dom.miniDragBar.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || e.target.closest('button')) return;
-        api.desktopBridge.startWindowDrag().catch(() => {});
+        if (e.detail >= 2) {
+          cleanupMiniDrag();
+          return;
+        }
+        dragArmed = { x: e.screenX, y: e.screenY };
+        window.addEventListener('mousemove', onMiniMove);
+        window.addEventListener('mouseup', cleanupMiniDrag);
+        window.addEventListener('blur', cleanupMiniDrag);
+      });
+      dom.miniDragBar.addEventListener('dblclick', (e) => {
+        if (e.target.closest('button')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        cleanupMiniDrag();
+        toggleMiniPlayer(false);
       });
     }
 
@@ -1395,6 +1560,7 @@ export function createPhase3Controller(api) {
     openSettingsModal,
     closeSettingsModal,
     matchAndDispatchShortcut,
+    invalidateStoreCache,
     isCapturingShortcut: () => Boolean(uiState.capturingActionId),
     cancelShortcutCapture: () => {
       uiState.capturingActionId = null;

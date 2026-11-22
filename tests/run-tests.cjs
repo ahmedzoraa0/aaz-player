@@ -569,6 +569,176 @@ async function main() {
     );
   });
 
+  // 15. Shortcuts v1.7.0: UNBOUND_SENTINEL override, range input allowance & unified defaults
+  await runTest('Shortcuts v1.7.0: overridden binding stays unbound, range input allows shortcuts & defaults unified', () => {
+    const store = storageMod.createEmptyState();
+    const sm = shortcutsMod.createShortcutsManager({
+      getStore: () => store,
+      persist: () => {},
+    });
+
+    assert.equal(sm.getBinding('pip'), 'P');
+    assert.equal(sm.getBinding('prevTrack'), 'Shift+P');
+    assert.equal(sm.getBinding('nextTrack'), 'N');
+    assert.equal(sm.getBinding('cast'), 'C');
+
+    // Overriding 'M' (Mute) onto fullscreen must leave 'mute' unbound (''), NOT default 'M'
+    const res = sm.setBinding('fullscreen', 'M', { allowOverride: true });
+    assert.equal(res.ok, true);
+    assert.equal(sm.getBinding('fullscreen'), 'M');
+    assert.equal(sm.getBinding('mute'), '', 'Overridden action must remain unbound');
+    assert.equal(sm.matchAction({ key: 'm', code: 'KeyM', target: { tagName: 'BODY' } }), 'fullscreen');
+
+    // Resetting restores default
+    sm.resetBinding('mute');
+    assert.equal(sm.getBinding('mute'), 'M');
+
+    // Range/button/checkbox/radio inputs must NOT block playback shortcuts; text/empty inputs MUST block
+    assert.equal(
+      sm.matchAction({ key: ' ', code: 'Space', target: { tagName: 'INPUT', type: 'range' } }),
+      'playPause'
+    );
+    assert.equal(
+      sm.matchAction({ key: ' ', code: 'Space', target: { tagName: 'INPUT', type: 'checkbox' } }),
+      'playPause'
+    );
+    assert.equal(
+      sm.matchAction({ key: ' ', code: 'Space', target: { tagName: 'INPUT', type: 'text' } }),
+      null
+    );
+    assert.equal(
+      sm.matchAction({ key: ' ', code: 'Space', target: { tagName: 'INPUT' } }),
+      null
+    );
+  });
+
+  // 16. Messaging v1.7.0: aaz-window-action, aaz-taskbar-action & canPrev/canNext
+  await runTest('Messaging v1.7.0: aaz-window-action clamping, aaz-taskbar-action & tab-state canPrev/canNext', () => {
+    const tabState = messaging.validateTabToShellMessage(
+      {
+        type: 'aaz-tab-state',
+        tabId: 'tab_1',
+        title: 'Clip',
+        isPlaying: true,
+        hasMedia: true,
+        canPrev: true,
+        canNext: false,
+        kind: 'video',
+      },
+      'tab_1'
+    );
+    assert.equal(tabState?.canPrev, true);
+    assert.equal(tabState?.canNext, false);
+
+    const miniPreset = messaging.validateTabToShellMessage(
+      { type: 'aaz-window-action', tabId: 'tab_1', action: 'mini-preset', width: 9999, height: 10 },
+      'tab_1'
+    );
+    assert.equal(miniPreset?.action, 'mini-preset');
+    assert.equal(miniPreset?.width, 960);
+    assert.equal(miniPreset?.height, 150);
+
+    const invalidWinAct = messaging.validateTabToShellMessage(
+      { type: 'aaz-window-action', tabId: 'tab_1', action: 'exec-cmd' },
+      'tab_1'
+    );
+    assert.equal(invalidWinAct, null);
+
+    const taskbarAct = messaging.validateShellToTabMessage({
+      type: 'aaz-taskbar-action',
+      action: 'toggle-play',
+    });
+    assert.deepEqual(taskbarAct, { type: 'aaz-taskbar-action', action: 'toggle-play' });
+    assert.equal(
+      messaging.validateShellToTabMessage({ type: 'aaz-taskbar-action', action: 'reboot' }),
+      null
+    );
+  });
+
+  // 17. Mini Player Overhaul & Subtitle Hint Consistency
+  await runTest('Mini Player & UI v1.7.0: SVG-only Mini Player HUD with seek/presets/controls & synced hints', () => {
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const deskPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
+    assert.ok(html.includes(`AAZ Player v${deskPkg.version}`), 'Menu version label must match desktop/package.json');
+    assert.ok(html.includes('id="miniSeekSlider"'), 'Mini Player must include #miniSeekSlider');
+    assert.ok(html.includes('id="miniTimeLabel"'), 'Mini Player must include #miniTimeLabel');
+    assert.ok(html.includes('id="miniSizeBtn"'), 'Mini Player must include #miniSizeBtn');
+    assert.ok(html.includes('id="miniMinBtn"'), 'Mini Player must include #miniMinBtn');
+    assert.ok(html.includes('id="miniCloseBtn"'), 'Mini Player must include #miniCloseBtn');
+    assert.ok(html.includes('id="miniVolIcon"') && html.includes('id="miniMuteIcon"'), 'Mini Player must use SVG volume icons');
+
+    const hudStart = html.indexOf('id="miniPlayerHud"');
+    const hudEnd = html.indexOf('</aside>', hudStart);
+    assert.ok(hudStart > 0 && hudEnd > hudStart, 'Mini Player HUD block must exist');
+    const hudHtml = html.slice(hudStart, hudEnd);
+    for (const emoji of ['📌', '⤢', '⏮', '⏭', '🔊', '🔇']) {
+      assert.equal(hudHtml.includes(emoji), false, `Mini Player HUD must not contain raw emoji ${emoji}`);
+    }
+
+    assert.ok(html.includes('(-0.25s)') && html.includes('(+0.25s)'), 'Subtitle menu hints must reflect +-0.25s step');
+
+    const stylesCss = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    assert.ok(stylesCss.includes('html.is-mini-player.is-mini-audio'), 'CSS must support compact audio Mini Player mode');
+    const themesCss = fs.readFileSync(path.join(ROOT, 'css/themes.css'), 'utf8');
+    assert.ok(themesCss.includes('prefers-reduced-transparency: reduce'), 'themes.css must support prefers-reduced-transparency');
+  });
+
+  // 18. Session Clear, MediaSession & Single-Load Resume Invariants
+  await runTest('Player App v1.7.0: clearSessionOnly clears native paths, MediaSession wired & no double-load', () => {
+    const appCode = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appCode.includes('delete current.trackFullPath;'), 'clearSessionOnly must delete trackFullPath');
+    assert.ok(appCode.includes('delete current.nativeTrackPaths;'), 'clearSessionOnly must delete nativeTrackPaths');
+    assert.ok(appCode.includes('navigator.mediaSession'), 'player-app.js must integrate navigator.mediaSession');
+    assert.ok(appCode.includes("msg.type === 'aaz-taskbar-action'"), 'player-app.js must handle aaz-taskbar-action');
+    assert.ok(appCode.includes('startTime:'), 'openExternalPathAtTime must pass startTime directly to avoid double-load');
+    assert.ok(appCode.includes('invalidateStoreCache'), 'player-app.js must invalidate phase3 store cache on storage sync');
+
+    const settingsCode = fs.readFileSync(path.join(ROOT, 'js/modules/settings-manager.js'), 'utf8');
+    assert.ok(settingsCode.includes('WEBGL_lose_context'), 'detectHardwareAcceleration must release WebGL probe context');
+    assert.ok(settingsCode.includes('cachedHwInfo'), 'detectHardwareAcceleration must memoize GPU probe');
+  });
+
+  // 19. Rust Backend v1.7.0: Taskbar Controls, Updater Replay Protection & Bounded Scanners
+  await runTest('Rust Backend v1.7.0: taskbar.rs wired, replay-protected Minisign, work_area & bounded dir scan', () => {
+    const taskbarPath = path.join(ROOT, 'desktop/src-tauri/src/taskbar.rs');
+    assert.ok(fs.existsSync(taskbarPath), 'desktop/src-tauri/src/taskbar.rs must exist');
+    const taskbarRs = fs.readFileSync(taskbarPath, 'utf8');
+    assert.ok(taskbarRs.includes('ITaskbarList3'), 'taskbar.rs must implement Windows ITaskbarList3');
+    assert.ok(taskbarRs.includes('TaskbarButtonCreated'), 'taskbar.rs must recover after Explorer restart');
+    assert.ok(taskbarRs.includes('aaz:taskbar-action'), 'taskbar.rs must emit aaz:taskbar-action');
+    assert.ok(taskbarRs.includes('DestroyIcon'), 'taskbar.rs must dispose HICON handles');
+
+    const libRs = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/src/lib.rs'), 'utf8');
+    assert.ok(libRs.includes('mod taskbar;'), 'lib.rs must declare mod taskbar');
+    assert.ok(libRs.includes('aaz_taskbar_update_state'), 'lib.rs must expose aaz_taskbar_update_state');
+    assert.ok(libRs.includes('attach_taskbar_controls'), 'lib.rs must attach taskbar controls on window creation');
+    assert.ok(libRs.includes('validate_minisign_trusted_comment'), 'lib.rs must validate Minisign trusted comments against replay');
+    assert.ok(libRs.includes('update_downloading'), 'lib.rs must guard concurrent update downloads');
+    assert.ok(libRs.includes('sweep_old_update_installers'), 'lib.rs must clean up old staged update installers');
+    assert.ok(libRs.includes('work_area()'), 'lib.rs must clamp window geometry to monitor work_area()');
+    assert.ok(libRs.includes('MAX_DIR_SCAN_DEPTH'), 'lib.rs must bound recursive directory scan depth');
+    assert.ok(libRs.includes('MAX_DIR_SCAN_ENTRIES'), 'lib.rs must bound recursive directory scan entries');
+    assert.ok(libRs.includes('MAX_TEXT_FILE_BYTES'), 'lib.rs must bound playlist/subtitle text reads');
+  });
+
+  // 20. Release Workflow Fail-Closed Signing & Docs/Changelog Version Parity
+  await runTest('Release & Docs v1.7.0: fail-closed release.yml signing, trusted comments & README/CHANGELOG version sync', () => {
+    const deskPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
+    const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    assert.ok(releaseYml.includes('allow_unsigned_preview'), 'release.yml must gate unsigned builds behind explicit allow_unsigned_preview');
+    assert.ok(releaseYml.includes('Release blocked (fail-closed)'), 'release.yml must fail closed when signing keys are missing');
+    assert.ok(releaseYml.includes('aaz-player|version=$ver|file=$fileName|sha256=$fileHash'), 'release.yml must pass replay-resistant trusted comments to minisign');
+
+    const ciYml = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    assert.ok(ciYml.includes('npm run lint') && ciYml.includes('npm run build'), 'ci.yml must run TypeScript lint and production build');
+
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    assert.ok(readme.includes(`v${deskPkg.version}`), `README.md badge must match v${deskPkg.version}`);
+
+    const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+    assert.ok(changelog.includes(`## [${deskPkg.version}]`), `CHANGELOG.md must contain section ## [${deskPkg.version}]`);
+  });
+
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 }

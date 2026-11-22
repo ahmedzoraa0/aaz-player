@@ -79,9 +79,27 @@ export function initWorkspaceShell() {
     return window.location.href.split('#')[0].split('?')[0];
   }
 
+  let lastTaskbarSig = '';
+  function syncTaskbarControls() {
+    if (!shellDesktop || typeof shellDesktop.updateTaskbarState !== 'function') return;
+    const active = tabs.find((tb) => tb.id === activeTabId);
+    const payload = {
+      hasMedia: Boolean(active && active.hasMedia),
+      isPlaying: Boolean(active && active.isPlaying),
+      canPrev: Boolean(active && active.canPrev),
+      canNext: Boolean(active && active.canNext),
+      lang: shellLang === 'ar' ? 'ar' : 'en',
+    };
+    const sig = `${payload.hasMedia ? 1 : 0}|${payload.isPlaying ? 1 : 0}|${payload.canPrev ? 1 : 0}|${payload.canNext ? 1 : 0}|${payload.lang}`;
+    if (sig === lastTaskbarSig) return;
+    lastTaskbarSig = sig;
+    shellDesktop.updateTaskbarState(payload).catch(() => {});
+  }
+
   function updateWindowTitle() {
     const active = tabs.find((tb) => tb.id === activeTabId);
     document.title = active && active.title ? `${active.title} — AAZ Player` : 'AAZ Player';
+    syncTaskbarControls();
   }
 
   function renderTabStrip() {
@@ -175,6 +193,7 @@ export function initWorkspaceShell() {
     }
     syncWinMaxIcons(shellIsMaximized);
     renderTabStrip();
+    syncTaskbarControls();
   }
 
   function activateTab(tabId) {
@@ -212,6 +231,8 @@ export function initWorkspaceShell() {
       title: '',
       isPlaying: false,
       hasMedia: false,
+      canPrev: false,
+      canNext: false,
       kind: '',
       sinkLabel: '',
       ready: false,
@@ -327,6 +348,8 @@ export function initWorkspaceShell() {
       tab.title = msg.title || '';
       tab.isPlaying = Boolean(msg.isPlaying);
       tab.hasMedia = Boolean(msg.hasMedia);
+      tab.canPrev = Boolean(msg.canPrev);
+      tab.canNext = Boolean(msg.canNext);
       tab.kind = msg.kind || '';
       tab.sinkLabel = msg.sinkLabel || '';
       renderTabStrip();
@@ -365,6 +388,21 @@ export function initWorkspaceShell() {
       return;
     }
 
+    if (msg.type === 'aaz-window-action') {
+      if (msg.action === 'minimize') {
+        shellDesktop?.minimizeWindow?.().catch(() => {});
+      } else if (msg.action === 'close') {
+        windowLayout.captureAndSaveCurrentGeometry().finally(() => {
+          shellDesktop?.closeWindow?.().catch(() => {});
+        });
+      } else if (msg.action === 'mini-preset' && msg.width && msg.height) {
+        windowLayout.resizeMiniPreset(msg.width, msg.height).catch(() => {});
+      } else if (msg.action === 'mini-drag-end') {
+        windowLayout.scheduleGeometrySave(300);
+      }
+      return;
+    }
+
     if (msg.type === 'aaz-sync-prefs') {
       if (msg.theme || msg.lang || msg.skin) {
         applyShellPrefs(msg.theme || shellTheme, msg.lang || shellLang, msg.skin || shellSkin);
@@ -377,6 +415,31 @@ export function initWorkspaceShell() {
             lang: msg.lang,
             skin: msg.skin,
             subtitleStyle: msg.subtitleStyle,
+          });
+        }
+      });
+    }
+  });
+
+  // Synchronize theme, visual skin, and language changes across separate windows
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'aaz_theme' || e.key === 'aaz_lang' || e.key === SKIN_STORAGE_KEY) {
+      let nextTheme = shellTheme;
+      let nextLang = shellLang;
+      let nextSkin = shellSkin;
+      try {
+        nextTheme = localStorage.getItem('aaz_theme') || 'dark';
+        nextLang = localStorage.getItem('aaz_lang') || 'en';
+        nextSkin = sanitizeSkin(localStorage.getItem(SKIN_STORAGE_KEY));
+      } catch {}
+      applyShellPrefs(nextTheme, nextLang, nextSkin);
+      tabs.forEach((tb) => {
+        if (tb.iframe && tb.iframe.contentWindow) {
+          sendSafeMessage(tb.iframe.contentWindow, {
+            type: 'aaz-apply-prefs',
+            theme: nextTheme,
+            lang: nextLang,
+            skin: nextSkin,
           });
         }
       });
@@ -542,6 +605,18 @@ export function initWorkspaceShell() {
             payload,
           });
         });
+      });
+    }
+    if (shellDesktop.onTaskbarAction) {
+      shellDesktop.onTaskbarAction((action) => {
+        if (action !== 'prev' && action !== 'toggle-play' && action !== 'next') return;
+        const active = tabs.find((tb) => tb.id === activeTabId);
+        if (active && active.iframe && active.iframe.contentWindow) {
+          sendSafeMessage(active.iframe.contentWindow, {
+            type: 'aaz-taskbar-action',
+            action,
+          });
+        }
       });
     }
     if (shellDesktop.getLaunchFiles) {

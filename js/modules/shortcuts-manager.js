@@ -10,6 +10,8 @@
  * - Safe guard to ignore shortcuts while typing in inputs, textareas, selects, or editable nodes.
  */
 
+export const UNBOUND_SENTINEL = '__UNBOUND__';
+
 export const DEFAULT_SHORTCUTS = Object.freeze([
   { id: 'playPause', defaultKey: 'Space', labelEn: 'Play / Pause', labelAr: 'تشغيل / إيقاف مؤقت' },
   { id: 'stop', defaultKey: 'S', labelEn: 'Stop Playback', labelAr: 'إيقاف التشغيل' },
@@ -19,13 +21,14 @@ export const DEFAULT_SHORTCUTS = Object.freeze([
   { id: 'volumeDown', defaultKey: 'ArrowDown', labelEn: 'Volume Down', labelAr: 'خفض الصوت' },
   { id: 'mute', defaultKey: 'M', labelEn: 'Mute / Unmute', labelAr: 'كتم / إلغاء الكتم' },
   { id: 'fullscreen', defaultKey: 'F', labelEn: 'Toggle Fullscreen', labelAr: 'ملء الشاشة' },
+  { id: 'pip', defaultKey: 'P', labelEn: 'Picture-in-Picture', labelAr: 'صورة داخل صورة' },
   { id: 'nextTrack', defaultKey: 'N', labelEn: 'Next Track', labelAr: 'المقطع التالي' },
-  { id: 'prevTrack', defaultKey: 'P', labelEn: 'Previous Track', labelAr: 'المقطع السابق' },
+  { id: 'prevTrack', defaultKey: 'Shift+P', labelEn: 'Previous Track', labelAr: 'المقطع السابق' },
   { id: 'subEarlier', defaultKey: 'G', labelEn: 'Subtitle Earlier (-0.25s)', labelAr: 'تقديم الترجمة (-0.25ث)' },
   { id: 'subLater', defaultKey: 'H', labelEn: 'Subtitle Later (+0.25s)', labelAr: 'تأخير الترجمة (+0.25ث)' },
   { id: 'audioOutput', defaultKey: 'Ctrl+Shift+A', labelEn: 'Audio Output Device', labelAr: 'جهاز إخراج الصوت' },
   { id: 'miniPlayer', defaultKey: 'Ctrl+Shift+M', labelEn: 'Toggle Mini Player', labelAr: 'المشغل المصغر' },
-  { id: 'cast', defaultKey: 'K', labelEn: 'Cast to TV / Network', labelAr: 'البث إلى التلفاز' },
+  { id: 'cast', defaultKey: 'C', labelEn: 'Cast to TV / Network', labelAr: 'البث إلى التلفاز' },
   { id: 'snapshot', defaultKey: 'Shift+S', labelEn: 'Capture Video Snapshot', labelAr: 'التقاط صورة للفيديو' },
   { id: 'abLoop', defaultKey: 'L', labelEn: 'A–B Section Loop', labelAr: 'تكرار مقطع A–B' },
   { id: 'bookmark', defaultKey: 'B', labelEn: 'Add Timestamp Bookmark', labelAr: 'إضافة علامة زمنية' },
@@ -89,7 +92,14 @@ function canonicalKeyName(key, code = '') {
 export function isTypingTarget(target) {
   if (!target || typeof target !== 'object') return false;
   const tag = String(target.tagName || '').toUpperCase();
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const type = String(target.type || '').toLowerCase();
+    if (type === 'range' || type === 'button' || type === 'checkbox' || type === 'radio') {
+      return false;
+    }
+    return true;
+  }
   if (target.isContentEditable) return true;
   return false;
 }
@@ -105,6 +115,9 @@ export function createShortcutsManager({ getStore, persist }) {
 
   function getBinding(actionId) {
     const custom = getCustomMap();
+    if (custom[actionId] === UNBOUND_SENTINEL) {
+      return '';
+    }
     if (typeof custom[actionId] === 'string' && custom[actionId]) {
       return normalizeKeyCombo(custom[actionId]);
     }
@@ -113,11 +126,21 @@ export function createShortcutsManager({ getStore, persist }) {
   }
 
   function getAllBindings() {
-    return DEFAULT_SHORTCUTS.map((def) => ({
-      ...def,
-      key: getBinding(def.id),
-      isCustom: Boolean(getCustomMap()[def.id] && getCustomMap()[def.id] !== def.defaultKey),
-    }));
+    const custom = getCustomMap();
+    return DEFAULT_SHORTCUTS.map((def) => {
+      const key = getBinding(def.id);
+      const isCustom =
+        custom[def.id] === UNBOUND_SENTINEL ||
+        Boolean(
+          custom[def.id] &&
+            normalizeKeyCombo(custom[def.id]) !== normalizeKeyCombo(def.defaultKey)
+        );
+      return {
+        ...def,
+        key,
+        isCustom,
+      };
+    });
   }
 
   function findConflict(actionId, combo) {
@@ -146,8 +169,8 @@ export function createShortcutsManager({ getStore, persist }) {
 
     const custom = getCustomMap();
     if (conflict && allowOverride) {
-      // Swap/clear conflicting binding to its default only if different, else unbind
-      custom[conflict.id] = '';
+      // Explicitly mark overridden binding as unbound so it never reverts to its default
+      custom[conflict.id] = UNBOUND_SENTINEL;
     }
 
     if (norm === normalizeKeyCombo(def.defaultKey)) {

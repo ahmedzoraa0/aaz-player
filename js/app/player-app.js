@@ -619,8 +619,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPreviewSample: 'AAZ Player — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
           menuSubtitles: 'Subtitles',
           headingSubSync: 'Subtitle Timing Sync',
-          cmdSubEarlier: 'Earlier (-0.5s)',
-          cmdSubLater: 'Later (+0.5s)',
+          cmdSubEarlier: 'Earlier (-0.25s)',
+          cmdSubLater: 'Later (+0.25s)',
           cmdSubSyncReset: 'Reset Timing (0.0s)',
           scSubSync: 'Subtitle timing earlier / later',
           subSyncHint: 'Shortcuts: G (Earlier) / H (Later)',
@@ -901,8 +901,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAAZ Player — Subtitle Live Preview',
           menuSubtitles: 'الترجمة',
           headingSubSync: 'تقديم وتأخير الترجمة',
-          cmdSubEarlier: 'تقديم الترجمة (-0.5 ثانية)',
-          cmdSubLater: 'تأخير الترجمة (+0.5 ثانية)',
+          cmdSubEarlier: 'تقديم الترجمة (-0.25 ثانية)',
+          cmdSubLater: 'تأخير الترجمة (+0.25 ثانية)',
           cmdSubSyncReset: 'إعادة ضبط التوقيت (0.0 ثانية)',
           scSubSync: 'تقديم أو تأخير الترجمة',
           subSyncHint: 'اختصار سريع: G للتقديم / H للتأخير',
@@ -1921,8 +1921,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (!current) return;
           delete current.trackKey;
           delete current.trackName;
+          delete current.trackFullPath;
           delete current.folderName;
           delete current.nativeFolderPath;
+          delete current.nativeTrackPaths;
           delete current.currentTime;
           delete current.activeSavedPlaylistId;
           storageManager.save(current);
@@ -3550,7 +3552,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           restoreSavedPosition = true,
           autoPlay = false,
           keepActiveSavedPlaylist = false,
-          nativeFolderPath = ''
+          nativeFolderPath = '',
+          startTime = 0
         } = options;
         stopAutosaveTimer();
         el.media.pause();
@@ -3595,7 +3598,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           await loadTrackByKey(matched.key, { autoPlay, startTime: seekTo });
         } else {
           const first = getModeQueue()[0] || tracks[0];
-          if (first) await loadTrackByKey(first.key, { autoPlay, startTime: 0 });
+          const explicitStart = Number.isFinite(startTime) && startTime > 0 ? startTime : 0;
+          if (first) await loadTrackByKey(first.key, { autoPlay, startTime: explicitStart });
         }
       }
 
@@ -4891,16 +4895,42 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         notifyShellTabState();
       }
 
+      function syncMediaSession() {
+        if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+        try {
+          const track = getCurrentTrack();
+          const isPlaying = !el.media.paused && !el.media.ended;
+          if (track && typeof MediaMetadata === 'function') {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: track.displayName || track.name || 'AAZ Player',
+              artist: state.folderName || 'AAZ Player',
+              album: 'AAZ Player',
+            });
+          } else if (!track) {
+            navigator.mediaSession.metadata = null;
+          }
+          navigator.mediaSession.playbackState = !track ? 'none' : isPlaying ? 'playing' : 'paused';
+        } catch (err) {
+          errorHandler.log('mediaSession.sync', err);
+        }
+      }
+
       function notifyShellTabState() {
         const track = getCurrentTrack();
         const isPlaying = !el.media.paused && !el.media.ended;
+        const { queue, idx } = getCurrentQueuePosition();
+        const canPrev = queue.length > 0 && (idx > 0 || state.repeatMode === 'all' || el.media.currentTime > 3);
+        const canNext = queue.length > 0 && (idx < queue.length - 1 || state.repeatMode === 'all' || (state.shuffle && queue.length > 1));
         postToShell('aaz-tab-state', {
           title: track ? track.displayName : '',
           isPlaying,
           hasMedia: state.allTracks.length > 0,
+          canPrev,
+          canNext,
           kind: track ? track.kind : '',
           sinkLabel: state.audioSinkId ? (state.audioSinkLabel || '') : ''
         });
+        syncMediaSession();
       }
 
       function updatePlayButtonUI() {
@@ -4927,6 +4957,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         el.prevBtn.disabled = !(queue.length > 0 && (idx > 0 || state.repeatMode === 'all' || el.media.currentTime > 3));
         el.nextBtn.disabled = !(queue.length > 0 && (idx < queue.length - 1 || state.repeatMode === 'all' || (state.shuffle && queue.length > 1)));
+        notifyShellTabState();
       }
 
       function updateSeekUI() {
@@ -6028,8 +6059,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             }
             break;
           case 'open-subtitle-style': openSubtitleStyleModal(); break;
-          case 'sub-sync-earlier': adjustSubtitleOffset(-0.5, true); break;
-          case 'sub-sync-later': adjustSubtitleOffset(0.5, true); break;
+          case 'sub-sync-earlier': adjustSubtitleOffset(-0.25, true); break;
+          case 'sub-sync-later': adjustSubtitleOffset(0.25, true); break;
           case 'sub-sync-reset': resetSubtitleOffset(true); break;
           case 'open-cast': openCastModal(); break;
           case 'toggle-pip': togglePictureInPicture(); break;
@@ -6978,9 +7009,29 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (!desktopBridge) return;
         if (state.updateState === 'available' && desktopBridge.downloadUpdate) {
           el.updateActionBtn.disabled = true;
-          await desktopBridge.downloadUpdate();
+          try {
+            await desktopBridge.downloadUpdate();
+          } catch (err) {
+            el.updateActionBtn.disabled = false;
+            errorHandler.notify(ErrorCategory.UPDATE, err);
+          }
         } else if (state.updateState === 'downloaded' && desktopBridge.installUpdate) {
-          desktopBridge.installUpdate();
+          el.updateActionBtn.disabled = true;
+          try {
+            const launched = await desktopBridge.installUpdate();
+            if (!launched) {
+              el.updateActionBtn.disabled = false;
+              showNotice(
+                state.lang === 'ar'
+                  ? 'تعذر تشغيل المثبت المحمّل. جرّب إعادة التحميل.'
+                  : 'Could not launch the downloaded installer. Please try downloading again.',
+                true
+              );
+            }
+          } catch (err) {
+            el.updateActionBtn.disabled = false;
+            errorHandler.notify(ErrorCategory.UPDATE, err);
+          }
         }
       });
       el.dismissUpdateBtn.addEventListener('click', () => {
@@ -7204,6 +7255,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       window.addEventListener('storage', (e) => {
         if (e.key === STORAGE_KEY) {
           syncSavedPlaylistsFromStorage();
+          if (phase3 && typeof phase3.invalidateStoreCache === 'function') {
+            phase3.invalidateStoreCache();
+            phase3.renderHistory();
+            phase3.renderLibrary();
+          }
+        } else if (e.key === 'aaz_theme' && (e.newValue === 'dark' || e.newValue === 'light')) {
+          applyTheme(e.newValue, false, false);
+        } else if (e.key === SKIN_STORAGE_KEY && e.newValue) {
+          applySkin(sanitizeSkin(e.newValue), false, false);
+        } else if (e.key === 'aaz_lang' && (e.newValue === 'en' || e.newValue === 'ar')) {
+          applyLanguage(e.newValue, false, false);
         }
       });
 
@@ -7511,8 +7573,6 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           stepVideoFrame(1);
         } else if (e.key === '0') {
           if (!el.videoFrame.hidden) resetVideoTransform(true);
-        } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
-          openCastModal();
         } else if (e.key === '?') {
           if (phase3) phase3.renderShortcutsEditor();
           el.shortcutsModal.hidden = !el.shortcutsModal.hidden;
@@ -7628,31 +7688,60 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           setPlaybackRate(1, false);
         }
 
-        async function handleExternalOpenPaths(paths) {
-          if (!desktopBridge || !paths || !paths.length) return;
+        async function handleExternalOpenPaths(paths, options = {}) {
+          const { startTime = 0 } = options;
+          if (!desktopBridge || !paths || !paths.length) return false;
           const inspected = await desktopBridge.inspectPaths(paths);
-          if (!inspected) return;
+          if (!inspected) return false;
           if (inspected.playlists && inspected.playlists.length > 0) {
             await handleImportedPlaylistContent(inspected.playlists[0].name, inspected.playlists[0].content);
-            return;
+            return true;
           }
-          if (!inspected.entries?.length) return;
+          if (!inspected.entries?.length) return false;
           // Support dragging a single .srt / .vtt subtitle directly onto an active video!
           if (inspected.entries.length === 1 && inspected.entries[0].kind === 'subtitle' && inspected.entries[0].fullPath) {
             const subText = await desktopBridge.readTextFile(inspected.entries[0].fullPath);
             if (subText) {
               attachSubtitleVttText(subText, inspected.entries[0].name);
               showNotice(t('subAutoLoaded', { name: inspected.entries[0].name }));
-              return;
+              return true;
             }
           }
           const { tracks, subMap } = buildTracksFromElectronEntries(inspected.entries);
-          if (tracks.length === 0) return;
+          if (tracks.length === 0) return false;
           await applyLoadedTracks(tracks, subMap, inspected.folderName || t('currentQueue'), 'electron', {
-            restoreSavedPosition: inspected.isDirectory,
+            restoreSavedPosition: inspected.isDirectory && !(startTime > 0),
             autoPlay: true,
+            startTime,
             nativeFolderPath: inspected.isDirectory ? (inspected.folderPath || '') : ''
           });
+          return true;
+        }
+
+        function handleTaskbarMediaAction(action) {
+          if (action === 'toggle-play') togglePlayPause();
+          else if (action === 'prev') playPreviousTrack();
+          else if (action === 'next') playNextTrack(true, false);
+        }
+
+        if (typeof navigator !== 'undefined' && 'mediaSession' in navigator) {
+          const bindMs = (name, fn) => {
+            try {
+              navigator.mediaSession.setActionHandler(name, fn);
+            } catch (err) {
+              errorHandler.log(`mediaSession.bind.${name}`, err);
+            }
+          };
+          bindMs('play', () => {
+            if (el.media.paused) togglePlayPause();
+          });
+          bindMs('pause', () => {
+            if (!el.media.paused) togglePlayPause();
+          });
+          bindMs('previoustrack', () => playPreviousTrack());
+          bindMs('nexttrack', () => playNextTrack(true, false));
+          bindMs('seekbackward', (details) => skipBySeconds(-(details?.seekOffset || 5)));
+          bindMs('seekforward', (details) => skipBySeconds(details?.seekOffset || 5));
         }
 
         if (desktopBridge) {
@@ -7672,6 +7761,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (!IS_TAB_FRAME) {
             if (desktopBridge.onUpdateStatus) desktopBridge.onUpdateStatus(handleUpdateStatus);
             if (desktopBridge.onOpenExternal) desktopBridge.onOpenExternal(handleExternalOpenPaths);
+            if (desktopBridge.onTaskbarAction) desktopBridge.onTaskbarAction(handleTaskbarMediaAction);
           }
         }
 
@@ -7690,6 +7780,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               if (msg.subtitleStyle) updateSubtitleStyle(msg.subtitleStyle, false, false);
             } else if (msg.type === 'aaz-shell-mini-state') {
               if (phase3) phase3.applyMiniPlayerVisuals(msg.enabled, msg.alwaysOnTop);
+            } else if (msg.type === 'aaz-taskbar-action') {
+              handleTaskbarMediaAction(msg.action);
             }
           });
         }
@@ -7799,9 +7891,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           },
           loadTrackByKey,
           openExternalPathAtTime: async (fullPath, startTime = 0) => {
-            await handleExternalOpenPaths([fullPath]);
-            if (startTime > 0 && state.currentKey) {
-              await loadTrackByKey(state.currentKey, { autoPlay: true, startTime });
+            const opened = await handleExternalOpenPaths([fullPath], { startTime });
+            if (!opened) {
+              showNotice(
+                state.lang === 'ar'
+                  ? 'تعذر فتح الملف — ربما تم نقله أو حذفه من الجهاز.'
+                  : 'Could not open file — it may have been moved or deleted.',
+                true
+              );
             }
           },
           togglePlayPause,
@@ -7821,6 +7918,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           },
           toggleMute,
           toggleFullscreen,
+          togglePictureInPicture,
           playNextTrack: () => playNextTrack(true, false),
           playPrevTrack: playPreviousTrack,
           adjustSubtitleOffset: (delta) => adjustSubtitleOffset(delta, true),

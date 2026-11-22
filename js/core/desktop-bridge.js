@@ -70,7 +70,7 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
         height: Math.max(540, Math.round(Number(height) || 780)),
         maximized: Boolean(maximized),
       }),
-    setMiniMode: ({ enabled, x, y, width, height, alwaysOnTop }) =>
+    setMiniMode: ({ enabled, x, y, width, height, alwaysOnTop, maximized }) =>
       invoke('aaz_set_mini_mode', {
         enabled: Boolean(enabled),
         x: typeof x === 'number' && Number.isFinite(x) ? Math.round(x) : null,
@@ -78,7 +78,17 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
         width: typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : null,
         height: typeof height === 'number' && Number.isFinite(height) ? Math.round(height) : null,
         alwaysOnTop: typeof alwaysOnTop === 'boolean' ? alwaysOnTop : null,
+        maximized: typeof maximized === 'boolean' ? maximized : null,
       }),
+    updateTaskbarState: ({ hasMedia, isPlaying, canPrev, canNext, lang }) =>
+      invoke('aaz_taskbar_update_state', {
+        hasMedia: Boolean(hasMedia),
+        isPlaying: Boolean(isPlaying),
+        canPrev: Boolean(canPrev),
+        canNext: Boolean(canNext),
+        lang: lang === 'ar' ? 'ar' : 'en',
+      }),
+    onTaskbarAction: (callback) => listen('aaz:taskbar-action', callback),
     saveSnapshot: (dataBase64, suggestedName) =>
       invoke('aaz_save_snapshot', { dataBase64, suggestedName }),
     listSystemFonts: () => invoke('aaz_list_system_fonts'),

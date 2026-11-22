@@ -4,6 +4,38 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.7.0] - 2026-11-22
+
+### Native Windows Taskbar & Media Session
+- **Windows Taskbar Thumbnail Media Controls**: Added native `ITaskbarList3` thumbnail toolbar (`Previous`, `Play/Pause`, `Next`) with programmatic 24×24 BGRA icons, `TaskbarButtonCreated` Explorer-restart recovery, live enabled/disabled and localized tooltip sync, and clean GDI resource disposal on window destroy.
+- **OS Media Keys (`navigator.mediaSession`)**: Wired metadata, playback state, and play/pause/previous/next/seek action handlers for keyboard media keys and Windows media flyouts.
+
+### Mini Player Overhaul
+- **Crisp SVG Controls & Seek Bar**: Replaced emoji icons in the Mini Player HUD with crisp inline SVGs, added a live scrubbable seek bar with elapsed/remaining time display, `S` (360×202) / `M` (480×270) / `L` (640×360) quick size presets, and Minimize / Close buttons.
+- **Audio Compact Mode & Frameless Resize Polish**: Added always-visible HUD mode when playing audio or paused, 5px edge clearance so Windows frameless resize handles remain effortless to grab, drag-threshold + double-click to return to full player, and DPI/work-area-safe geometry clamping with single-step maximized restore.
+- **Accessibility**: Added `@media (prefers-reduced-transparency: reduce)` fallback for Glass skin and Mini Player HUD, and included Mini Player transitions in `prefers-reduced-motion`.
+
+### Updater Security & Reliability Hardening
+- **Replay & Downgrade Protection**: Bound Minisign trusted comments to exact release version, filename, and SHA-256 (`aaz-player|version=<ver>|file=<name>|sha256=<hash>`) and verified them in Rust before accepting an installer.
+- **Private Update Staging & Concurrency Guard**: Moved downloaded installers into app-private `app_cache_dir/updates` with unique nonces, automatic cleanup of old installers, an RAII concurrency lock preventing overlapping downloads, and explicit `aaz:update-status` error reporting on installer launch failure.
+- **Fail-Closed Release Workflow**: Updated `.github/workflows/release.yml` to block stable releases when `AAZ_UPDATER_SIGNING_KEY` or `AAZ_UPDATER_PUBLIC_KEY` is missing (with an explicit opt-in `allow_unsigned_preview` prerelease flag on manual `workflow_dispatch`) and to pull release notes directly from `CHANGELOG.md`.
+
+### Bug Fixes & Stability
+- **Keyboard Shortcuts**: Fixed overridden shortcuts reverting to their default key via an explicit unbound sentinel, allowed shortcuts while range/button/checkbox/radio inputs are focused, unified menu hints (`Previous Track: Shift+P`, `Next Track: N`, `PiP: P`, `Cast: C`), and unified subtitle timing steps to `±0.25s`.
+- **Session Resume & Watch History**: Fixed `Clear Saved Session` leaving stale desktop paths (`trackFullPath` / `nativeTrackPaths`), eliminated double-loading and wrong-track seeking in `openExternalPathAtTime`, fixed the Watch History remove tooltip and added an indicator when more than 20 entries exist.
+- **Cross-Window & Backend Hardening**: Synced theme, skin, and language changes across independent windows via `storage` events, memoized WebGL GPU detection with explicit context disposal, bounded Rust directory scans (`MAX_DIR_SCAN_DEPTH = 24`, `MAX_DIR_SCAN_ENTRIES = 25,000`) and text file reads, enforced authorization in `aaz_find_nearby_subtitle`, added fallback window recovery in single-instance handling, and fixed Vite ESM `__dirname` usage.
+
+---
+
+## [1.6.0] - 2026-11-21
+
+### Theme Studio & UI Consolidation
+- **16-Theme Green-Identity Studio (32 Dark & Light Modes)**: Added 16 distinct visual themes preserving AAZ Player's green identity—including Minecraft, LEGO, Roblox, Super Arcade 16-Bit, Classic OS 95, Game Boy LCD, Blueprint CAD, Glassmorphism, Comic Pop, Terminal CRT, Paper Editorial, and more—accessible via `View -> Theme Style`.
+- **Unified Sidebar & Open Recent History**: Moved Watch History into `Media -> Open Recent` submenu, unified the Library tab layout with Queue and Saved Playlists, and added automatic desktop session resume without re-prompting Windows Explorer.
+- **Offline Fonts & Hardened Packaging**: Bundled Cairo, JetBrains Mono, and Plus Jakarta Sans WOFF2 fonts locally (zero external font requests), removed `.ts` from Windows file associations, added bilingual `NO_LAN_IP` and audio output fallback notices, and replaced silent catch blocks with structured error logging.
+
+---
+
 ## [1.5.0] - 2026-11-21
 
 ### Security Hardening (Phase 1)

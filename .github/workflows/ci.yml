@@ -8,6 +8,9 @@ on:
       - 'security/**'
       - 'refactor/**'
       - 'features/**'
+      - 'bugfix/**'
+      - 'fix/**'
+      - 'chore/**'
   pull_request:
     branches:
       - main
@@ -25,6 +28,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: TypeScript lint check
+        run: npm run lint
+
+      - name: Build production frontend bundle
+        run: npm run build
 
       - name: Sync frontend assets into desktop/app
         run: node desktop/scripts/prepare-ci.cjs

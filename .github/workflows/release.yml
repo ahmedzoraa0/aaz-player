@@ -11,6 +11,12 @@ on:
       - 'desktop/**'
       - '.github/workflows/release.yml'
   workflow_dispatch:
+    inputs:
+      allow_unsigned_preview:
+        description: 'Allow publishing an unsigned prerelease preview when Minisign secrets are not configured'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,6 +64,38 @@ jobs:
             Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
           }
           exit 0
+
+      - name: Verify Minisign signing configuration (fail closed)
+        id: signing_gate
+        if: steps.version_check.outputs.should_release == 'true'
+        shell: pwsh
+        env:
+          AAZ_UPDATER_SIGNING_KEY: ${{ secrets.AAZ_UPDATER_SIGNING_KEY }}
+          AAZ_UPDATER_PUBLIC_KEY: ${{ secrets.AAZ_UPDATER_PUBLIC_KEY || vars.AAZ_UPDATER_PUBLIC_KEY }}
+          ALLOW_UNSIGNED_PREVIEW: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_unsigned_preview }}
+        run: |
+          $hasSigningKey = -not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_SIGNING_KEY)
+          $hasPublicKey = -not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_PUBLIC_KEY)
+          $allowPreview = ($env:ALLOW_UNSIGNED_PREVIEW -eq "true")
+
+          if ($hasSigningKey -and -not $hasPublicKey) {
+            Write-Error "AAZ_UPDATER_SIGNING_KEY is configured, but AAZ_UPDATER_PUBLIC_KEY is missing. Both secrets are required so the compiled binary can verify signatures."
+            exit 1
+          }
+
+          if (-not $hasSigningKey -or -not $hasPublicKey) {
+            if ($allowPreview) {
+              Write-Host "::warning::Publishing an UNSIGNED PRERELEASE preview because allow_unsigned_preview=true. The in-app updater will refuse unsigned builds."
+              Add-Content -Path $env:GITHUB_OUTPUT -Value "signed=false"
+              Add-Content -Path $env:GITHUB_OUTPUT -Value "prerelease=true"
+              exit 0
+            }
+            Write-Error "Release blocked (fail-closed): AAZ_UPDATER_SIGNING_KEY and AAZ_UPDATER_PUBLIC_KEY must both be configured in GitHub Secrets/Variables before publishing a stable release. To build an unsigned test preview manually, run workflow_dispatch with allow_unsigned_preview=true."
+            exit 1
+          }
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "signed=true"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "prerelease=false"
 
       - name: Setup Rust stable toolchain
         if: steps.version_check.outputs.should_release == 'true'
@@ -107,6 +145,8 @@ jobs:
           AAZ_UPDATER_SIGNING_KEY: ${{ secrets.AAZ_UPDATER_SIGNING_KEY }}
           AAZ_UPDATER_SIGNING_KEY_PASSWORD: ${{ secrets.AAZ_UPDATER_SIGNING_KEY_PASSWORD }}
           AAZ_UPDATER_PUBLIC_KEY: ${{ secrets.AAZ_UPDATER_PUBLIC_KEY || vars.AAZ_UPDATER_PUBLIC_KEY }}
+          SIGNED_RELEASE: ${{ steps.signing_gate.outputs.signed }}
+          IS_PRERELEASE: ${{ steps.signing_gate.outputs.prerelease }}
         run: |
           $ver = "${{ steps.version_check.outputs.version }}"
           $tag = "${{ steps.version_check.outputs.tag }}"
@@ -139,7 +179,7 @@ jobs:
 
           $uploadFiles = @($setupDest, $portableDest, $sumsPath)
 
-          if (-not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_SIGNING_KEY)) {
+          if ($env:SIGNED_RELEASE -eq "true") {
             if (-not (Get-Command minisign -ErrorAction SilentlyContinue)) {
               choco install minisign -y --no-progress | Out-Null
             }
@@ -147,8 +187,11 @@ jobs:
             try {
               Set-Content -Path $keyFile -Value $env:AAZ_UPDATER_SIGNING_KEY -NoNewline -Encoding UTF8
               foreach ($targetFile in @($setupDest, $portableDest, $sumsPath)) {
+                $fileName = [System.IO.Path]::GetFileName($targetFile)
+                $fileHash = (Get-FileHash -Path $targetFile -Algorithm SHA256).Hash.ToLower()
+                $trustedComment = "aaz-player|version=$ver|file=$fileName|sha256=$fileHash"
                 $pw = if ($null -ne $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD) { $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD } else { "" }
-                $pw | minisign -S -s $keyFile -m $targetFile
+                $pw | minisign -S -s $keyFile -m $targetFile -t $trustedComment
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "Minisign signing failed for $targetFile"
                   exit 1
@@ -158,12 +201,10 @@ jobs:
                   Write-Error "Expected signature file missing: $sigPath"
                   exit 1
                 }
-                if (-not [string]::IsNullOrWhiteSpace($env:AAZ_UPDATER_PUBLIC_KEY)) {
-                  minisign -V -P $env:AAZ_UPDATER_PUBLIC_KEY -m $targetFile -x $sigPath
-                  if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Minisign self-verification failed for $targetFile"
-                    exit 1
-                  }
+                minisign -V -P $env:AAZ_UPDATER_PUBLIC_KEY -m $targetFile -x $sigPath
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Minisign self-verification failed for $targetFile"
+                  exit 1
                 }
                 $uploadFiles += $sigPath
               }
@@ -171,22 +212,45 @@ jobs:
               if (Test-Path $keyFile) { Remove-Item -Path $keyFile -Force }
             }
           } else {
-            Write-Host "::warning::AAZ_UPDATER_SIGNING_KEY secret is not configured. Release artifacts are unsigned; the in-app updater refuses unsigned updates (fail closed) until signing keys are configured."
+            Write-Host "::warning::Publishing unsigned prerelease preview (allow_unsigned_preview=true)."
           }
 
           Write-Host "Built artifacts & checksums:"
           Get-ChildItem "release-out" | ForEach-Object { Write-Host " - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)" }
           Get-Content $sumsPath
 
+          # Extract release notes for this version from CHANGELOG.md
+          $notes = ""
+          if (Test-Path "CHANGELOG.md") {
+            $changelog = Get-Content "CHANGELOG.md" -Raw
+            $escapedVer = [regex]::Escape($ver)
+            $pattern = "(?ms)^## \[$escapedVer\][^\r\n]*\r?\n(.*?)(?=\r?\n---|\r?\n## \[|\z)"
+            $match = [regex]::Match($changelog, $pattern)
+            if ($match.Success) {
+              $notes = $match.Groups[1].Value.Trim()
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            $notes = "AAZ Player $tag — Security-hardened local audio & video player for Windows with overhauled Mini Player, native Windows taskbar media controls, 16 green-identity themes, and fail-closed SHA-256 + Minisign auto-updater."
+          }
+          if ($env:IS_PRERELEASE -eq "true") {
+            $notes = "> **Unsigned Preview Build:** Minisign secrets were not configured for this manual preview build. The in-app auto-updater refuses unsigned updates.`n`n$notes"
+          }
+          $notesFile = Join-Path $env:RUNNER_TEMP "release-notes-$ver.md"
+          Set-Content -Path $notesFile -Value $notes -Encoding UTF8
+
           $ErrorActionPreference = "Continue"
           gh release view $tag *> $null
           $exists = ($LASTEXITCODE -eq 0)
           $global:LASTEXITCODE = 0
 
-          $notes = "AAZ Player $tag — 16-Theme Green-Identity Studio (32 Dark & Light modes including Minecraft, LEGO, Roblox, Super Arcade 16-Bit, Classic OS 95, Game Boy LCD & more), Media -> Open Recent Watch History, unified Library & Queue UI, automatic desktop session resume, Mini Player, offline bundled fonts, and fail-closed SHA-256 + Minisign auto-updater."
           if ($exists) {
             gh release upload $tag @uploadFiles --clobber
           } else {
-            gh release create $tag @uploadFiles --title "AAZ Player $tag" --notes $notes
+            $createArgs = @("release", "create", $tag) + $uploadFiles + @("--title", "AAZ Player $tag", "--notes-file", $notesFile)
+            if ($env:IS_PRERELEASE -eq "true") {
+              $createArgs += "--prerelease"
+            }
+            & gh @createArgs
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -162,10 +162,8 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
             width: restoreTarget ? restoreTarget.width : 1220,
             height: restoreTarget ? restoreTarget.height : 780,
             alwaysOnTop: false,
+            maximized: Boolean(restoreTarget && restoreTarget.maximized),
           });
-          if (restoreTarget && restoreTarget.maximized && desktopBridge.applyWindowGeometry) {
-            await desktopBridge.applyWindowGeometry(restoreTarget);
-          }
         } catch {}
       }
     } else if (next && isMiniActive && typeof alwaysOnTopOverride === 'boolean') {
@@ -179,6 +177,38 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
     return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop };
   }
 
+  async function resizeMiniPreset(width, height) {
+    if (!isMiniActive) return false;
+    const targetW = Math.min(960, Math.max(300, Math.round(Number(width) || 480)));
+    const targetH = Math.min(640, Math.max(150, Math.round(Number(height) || 270)));
+    const layout = loadLayout();
+    const miniPrefs = {
+      ...DEFAULT_WINDOW_LAYOUT.mini,
+      ...(layout.mini || {}),
+      width: targetW,
+      height: targetH,
+    };
+    persistLayout((wl) => {
+      wl.mini = { ...miniPrefs };
+    });
+    if (desktopBridge && typeof desktopBridge.setMiniMode === 'function') {
+      try {
+        await desktopBridge.setMiniMode({
+          enabled: true,
+          x: miniPrefs.x,
+          y: miniPrefs.y,
+          width: miniPrefs.width,
+          height: miniPrefs.height,
+          alwaysOnTop: miniPrefs.alwaysOnTop,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
   return {
     isMiniActive: () => isMiniActive,
     loadLayout,
@@ -186,5 +216,6 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
     captureAndSaveCurrentGeometry,
     scheduleGeometrySave,
     setMiniMode,
+    resizeMiniPreset,
   };
 }

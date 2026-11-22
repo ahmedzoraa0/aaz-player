@@ -7,30 +7,49 @@
 
 import { DEFAULT_PLAYBACK_SETTINGS, sanitizePlaybackSettings } from './storage-manager.js';
 
+let cachedHwInfo = null;
+
 export function detectHardwareAcceleration() {
+  if (cachedHwInfo) return cachedHwInfo;
   if (typeof document === 'undefined') {
     return { available: false, renderer: 'Unknown', backend: 'Unavailable' };
   }
+  let gl = null;
   try {
     const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
     if (!gl) {
-      return { available: false, renderer: 'Software / No WebGL', backend: 'CPU' };
+      cachedHwInfo = { available: false, renderer: 'Software / No WebGL', backend: 'CPU' };
+      return cachedHwInfo;
     }
     const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = debugInfo
       ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'WebGL GPU')
       : 'WebGL GPU';
     const isSoftware = /swiftshader|llvmpipe|software|microsoft basic render/i.test(renderer);
-    return {
+    cachedHwInfo = {
       available: !isSoftware,
       renderer: renderer.slice(0, 100),
-      backend: gl instanceof (typeof WebGL2RenderingContext !== 'undefined' ? WebGL2RenderingContext : Object)
-        ? 'WebGL2'
-        : 'WebGL',
+      backend:
+        gl instanceof (typeof WebGL2RenderingContext !== 'undefined' ? WebGL2RenderingContext : Object)
+          ? 'WebGL2'
+          : 'WebGL',
     };
+    return cachedHwInfo;
   } catch {
-    return { available: false, renderer: 'Unavailable', backend: 'Fallback' };
+    cachedHwInfo = { available: false, renderer: 'Unavailable', backend: 'Fallback' };
+    return cachedHwInfo;
+  } finally {
+    try {
+      if (gl && typeof gl.getExtension === 'function') {
+        const loseCtx = gl.getExtension('WEBGL_lose_context');
+        if (loseCtx && typeof loseCtx.loseContext === 'function') {
+          loseCtx.loseContext();
+        }
+      }
+    } catch {
+      // Ignore WebGL cleanup errors on unsupported drivers
+    }
   }
 }
 

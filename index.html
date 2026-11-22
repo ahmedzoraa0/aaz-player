@@ -164,8 +164,8 @@
             <button type="button" class="menu-trigger" aria-haspopup="true" aria-expanded="false" data-i18n="menuPlayback">Playback</button>
             <div class="menu-dropdown" role="menu">
               <button type="button" class="menu-action" data-cmd="toggle-play"><span class="menu-action-label" data-i18n="cmdPlayPause">Play / Pause</span><span class="menu-shortcut">Space</span></button>
-              <button type="button" class="menu-action" data-cmd="prev-track"><span class="menu-action-label" data-i18n="cmdPrev">Previous Track</span></button>
-              <button type="button" class="menu-action" data-cmd="next-track"><span class="menu-action-label" data-i18n="cmdNext">Next Track</span></button>
+              <button type="button" class="menu-action" data-cmd="prev-track"><span class="menu-action-label" data-i18n="cmdPrev">Previous Track</span><span class="menu-shortcut">Shift+P</span></button>
+              <button type="button" class="menu-action" data-cmd="next-track"><span class="menu-action-label" data-i18n="cmdNext">Next Track</span><span class="menu-shortcut">N</span></button>
               <button type="button" class="menu-action" data-cmd="prev-frame"><span class="menu-action-label" data-i18n="cmdPrevFrame">Previous Frame</span><span class="menu-shortcut">,</span></button>
               <button type="button" class="menu-action" data-cmd="next-frame"><span class="menu-action-label" data-i18n="cmdNextFrame">Next Frame</span><span class="menu-shortcut">.</span></button>
               <div class="menu-sep"></div>
@@ -299,8 +299,8 @@
                   <span class="menu-sub-arrow" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
                 </button>
                 <div class="menu-sub-panel" role="menu">
-                  <button type="button" class="menu-action" data-cmd="sub-sync-earlier"><span class="menu-action-label" data-i18n="cmdSubEarlier">Earlier (-0.5s)</span><span class="menu-shortcut">G</span></button>
-                  <button type="button" class="menu-action" data-cmd="sub-sync-later"><span class="menu-action-label" data-i18n="cmdSubLater">Later (+0.5s)</span><span class="menu-shortcut">H</span></button>
+                  <button type="button" class="menu-action" data-cmd="sub-sync-earlier"><span class="menu-action-label" data-i18n="cmdSubEarlier">Earlier (-0.25s)</span><span class="menu-shortcut">G</span></button>
+                  <button type="button" class="menu-action" data-cmd="sub-sync-later"><span class="menu-action-label" data-i18n="cmdSubLater">Later (+0.25s)</span><span class="menu-shortcut">H</span></button>
                   <button type="button" class="menu-action" data-cmd="sub-sync-reset"><span class="menu-action-label" data-i18n="cmdSubSyncReset">Reset Timing (0.0s)</span></button>
                 </div>
               </div>
@@ -332,7 +332,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.6.0</div>
+              <div class="menu-heading" id="menuVersionLabel">AAZ Player v1.7.0</div>
             </div>
           </div>
         </nav>
@@ -459,21 +459,78 @@
           <!-- Compact Floating Mini Player Overlay HUD -->
           <div class="mini-player-hud" id="miniPlayerHud" hidden aria-label="Mini Player Controls">
             <div class="mini-hud-top" id="miniDragBar">
+              <span class="mini-hud-grip" aria-hidden="true">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <circle cx="5" cy="4" r="1.4"/><circle cx="11" cy="4" r="1.4"/>
+                  <circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/>
+                  <circle cx="5" cy="12" r="1.4"/><circle cx="11" cy="12" r="1.4"/>
+                </svg>
+              </span>
               <span class="mini-hud-title" id="miniTrackTitle">AAZ Player</span>
               <div class="mini-hud-top-actions">
-                <button type="button" class="mini-hud-btn is-active" id="miniPinBtn" title="Always on Top" aria-label="Always on Top" aria-pressed="true">📌</button>
-                <button type="button" class="mini-hud-btn" id="miniExpandBtn" title="Return to Full Player" aria-label="Return to Full Player">⤢</button>
+                <button type="button" class="mini-hud-btn mini-hud-size" id="miniSizeBtn" title="Cycle Mini Player Size" aria-label="Cycle Mini Player Size">M</button>
+                <button type="button" class="mini-hud-btn is-active" id="miniPinBtn" title="Always on Top" aria-label="Always on Top" aria-pressed="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="12" y1="17" x2="12" y2="22"/>
+                    <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+                  </svg>
+                </button>
+                <button type="button" class="mini-hud-btn" id="miniExpandBtn" title="Return to Full Player" aria-label="Return to Full Player">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                </button>
+                <button type="button" class="mini-hud-btn" id="miniMinBtn" title="Minimize" aria-label="Minimize">
+                  <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.35" aria-hidden="true">
+                    <line x1="1" y1="5.5" x2="9" y2="5.5"/>
+                  </svg>
+                </button>
+                <button type="button" class="mini-hud-btn is-close" id="miniCloseBtn" title="Close" aria-label="Close">
+                  <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+                    <line x1="1.6" y1="1.6" x2="8.4" y2="8.4"/>
+                    <line x1="8.4" y1="1.6" x2="1.6" y2="8.4"/>
+                  </svg>
+                </button>
               </div>
             </div>
             <div class="mini-hud-bottom">
-              <button type="button" class="mini-hud-btn" id="miniPrevBtn" aria-label="Previous track">⏮</button>
-              <button type="button" class="mini-hud-btn" id="miniPlayBtn" aria-label="Play or Pause">
-                <svg id="miniPlayIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-                <svg id="miniPauseIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4.5" height="16" rx="1"/><rect x="13.5" y="4" width="4.5" height="16" rx="1"/></svg>
-              </button>
-              <button type="button" class="mini-hud-btn" id="miniNextBtn" aria-label="Next track">⏭</button>
-              <button type="button" class="mini-hud-btn" id="miniMuteBtn" aria-label="Mute or Unmute">🔊</button>
-              <input type="range" id="miniVolSlider" class="range-input mini-hud-vol" min="0" max="1" step="0.02" value="0.85" aria-label="Mini Player Volume" />
+              <div class="mini-hud-seek-row">
+                <input type="range" id="miniSeekSlider" class="range-input mini-hud-seek" min="0" max="1000" step="1" value="0" aria-label="Mini Player Seek" />
+                <span class="mini-hud-time" id="miniTimeLabel">00:00 / 00:00</span>
+              </div>
+              <div class="mini-hud-controls-row">
+                <div class="mini-hud-transport">
+                  <button type="button" class="mini-hud-btn" id="miniPrevBtn" title="Previous Track" aria-label="Previous track">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <polygon points="19 20 9 12 19 4 19 20"/><rect x="5" y="4" width="2.4" height="16" rx="0.8"/>
+                    </svg>
+                  </button>
+                  <button type="button" class="mini-hud-btn mini-hud-play" id="miniPlayBtn" title="Play / Pause" aria-label="Play or Pause">
+                    <svg id="miniPlayIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+                    <svg id="miniPauseIcon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:none" aria-hidden="true"><rect x="6" y="4" width="4.5" height="16" rx="1"/><rect x="13.5" y="4" width="4.5" height="16" rx="1"/></svg>
+                  </button>
+                  <button type="button" class="mini-hud-btn" id="miniNextBtn" title="Next Track" aria-label="Next track">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <polygon points="5 4 15 12 5 20 5 4"/><rect x="16.6" y="4" width="2.4" height="16" rx="0.8"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="mini-hud-vol-group">
+                  <button type="button" class="mini-hud-btn" id="miniMuteBtn" title="Mute / Unmute" aria-label="Mute or Unmute">
+                    <svg id="miniVolIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                    </svg>
+                    <svg id="miniMuteIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/>
+                    </svg>
+                  </button>
+                  <input type="range" id="miniVolSlider" class="range-input mini-hud-vol" min="0" max="1" step="0.02" value="0.85" aria-label="Mini Player Volume" />
+                </div>
+              </div>
             </div>
           </div>
           <!-- Custom AAZ Player Right-Click Context Menu (Works in Normal & Fullscreen Modes) -->
