@@ -422,7 +422,10 @@ mod imp {
         let win_clone = window.clone();
         let _ = window.run_on_main_thread(move || {
             let label = win_clone.label().to_string();
-            let ptr_opt = registry().lock().ok().and_then(|map| map.get(&label).copied());
+            let ptr_opt = registry()
+                .lock()
+                .ok()
+                .and_then(|map| map.get(&label).copied());
             let Some(ptr) = ptr_opt else {
                 return;
             };

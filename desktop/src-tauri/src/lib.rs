@@ -672,7 +672,10 @@ fn validate_minisign_trusted_comment(
         let exp_ver = expected_version.trim().trim_start_matches(['v', 'V']);
         let exp_sha = expected_sha256.trim().to_ascii_lowercase();
         let ver_ok = seen_version
-            .map(|v| v.trim_start_matches(['v', 'V']).eq_ignore_ascii_case(exp_ver))
+            .map(|v| {
+                v.trim_start_matches(['v', 'V'])
+                    .eq_ignore_ascii_case(exp_ver)
+            })
             .unwrap_or(false);
         let file_ok = seen_file
             .map(|f| f.eq_ignore_ascii_case(expected_asset_name.trim()))
@@ -4278,9 +4281,8 @@ mod tests {
     #[test]
     fn minisign_trusted_comment_blocks_version_file_and_digest_replay() {
         let digest = "a".repeat(64);
-        let valid = format!(
-            "aaz-player|version=1.7.0|file=AAZ-Player_1.7.0_x64-setup.exe|sha256={digest}"
-        );
+        let valid =
+            format!("aaz-player|version=1.7.0|file=AAZ-Player_1.7.0_x64-setup.exe|sha256={digest}");
         assert!(validate_minisign_trusted_comment(
             &valid,
             "1.7.0",
