@@ -180,18 +180,33 @@ jobs:
           $uploadFiles = @($setupDest, $portableDest, $sumsPath)
 
           if ($env:SIGNED_RELEASE -eq "true") {
-            if (-not (Get-Command minisign -ErrorAction SilentlyContinue)) {
-              choco install minisign -y --no-progress | Out-Null
+            $minisignZip = Join-Path $env:RUNNER_TEMP "minisign-0.12-win64.zip"
+            $minisignDir = Join-Path $env:RUNNER_TEMP "minisign-0.12"
+            if (Test-Path $minisignDir) { Remove-Item -Path $minisignDir -Recurse -Force }
+            Invoke-WebRequest -Uri "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip" -OutFile $minisignZip
+            Expand-Archive -Path $minisignZip -DestinationPath $minisignDir -Force
+            $minisignBin = Get-ChildItem -Path $minisignDir -Filter "minisign.exe" -Recurse | Select-Object -First 1
+            if (-not $minisignBin) {
+              Write-Error "Could not locate minisign.exe in downloaded Minisign 0.12 archive"
+              exit 1
             }
+            $minisignExe = $minisignBin.FullName
+            & $minisignExe -v
+
             $keyFile = Join-Path $env:RUNNER_TEMP "aaz-updater.key"
+            $pubKey = $env:AAZ_UPDATER_PUBLIC_KEY.Trim()
             try {
-              Set-Content -Path $keyFile -Value $env:AAZ_UPDATER_SIGNING_KEY -NoNewline -Encoding UTF8
+              $cleanKey = ($env:AAZ_UPDATER_SIGNING_KEY -replace "`r`n", "`n").Trim() + "`n"
+              [System.IO.File]::WriteAllText($keyFile, $cleanKey, [System.Text.UTF8Encoding]::new($false))
               foreach ($targetFile in @($setupDest, $portableDest, $sumsPath)) {
                 $fileName = [System.IO.Path]::GetFileName($targetFile)
                 $fileHash = (Get-FileHash -Path $targetFile -Algorithm SHA256).Hash.ToLower()
                 $trustedComment = "aaz-player|version=$ver|file=$fileName|sha256=$fileHash"
-                $pw = if ($null -ne $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD) { $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD } else { "" }
-                $pw | minisign -S -s $keyFile -m $targetFile -t $trustedComment
+                if ([string]::IsNullOrEmpty($env:AAZ_UPDATER_SIGNING_KEY_PASSWORD)) {
+                  & $minisignExe -S -s $keyFile -m $targetFile -t $trustedComment
+                } else {
+                  $env:AAZ_UPDATER_SIGNING_KEY_PASSWORD | & $minisignExe -S -s $keyFile -m $targetFile -t $trustedComment
+                }
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "Minisign signing failed for $targetFile"
                   exit 1
@@ -201,7 +216,7 @@ jobs:
                   Write-Error "Expected signature file missing: $sigPath"
                   exit 1
                 }
-                minisign -V -P $env:AAZ_UPDATER_PUBLIC_KEY -m $targetFile -x $sigPath
+                & $minisignExe -V -P $pubKey -m $targetFile -x $sigPath
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "Minisign self-verification failed for $targetFile"
                   exit 1
