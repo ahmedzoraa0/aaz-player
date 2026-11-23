@@ -14,6 +14,7 @@
 
 import { createHistoryManager } from '../modules/history-manager.js';
 import { createLibraryManager } from '../modules/library-manager.js';
+import { createLibraryNavigator } from '../modules/library-navigation.js';
 import {
   createShortcutsManager,
   normalizeKeyCombo,
@@ -86,6 +87,13 @@ const P3_I18N = {
     libFolderRemoved: 'Removed "{name}" from Media Library.',
     libFolderMissing: 'Folder not found on disk: "{name}".',
     libWebUnsupported: 'Persistent folder scanning works in the AAZ Desktop App. Use Open Folder in browser mode.',
+    libBrowseUp: 'Up one level',
+    libBrowseLoading: 'Loading folder...',
+    libBrowseEmpty: 'This folder is empty',
+    libBrowseError: 'Could not open this folder. It may have been moved or its permission revoked.',
+    libAddToQueue: 'Add to queue',
+    libAddedQueue: 'Added "{name}" to the queue.',
+    libFolderAddedShallow: 'Added "{name}" to Media Library.',
     scModalHint: 'Click any shortcut badge and press a new key combination. Press Esc to cancel.',
     scPressKey: 'Press key...',
     scResetAll: 'Reset All Defaults',
@@ -182,6 +190,13 @@ const P3_I18N = {
     libFolderRemoved: 'تمت إزالة "{name}" من المكتبة.',
     libFolderMissing: 'تعذر العثور على المجلد على القرص: "{name}".',
     libWebUnsupported: 'فحص المجلدات الدائم يعمل في تطبيق سطح المكتب AAZ Player. استخدم فتح مجلد في المتصفح.',
+    libBrowseUp: 'مستوى أعلى',
+    libBrowseLoading: 'جارٍ فتح المجلد...',
+    libBrowseEmpty: 'هذا المجلد فارغ',
+    libBrowseError: 'تعذر فتح هذا المجلد. ربما تم نقله أو سُحب إذنه.',
+    libAddToQueue: 'إضافة إلى قائمة التشغيل',
+    libAddedQueue: 'تمت إضافة "{name}" إلى قائمة التشغيل.',
+    libFolderAddedShallow: 'تمت إضافة "{name}" إلى المكتبة.',
     scModalHint: 'انقر على أي اختصار واضغط تركيبة المفاتيح الجديدة. اضغط Esc للإلغاء.',
     scPressKey: 'اضغط مفتاحاً...',
     scResetAll: 'استعادة الافتراضي',
@@ -286,6 +301,271 @@ export function createPhase3Controller(api) {
     getStore,
     persist: () => persistDomain('mediaLibrary'),
   });
+
+  // Android file-manager style hierarchical browsing (desktop keeps flat UX)
+  const libraryNav = createLibraryNavigator();
+  const browseLevel = { loading: false, error: '', folders: [], files: [] };
+  let browseLoadToken = 0;
+
+  function isAndroidBrowse() {
+    return (
+      Boolean(api.desktopBridge?.isAndroid) &&
+      !uiState.librarySearch &&
+      uiState.libraryType === 'all' &&
+      !uiState.libraryFolderFilter
+    );
+  }
+
+  async function loadBrowseLevel() {
+    const treeUri = libraryNav.getActiveTreeUri();
+    const docId = libraryNav.getCurrentDocId();
+    if (!treeUri) {
+      renderLibrary();
+      return;
+    }
+    const token = ++browseLoadToken;
+    browseLevel.loading = true;
+    browseLevel.error = '';
+    renderLibraryBrowse();
+    try {
+      if (String(treeUri).startsWith('content://') && typeof api.desktopBridge?.listSafChildren === 'function') {
+        const res = await api.desktopBridge.listSafChildren(treeUri, docId || '');
+        if (token !== browseLoadToken) return;
+        browseLevel.folders = Array.isArray(res?.folders) ? res.folders : [];
+        browseLevel.files = Array.isArray(res?.entries) ? res.entries : [];
+      } else {
+        // Non-SAF root (e.g. MediaStore bucket): show its cached items flat
+        const folder = libraryManager.getFolders().find((f) => f.path === treeUri);
+        if (token !== browseLoadToken) return;
+        browseLevel.folders = [];
+        browseLevel.files = Array.isArray(folder?.items) ? folder.items : [];
+      }
+    } catch (err) {
+      if (token !== browseLoadToken) return;
+      browseLevel.error = p3t('libBrowseError');
+      api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
+    }
+    browseLevel.loading = false;
+    renderLibraryBrowse();
+  }
+
+  function buildBrowseFileRow(item) {
+    const row = document.createElement('div');
+    row.className = 'track-row lib-track-row';
+    row.setAttribute('role', 'option');
+    row.setAttribute('tabindex', '0');
+    row.title = item.fullPath || item.name;
+
+    const infoCell = document.createElement('span');
+    infoCell.className = 'track-info';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'track-name';
+    nameSpan.textContent = item.title || String(item.name || '').replace(/\.[^.]+$/, '');
+    infoCell.appendChild(nameSpan);
+    const ext = item.ext || (item.name && item.name.includes('.') ? item.name.split('.').pop() : '');
+    const subParts = [item.kind === 'video' ? 'Video' : 'Audio'];
+    if (ext) subParts.push(String(ext).toUpperCase());
+    if (item.size) subParts.push(formatBytes(item.size));
+    const subSpan = document.createElement('span');
+    subSpan.className = 'track-sub';
+    subSpan.textContent = subParts.join(' · ');
+    infoCell.appendChild(subSpan);
+
+    const rightCell = document.createElement('span');
+    rightCell.className = 'track-right';
+    rightCell.textContent = item.duration ? formatTime(item.duration) : '';
+
+    const queueBtn = document.createElement('button');
+    queueBtn.type = 'button';
+    queueBtn.className = 'lib-folder-act';
+    queueBtn.title = p3t('libAddToQueue');
+    queueBtn.setAttribute('aria-label', p3t('libAddToQueue'));
+    queueBtn.textContent = '+';
+    const enqueueItem = async (e) => {
+      if (e) e.stopPropagation();
+      if (typeof api.enqueueExternalPath !== 'function') return;
+      try {
+        const ok = await api.enqueueExternalPath(item.fullPath);
+        if (ok) api.showNotice(p3t('libAddedQueue', { name: item.name }));
+      } catch (err) {
+        api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
+      }
+    };
+    queueBtn.addEventListener('click', enqueueItem);
+
+    row.append(infoCell, rightCell, queueBtn);
+
+    const playItem = async () => {
+      if (item.fullPath && api.desktopBridge && api.desktopBridge.inspectPaths) {
+        try {
+          await api.openExternalPathAtTime(item.fullPath, 0);
+        } catch (err) {
+          api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
+        }
+      } else {
+        api.showNotice(p3t('libWebUnsupported'), true);
+      }
+    };
+    row.addEventListener('click', playItem);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        playItem();
+      }
+    });
+    // Long-press also offers add-to-queue (touch discoverability)
+    let lpTimer = null;
+    row.addEventListener('touchstart', () => {
+      lpTimer = setTimeout(enqueueItem, 550);
+    }, { passive: true });
+    row.addEventListener('touchend', () => clearTimeout(lpTimer));
+    row.addEventListener('touchmove', () => clearTimeout(lpTimer));
+    row.addEventListener('touchcancel', () => clearTimeout(lpTimer));
+    return row;
+  }
+
+const LIB_FOLDER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+
+  function buildBrowseFolderRow(iconLabel, name, subtitle, onOpen) {
+    const row = document.createElement('div');
+    row.className = 'track-row lib-track-row lib-browse-folder';
+    row.setAttribute('role', 'option');
+    row.setAttribute('tabindex', '0');
+    const iconCell = document.createElement('span');
+    iconCell.className = 'track-index lib-folder-icon';
+    iconCell.innerHTML = iconLabel;
+    const infoCell = document.createElement('span');
+    infoCell.className = 'track-info';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'track-name';
+    nameSpan.textContent = name;
+    infoCell.appendChild(nameSpan);
+    if (subtitle) {
+      const subSpan = document.createElement('span');
+      subSpan.className = 'track-sub';
+      subSpan.textContent = subtitle;
+      infoCell.appendChild(subSpan);
+    }
+    row.append(iconCell, infoCell);
+    row.addEventListener('click', onOpen);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onOpen();
+      }
+    });
+    return row;
+  }
+
+  function renderLibraryBrowse() {
+    if (!dom.libList) return;
+    if (dom.libFolderChips) dom.libFolderChips.replaceChildren();
+    const roots = libraryNav.getRoots();
+    const frag = document.createDocumentFragment();
+
+    if (dom.libMeta) {
+      dom.libMeta.textContent = libraryNav.isBrowsing()
+        ? libraryNav.getBreadcrumbs().map((b) => b.name).join(' / ')
+        : p3t('libMetaSummary', {
+            folders: roots.length,
+            folderWord: roots.length === 1 ? p3t('libFolderOne') : p3t('libFolderMany'),
+            items: '',
+            itemWord: '',
+          });
+    }
+
+    if (!libraryNav.isBrowsing()) {
+      // Roots view: the folders the user has granted, not their contents
+      for (const root of roots) {
+        frag.appendChild(
+          buildBrowseFolderRow(LIB_FOLDER_ICON_SVG, root.name, '', () => {
+            if (libraryNav.enterRoot(root.treeUri)) loadBrowseLevel();
+          })
+        );
+      }
+    } else {
+      // Breadcrumb / path bar with up-one-level
+      const crumbs = libraryNav.getBreadcrumbs();
+      const bar = document.createElement('div');
+      bar.className = 'lib-browse-crumbs';
+      const upBtn = document.createElement('button');
+      upBtn.type = 'button';
+      upBtn.className = 'lib-browse-up';
+      upBtn.textContent = '←';
+      upBtn.title = p3t('libBrowseUp');
+      upBtn.setAttribute('aria-label', p3t('libBrowseUp'));
+      upBtn.addEventListener('click', () => {
+        if (libraryNav.goUp()) {
+          if (libraryNav.isBrowsing()) loadBrowseLevel();
+          else renderLibraryBrowse();
+        }
+      });
+      bar.appendChild(upBtn);
+      crumbs.forEach((seg, idx) => {
+        const segBtn = document.createElement('button');
+        segBtn.type = 'button';
+        segBtn.className = `lib-browse-crumb${idx === crumbs.length - 1 ? ' is-active' : ''}`;
+        segBtn.textContent = seg.name;
+        segBtn.addEventListener('click', () => {
+          if (idx < crumbs.length - 1 && libraryNav.jumpToDepth(idx)) loadBrowseLevel();
+        });
+        bar.appendChild(segBtn);
+        if (idx < crumbs.length - 1) {
+          const sep = document.createElement('span');
+          sep.className = 'lib-browse-sep';
+          sep.textContent = '/';
+          bar.appendChild(sep);
+        }
+      });
+      frag.appendChild(bar);
+
+      if (browseLevel.loading) {
+        const loading = document.createElement('div');
+        loading.className = 'no-results';
+        loading.textContent = p3t('libBrowseLoading');
+        frag.appendChild(loading);
+      } else if (browseLevel.error) {
+        const err = document.createElement('div');
+        err.className = 'no-results';
+        err.textContent = browseLevel.error;
+        frag.appendChild(err);
+      } else {
+        const { folders, files } = libraryNav.sortLevel(browseLevel.folders, browseLevel.files);
+        for (const folder of folders) {
+          frag.appendChild(
+            buildBrowseFolderRow(LIB_FOLDER_ICON_SVG, folder.name, '', () => {
+              if (libraryNav.openFolder(folder)) loadBrowseLevel();
+            })
+          );
+        }
+        for (const file of files) {
+          frag.appendChild(buildBrowseFileRow(file));
+        }
+        if (folders.length === 0 && files.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'no-results';
+          empty.textContent = p3t('libBrowseEmpty');
+          frag.appendChild(empty);
+        }
+      }
+    }
+
+    dom.libList.replaceChildren(frag);
+    updateCounts();
+  }
+
+  /**
+   * Android Back inside the library: climb one folder level (or return to the
+   * roots view) before the app-level back handling runs. Returns true when the
+   * press was consumed here.
+   */
+  function libraryHandleBack() {
+    if (!isAndroidBrowse() || !libraryNav.canGoUp()) return false;
+    libraryNav.goUp();
+    if (libraryNav.isBrowsing()) loadBrowseLevel();
+    else renderLibraryBrowse();
+    return true;
+  }
 
   const shortcutsManager = createShortcutsManager({
     getStore,
@@ -596,6 +876,14 @@ export function createPhase3Controller(api) {
     if (!dom.libList) return;
     const folders = libraryManager.getFolders();
 
+    // Android: file-manager style hierarchical browsing; desktop keeps the
+    // flat library UX below. The flat empty-state still handles "no folders".
+    libraryNav.setRoots(folders.map((f) => ({ treeUri: f.path, name: f.name })));
+    if (isAndroidBrowse() && libraryNav.getRoots().length > 0) {
+      renderLibraryBrowse();
+      return;
+    }
+
     // Compute counts for header meta and segmented All/Audio/Video tabs
     const scopedItems = libraryManager.queryItems({
       search: '',
@@ -838,13 +1126,31 @@ export function createPhase3Controller(api) {
       return;
     }
     try {
-      const res = await api.desktopBridge.selectFolder();
+      // Android grants skip the recursive scan: hierarchical browsing lists
+      // one level at a time, so adding even a huge folder is instant.
+      const shallow =
+        Boolean(api.desktopBridge.isAndroid) &&
+        typeof api.desktopBridge.selectFolderShallow === 'function';
+      const picker = shallow ? api.desktopBridge.selectFolderShallow : api.desktopBridge.selectFolder;
+      const res = await picker.call(api.desktopBridge);
       if (!res || !res.folderPath) return;
       const added = libraryManager.addOrUpdateFolder(
         res.folderPath,
         res.folderName,
         res.entries || []
       );
+      if (shallow && added) {
+        libraryNav.setRoots(
+          libraryManager.getFolders().map((f) => ({ treeUri: f.path, name: f.name }))
+        );
+        if (libraryNav.enterRoot(added.path)) {
+          await loadBrowseLevel();
+        } else {
+          renderLibrary();
+        }
+        api.showNotice(p3t('libFolderAddedShallow', { name: added.name }));
+        return;
+      }
       renderLibrary();
       if (added) {
         api.showNotice(p3t('libFolderAdded', { name: added.name, count: added.items.length }));
@@ -1712,6 +2018,7 @@ export function createPhase3Controller(api) {
     applyTranslations,
     renderHistory,
     renderLibrary,
+    libraryHandleBack,
     renderShortcutsEditor,
     syncSettingsModalUI,
     syncMiniPlayerPlaybackUI,
@@ -1728,4 +2035,4 @@ export function createPhase3Controller(api) {
       hideConflictBar();
     },
   };
-}
+  }
