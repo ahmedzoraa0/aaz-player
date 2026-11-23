@@ -38,6 +38,11 @@ import {
   sanitizeSkin,
   getSkinMeta,
 } from '../modules/themes-catalog.js';
+import {
+  createMobileGestureController,
+  decideGestureAxis,
+  TOUCH_SLOP_PX,
+} from '../modules/mobile-gestures.js';
 
 export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
   const CURRENT_TAB_ID = currentTabId;
@@ -116,6 +121,16 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         sidebarResizer: document.getElementById('sidebarResizer'),
         sidebarPane: document.getElementById('sidebarPane'),
         media: document.getElementById('mediaEngine'),
+        mobileBottomNav: document.getElementById('mobileBottomNav'),
+        mobileNavBtns: document.querySelectorAll('[data-mobile-nav]'),
+        mobileMiniNowBar: document.getElementById('mobileMiniNowBar'),
+        mobileMiniOpenPlayerBtn: document.getElementById('mobileMiniOpenPlayerBtn'),
+        mobileMiniTitle: document.getElementById('mobileMiniTitle'),
+        mobileMiniSub: document.getElementById('mobileMiniSub'),
+        mobileMiniPlayBtn: document.getElementById('mobileMiniPlayBtn'),
+        mobileMiniPlayIcon: document.getElementById('mobileMiniPlayIcon'),
+        mobileMiniPauseIcon: document.getElementById('mobileMiniPauseIcon'),
+        mobileMiniNextBtn: document.getElementById('mobileMiniNextBtn'),
 
         menuBar: document.getElementById('menuBar'),
         contextMenu: document.getElementById('aazContextMenu'),
@@ -2067,6 +2082,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-8') {
+        if (desktopBridge?.isAndroid && typeof desktopBridge.saveTextFile === 'function') {
+          desktopBridge
+            .saveTextFile(filename, content, mimeType)
+            .catch((err) => errorHandler.log('android.saveTextFile', err));
+          return;
+        }
         const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4153,6 +4174,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
 
           if (autoPlay) {
+            if (desktopBridge?.isAndroid && window.innerWidth <= 820 && state.mobileView && state.mobileView !== 'player') {
+              setMobileView('player');
+            }
             try {
               await ensureAudioOutputBound();
               if (gen !== trackLoadGen) return;
@@ -4750,6 +4774,47 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (persist) persistPlaybackState();
       }
 
+      function syncMobileMiniBar() {
+        if (!desktopBridge?.isAndroid || !el.mobileMiniNowBar) return;
+        const track = getCurrentTrack();
+        const isPhone = window.innerWidth <= 820;
+        const showMini = Boolean(isPhone && track && state.mobileView && state.mobileView !== 'player');
+        el.mobileMiniNowBar.hidden = !showMini;
+        if (!track) return;
+        const playing = !el.media.paused && !el.media.ended;
+        if (el.mobileMiniTitle) el.mobileMiniTitle.textContent = track.displayName || track.name || '';
+        if (el.mobileMiniSub) {
+          const kindLabel = track.kind === 'video' ? t('kindVideo') : t('kindAudio');
+          el.mobileMiniSub.textContent = `${kindLabel} · ${track.ext || ''}`.replace(/\s·\s$/, '');
+        }
+        if (el.mobileMiniPlayIcon) el.mobileMiniPlayIcon.style.display = playing ? 'none' : 'block';
+        if (el.mobileMiniPauseIcon) el.mobileMiniPauseIcon.style.display = playing ? 'block' : 'none';
+        if (el.mobileMiniNextBtn && el.nextBtn) {
+          el.mobileMiniNextBtn.disabled = Boolean(el.nextBtn.disabled);
+        }
+      }
+
+      function setMobileView(view) {
+        const valid = ['player', 'queue', 'library', 'saved'];
+        const nextView = valid.includes(view) ? view : 'player';
+        state.mobileView = nextView;
+        document.documentElement.dataset.mobileView = nextView;
+        if (nextView !== 'player') {
+          switchSidebarTab(nextView);
+        }
+        if (el.mobileNavBtns && el.mobileNavBtns.length) {
+          el.mobileNavBtns.forEach((btn) => {
+            const active = btn.dataset.mobileNav === nextView;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', String(active));
+          });
+        }
+        syncMobileMiniBar();
+        if (nextView === 'player') {
+          requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+        }
+      }
+
       async function toggleFullscreen() {
         try {
           if (isFullscreenActive()) {
@@ -4757,6 +4822,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               await document.exitFullscreen();
             } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
               document.webkitExitFullscreen();
+            }
+            if (desktopBridge?.isAndroid && desktopBridge.setImmersiveFullscreen) {
+              desktopBridge.setImmersiveFullscreen(false).catch((err) => errorHandler.log('android.immersiveExit', err));
             }
             if (state.electronFsFallback) {
               state.electronFsFallback = false;
@@ -4782,12 +4850,19 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               errorHandler.log('ui.requestFullscreen', err);
               entered = false;
             }
+            if (desktopBridge?.isAndroid && desktopBridge.setImmersiveFullscreen) {
+              desktopBridge.setImmersiveFullscreen(true).catch((err) => errorHandler.log('android.immersiveEnter', err));
+            }
             // Fallback to Desktop native window fullscreen + full-bleed stage if DOM fullscreen was restricted
             if (!entered && desktopBridge && desktopBridge.setWindowFullscreen) {
               await desktopBridge.setWindowFullscreen(true);
               state.electronFsFallback = true;
               el.mediaStage.classList.add('is-pseudo-fullscreen');
               postToShell('aaz-shell-fullscreen', { active: true });
+              onFullscreenChange();
+            } else if (!entered && desktopBridge?.isAndroid) {
+              state.electronFsFallback = true;
+              el.mediaStage.classList.add('is-pseudo-fullscreen');
               onFullscreenChange();
             } else if (!entered && !el.videoFrame.hidden && el.media.requestFullscreen) {
               await el.media.requestFullscreen();
@@ -4801,6 +4876,18 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       async function togglePictureInPicture() {
         const track = getCurrentTrack();
         if (!track || track.kind !== 'video') return;
+        if (desktopBridge?.isAndroid && typeof desktopBridge.enterPictureInPicture === 'function') {
+          if (state.videoDisplayMode === 'audio') setVideoDisplayMode('video', true);
+          const ok = await desktopBridge.enterPictureInPicture();
+          if (!ok) {
+            showNotice(
+              state.lang === 'ar'
+                ? 'وضع صورة داخل صورة غير مدعوم على هذا الجهاز.'
+                : 'Picture-in-Picture is not supported on this device.'
+            );
+          }
+          return;
+        }
         if (!document.pictureInPictureEnabled) {
           showNotice('Picture-in-Picture is not supported in this browser.');
           return;
@@ -4907,10 +4994,21 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function syncMediaSession() {
+        const track = getCurrentTrack();
+        const isPlaying = !el.media.paused && !el.media.ended;
+        if (desktopBridge?.isAndroid && typeof desktopBridge.updateMediaSession === 'function') {
+          Promise.resolve(
+            desktopBridge.updateMediaSession({
+              title: track ? track.displayName || track.name || 'AAZ Player' : 'AAZ Player',
+              artist: state.folderName || 'AAZ Player',
+              isPlaying: Boolean(track && isPlaying),
+              durationMs: Number.isFinite(el.media.duration) ? Math.round(el.media.duration * 1000) : 0,
+              positionMs: Number.isFinite(el.media.currentTime) ? Math.round(el.media.currentTime * 1000) : 0,
+            })
+          ).catch((err) => errorHandler.log('android.updateMediaSession', err));
+        }
         if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
         try {
-          const track = getCurrentTrack();
-          const isPlaying = !el.media.paused && !el.media.ended;
           if (track && typeof MediaMetadata === 'function') {
             navigator.mediaSession.metadata = new MediaMetadata({
               title: track.displayName || track.name || 'AAZ Player',
@@ -4942,6 +5040,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           sinkLabel: state.audioSinkId ? (state.audioSinkLabel || '') : ''
         });
         syncMediaSession();
+        syncMobileMiniBar();
       }
 
       function updatePlayButtonUI() {
@@ -7728,7 +7827,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         function handleTaskbarMediaAction(action) {
           if (action === 'toggle-play') togglePlayPause();
-          else if (action === 'prev') playPreviousTrack();
+          else if (action === 'play') {
+            if (el.media.paused) togglePlayPause();
+          } else if (action === 'pause') {
+            if (!el.media.paused) togglePlayPause();
+          } else if (action === 'stop') {
+            el.media.pause();
+            el.media.currentTime = 0;
+            updatePlayButtonUI();
+          } else if (action === 'prev') playPreviousTrack();
           else if (action === 'next') playNextTrack(true, false);
         }
 
@@ -7753,8 +7860,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
 
         if (desktopBridge) {
-          el.pinWindowBtn.hidden = false;
-          el.menuPinItem.hidden = false;
+          const isAndroid = Boolean(desktopBridge.isAndroid);
+          el.pinWindowBtn.hidden = isAndroid;
+          el.menuPinItem.hidden = isAndroid;
           if (desktopBridge.getAppVersion) {
             try {
               const ver = await desktopBridge.getAppVersion();
@@ -7770,6 +7878,183 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (desktopBridge.onUpdateStatus) desktopBridge.onUpdateStatus(handleUpdateStatus);
             if (desktopBridge.onOpenExternal) desktopBridge.onOpenExternal(handleExternalOpenPaths);
             if (desktopBridge.onTaskbarAction) desktopBridge.onTaskbarAction(handleTaskbarMediaAction);
+            if (desktopBridge.onMediaAction) desktopBridge.onMediaAction(handleTaskbarMediaAction);
+          }
+
+          // Android Phone & Tablet Shell Navigation, Touch Gestures, & Back Stack
+          if (isAndroid) {
+            if (el.mobileBottomNav) {
+              el.mobileBottomNav.hidden = false;
+              el.mobileNavBtns.forEach((btn) => {
+                btn.addEventListener('click', () => {
+                  const target = btn.dataset.mobileNav || 'player';
+                  setMobileView(target);
+                });
+              });
+            }
+            if (el.mobileMiniOpenPlayerBtn) {
+              el.mobileMiniOpenPlayerBtn.addEventListener('click', () => setMobileView('player'));
+            }
+            if (el.mobileMiniPlayBtn) {
+              el.mobileMiniPlayBtn.addEventListener('click', () => togglePlayPause());
+            }
+            if (el.mobileMiniNextBtn) {
+              el.mobileMiniNextBtn.addEventListener('click', () => playNextTrack(true, false));
+            }
+            setMobileView('player');
+            window.addEventListener('resize', syncMobileMiniBar);
+
+            let lastBackConfirmAt = 0;
+            const mobileGestures = createMobileGestureController({
+              onSeekDelta: (delta) => {
+                if (!getCurrentTrack()) return;
+                skipBySeconds(delta);
+                showNotice(delta > 0 ? `+${delta}s` : `${delta}s`);
+              },
+              onTogglePlay: () => togglePlayPause(),
+              onBrightnessChange: (level) => {
+                desktopBridge.setScreenBrightness?.(level).catch((err) => errorHandler.log('android.brightness', err));
+                showNotice(
+                  state.lang === 'ar'
+                    ? `السطوع: ${Math.round(level * 100)}%`
+                    : `Brightness: ${Math.round(level * 100)}%`
+                );
+              },
+              onVolumeChange: (level) => {
+                setVolume(level, true);
+                showNotice(
+                  state.lang === 'ar'
+                    ? `الصوت: ${Math.round(level * 100)}%`
+                    : `Volume: ${Math.round(level * 100)}%`
+                );
+              },
+              onPinchZoom: (scale) => {
+                state.videoZoom = Number(scale.toFixed(2));
+                applyVideoTransform();
+              },
+              onCloseTopModal: () => {
+                closeAllMenus();
+                const openModal = document.querySelector('.modal-backdrop:not([hidden])');
+                if (openModal) openModal.hidden = true;
+              },
+              onExitFullscreenOrPip: () => {
+                toggleFullscreen();
+              },
+              onNavigateBack: () => {
+                setMobileView('player');
+              },
+              onConfirmExit: () => {
+                lastBackConfirmAt = Date.now();
+                showNotice(
+                  state.lang === 'ar'
+                    ? 'اضغط رجوع مرة أخرى للخروج من التطبيق.'
+                    : 'Press Back again to exit AAZ Player.'
+                );
+              },
+            });
+
+            if (el.mediaStage) {
+              let touchStartX = 0;
+              let touchStartY = 0;
+              let touchLastY = 0;
+              let touchAxis = 'none';
+              let pinchStartDist = 0;
+              let pinchStartZoom = 1;
+              let touchMoved = false;
+
+              el.mediaStage.addEventListener(
+                'touchstart',
+                (ev) => {
+                  if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-hud')) return;
+                  if (ev.touches.length === 2) {
+                    const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+                    const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+                    pinchStartDist = Math.hypot(dx, dy);
+                    pinchStartZoom = state.videoZoom || 1;
+                    touchAxis = 'pinch';
+                    touchMoved = true;
+                    return;
+                  }
+                  if (ev.touches.length === 1) {
+                    touchStartX = ev.touches[0].clientX;
+                    touchStartY = ev.touches[0].clientY;
+                    touchLastY = touchStartY;
+                    touchAxis = 'none';
+                    touchMoved = false;
+                  }
+                },
+                { passive: true }
+              );
+
+              el.mediaStage.addEventListener(
+                'touchmove',
+                (ev) => {
+                  if (touchAxis === 'pinch' && ev.touches.length === 2 && pinchStartDist > 20) {
+                    const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+                    const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+                    const dist = Math.hypot(dx, dy);
+                    mobileGestures.handlePinchScale(pinchStartZoom * (dist / pinchStartDist));
+                    return;
+                  }
+                  if (ev.touches.length !== 1) return;
+                  const curX = ev.touches[0].clientX;
+                  const curY = ev.touches[0].clientY;
+                  if (touchAxis === 'none') {
+                    touchAxis = decideGestureAxis(curX - touchStartX, curY - touchStartY, TOUCH_SLOP_PX);
+                  }
+                  if (touchAxis === 'vertical') {
+                    touchMoved = true;
+                    const rect = el.mediaStage.getBoundingClientRect();
+                    const relX = rect.width > 0 ? (touchStartX - rect.left) / rect.width : 0.5;
+                    const deltaY = curY - touchLastY;
+                    touchLastY = curY;
+                    mobileGestures.handleVerticalSwipe({
+                      relativeXRatio: relX,
+                      deltaY,
+                      stageHeight: rect.height || 360,
+                      currentVolume: el.media.volume,
+                    });
+                  }
+                },
+                { passive: true }
+              );
+
+              el.mediaStage.addEventListener(
+                'touchend',
+                (ev) => {
+                  if (touchMoved || touchAxis !== 'none') {
+                    touchAxis = 'none';
+                    touchMoved = false;
+                    return;
+                  }
+                  const changed = ev.changedTouches && ev.changedTouches[0];
+                  if (!changed) return;
+                  if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-hud')) return;
+                  const rect = el.mediaStage.getBoundingClientRect();
+                  const relX = rect.width > 0 ? (changed.clientX - rect.left) / rect.width : 0.5;
+                  mobileGestures.handleTap(relX, Date.now());
+                },
+                { passive: true }
+              );
+            }
+
+            window.__aazHandleAndroidBack = () => {
+              const hasOpenModal = Boolean(
+                document.querySelector('.modal-backdrop:not([hidden])') ||
+                  (el.contextMenu && !el.contextMenu.hidden) ||
+                  document.querySelector('.menu-item.is-open')
+              );
+              const isPlaying = !el.media.paused && !el.media.ended;
+              const withinConfirmWindow = Date.now() - lastBackConfirmAt < 2200;
+              const outcome = mobileGestures.handleBackAction({
+                hasOpenModal,
+                isFullscreen: isFullscreenActive(),
+                isPip: false,
+                hasInternalBackView: Boolean(state.mobileView && state.mobileView !== 'player'),
+                isPlaying: isPlaying && !withinConfirmWindow,
+              });
+              return outcome !== 'allow-exit';
+            };
           }
         }
 
@@ -7969,6 +8254,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         notifyShellTabState();
         postToShell('aaz-tab-ready');
         requestAnimationFrame(() => AudioStudio.renderIdleFrame());
+
+        if (desktopBridge?.isAndroid && !IS_TAB_FRAME && typeof desktopBridge.getLaunchFiles === 'function') {
+          try {
+            const launchPaths = await desktopBridge.getLaunchFiles();
+            if (Array.isArray(launchPaths) && launchPaths.length > 0) {
+              await handleExternalOpenPaths(launchPaths);
+            }
+          } catch (err) {
+            errorHandler.log('android.getLaunchFiles', err);
+          }
+        }
       }
 
       init();

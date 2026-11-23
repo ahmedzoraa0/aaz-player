@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>AAZ Player</title>
   <meta name="description" content="AAZ Player — Local audio and video playlist player with saved playlists, XSPF/M3U8/PLS support, 5-band studio EQ, multi-mode visualizer, Arabic/English RTL/LTR, and Dark/Light foliage themes." />
   <meta property="og:title" content="AAZ Player" />
@@ -937,6 +937,7 @@
               <div class="playlist-meta" id="libMeta" data-p3-i18n="libEmptyMeta">No folders added yet</div>
             </div>
             <div class="playlist-header-actions">
+              <button type="button" class="btn btn-primary" id="libScanDeviceBtn" hidden style="height:28px;padding:0 9px;font-size:11.5px" data-p3-i18n="libScanDevice">Scan Device</button>
               <button type="button" class="btn" id="libAddFolderBtn" style="height:28px;padding:0 9px;font-size:11.5px" data-p3-i18n="libAddFolder">+ Folder</button>
               <button type="button" class="btn-icon" id="libRescanAllBtn" style="width:28px;height:28px" title="Rescan all folders" aria-label="Rescan all folders">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1127,6 +1128,54 @@
         </div>
       </div>
     </footer>
+
+    <!-- Android Phone Compact Mini Now-Playing Strip (visible only when browsing Queue/Library/Saved) -->
+    <div class="mobile-mini-bar" id="mobileMiniNowBar" hidden>
+      <button type="button" class="mobile-mini-info" id="mobileMiniOpenPlayerBtn" aria-label="Return to player">
+        <span class="mobile-mini-title" id="mobileMiniTitle" data-i18n="nothingPlaying">Nothing playing</span>
+        <span class="mobile-mini-sub" id="mobileMiniSub" data-i18n="idle">Idle</span>
+      </button>
+      <div class="mobile-mini-actions">
+        <button type="button" class="btn-icon mobile-mini-play-btn" id="mobileMiniPlayBtn" aria-label="Play or Pause">
+          <svg id="mobileMiniPlayIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          <svg id="mobileMiniPauseIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none" aria-hidden="true"><rect x="6" y="4" width="4.5" height="16" rx="1"/><rect x="13.5" y="4" width="4.5" height="16" rx="1"/></svg>
+        </button>
+        <button type="button" class="btn-icon" id="mobileMiniNextBtn" aria-label="Next track">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <polygon points="5 4 15 12 5 20 5 4"/><rect x="16.5" y="4" width="2.5" height="16" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Android Phone Bottom Navigation Bar (hidden on desktop) -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" hidden aria-label="Mobile Navigation">
+      <button type="button" class="mobile-nav-btn is-active" data-mobile-nav="player" aria-pressed="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+        </svg>
+        <span class="mobile-nav-label" data-p3-i18n="navPlayer">Player</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="queue" aria-pressed="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        <span class="mobile-nav-label" data-i18n="tabQueue">Queue</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="library" aria-pressed="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="mobile-nav-label" data-p3-i18n="tabLibrary">Library</span>
+      </button>
+      <button type="button" class="mobile-nav-btn" data-mobile-nav="saved" aria-pressed="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="mobile-nav-label" data-i18n="tabSavedShort">Saved</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Interactive Configurable Keyboard Shortcuts Modal -->

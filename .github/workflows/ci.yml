@@ -130,23 +130,58 @@ jobs:
       - name: Sync frontend assets & versionCode
         run: node desktop/scripts/prepare-ci.cjs
 
-      - name: Initialize Android project if absent
+      - name: Initialize & configure Android project
         working-directory: desktop
         run: |
           if [ ! -d "src-tauri/gen/android" ]; then
             npx tauri android init --ci
           fi
           npx tauri icon assets/icon.png
+          node scripts/configure-android.cjs
           node scripts/prepare-ci.cjs
 
-      - name: Build Android Debug APK (aarch64)
+      - name: Build lightweight Android APK (aarch64 Release + R8 shrink)
         working-directory: desktop
-        run: npx tauri android build --apk --debug --target aarch64
+        run: npx tauri android build --apk --target aarch64
 
-      - name: Upload Android Debug APK artifact
+      - name: Sign preview APK for direct phone testing (ephemeral debug keystore)
+        working-directory: desktop
+        run: |
+          mkdir -p android-out
+          UNSIGNED_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "No built APK found!" >&2
+            exit 1
+          fi
+          echo "Built raw APK: $UNSIGNED_APK ($(du -h "$UNSIGNED_APK" | cut -f1))"
+          KEYSTORE="$RUNNER_TEMP/aaz-preview-debug.keystore"
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE" \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -dname "CN=AAZ Player Preview,O=AAZ,C=US"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          ALIGNED_APK="$RUNNER_TEMP/aaz-aligned.apk"
+          SIGNED_APK="android-out/AAZ-Player-Android-Preview.apk"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$SIGNED_APK" \
+            "$ALIGNED_APK"
+          "$BUILD_TOOLS/apksigner" verify "$SIGNED_APK"
+          ls -lh "$SIGNED_APK"
+
+      - name: Upload lightweight Android Preview APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aaz-player-android-debug-apk
-          path: desktop/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          name: aaz-player-android-preview-apk
+          path: desktop/android-out/AAZ-Player-Android-Preview.apk
           if-no-files-found: error
 

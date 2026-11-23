@@ -1,12 +1,15 @@
 /**
- * Native Rust / Tauri v2 Platform Bridge Adapter (window.aazDesktop).
- * Safely attaches IPC commands on both Windows desktop (WebView2) and Android (WebView + Kotlin plugins),
- * exposing platform feature detection (R6, R13, R17) so frontend code never assumes desktop-only APIs.
+ * Native Rust / Tauri v2 & Android Kotlin Platform Bridge Adapter (window.aazDesktop).
+ * Safely attaches IPC commands on both Windows desktop (WebView2) and Android (WebView + Kotlin AAZAndroid bridge),
+ * exposing platform feature detection (R6, R13, R17, R29-R34) so frontend code never assumes desktop-only APIs.
  */
 
 export function detectAndroidEnvironment(win = typeof window !== 'undefined' ? window : null) {
   if (!win) return false;
   try {
+    if (win.AAZAndroid && typeof win.AAZAndroid.isAvailable === 'function' && win.AAZAndroid.isAvailable()) {
+      return true;
+    }
     const ua = String(win.navigator?.userAgent || '');
     if (/\bAndroid\b/i.test(ua)) return true;
   } catch {
@@ -22,6 +25,7 @@ export function buildPlatformCapabilities(isAndroid) {
     setSinkId: !isAndroid,
     directoryPicker: !isAndroid,
     safPicker: isAndroid,
+    mediaStoreScan: isAndroid,
     touchGestures: isAndroid,
     windowsCast: !isAndroid,
     nativeMedia3: isAndroid,
@@ -49,24 +53,98 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     // Ignore cross-origin parent inspection errors
   }
 
-  if (!tauriApi) return null;
+  const getAndroidNative = () => {
+    try {
+      return win.AAZAndroid && typeof win.AAZAndroid.isAvailable === 'function' && win.AAZAndroid.isAvailable()
+        ? win.AAZAndroid
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (!tauriApi && !getAndroidNative()) return null;
 
   const isAndroid = detectAndroidEnvironment(win);
-  const invoke = (cmd, args = {}) => tauriApi.core.invoke(cmd, args);
+  const invoke = (cmd, args = {}) =>
+    tauriApi ? tauriApi.core.invoke(cmd, args) : Promise.resolve(null);
+
+  // Async callback & event bridge for Android @JavascriptInterface (window.AAZAndroid)
+  const androidCallbacks = new Map();
+  const androidEventListeners = new Map();
+  let androidCbSeq = 1;
+
+  if (isAndroid) {
+    win.__aazResolveAndroidCallback = (id, value) => {
+      const resolver = androidCallbacks.get(id);
+      if (!resolver) return;
+      androidCallbacks.delete(id);
+      resolver(value);
+    };
+    win.__aazOnAndroidEvent = (name, payload) => {
+      const set = androidEventListeners.get(name);
+      if (!set) return;
+      for (const cb of set) {
+        try {
+          cb(payload);
+        } catch {
+          // Isolate listener errors
+        }
+      }
+    };
+  }
+
+  const callAndroidAsync = (invokeNative) =>
+    new Promise((resolve) => {
+      const native = getAndroidNative();
+      if (!native) {
+        resolve(null);
+        return;
+      }
+      const cbId = `aaz_cb_${androidCbSeq++}_${Date.now()}`;
+      const timer = setTimeout(() => {
+        if (androidCallbacks.has(cbId)) {
+          androidCallbacks.delete(cbId);
+          resolve(null);
+        }
+      }, 120000);
+      androidCallbacks.set(cbId, (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      });
+      try {
+        invokeNative(native, cbId);
+      } catch {
+        clearTimeout(timer);
+        androidCallbacks.delete(cbId);
+        resolve(null);
+      }
+    });
+
+  const listenAndroidEvent = (eventName, cb) => {
+    if (!androidEventListeners.has(eventName)) {
+      androidEventListeners.set(eventName, new Set());
+    }
+    const set = androidEventListeners.get(eventName);
+    set.add(cb);
+    return Promise.resolve(() => set.delete(cb));
+  };
+
   const listen = (eventName, cb) => {
-    if (tauriApi.event && typeof tauriApi.event.listen === 'function') {
+    if (tauriApi && tauriApi.event && typeof tauriApi.event.listen === 'function') {
       return tauriApi.event
         .listen(eventName, (ev) => cb(ev ? ev.payload : null))
         .catch(() => () => {});
     }
     return Promise.resolve(() => {});
   };
+
   const listenWindow = (eventName, cb) => {
     if (isAndroid) {
       return listen(eventName, cb);
     }
     try {
-      const currentWin = tauriApi.webviewWindow?.getCurrentWebviewWindow?.();
+      const currentWin = tauriApi?.webviewWindow?.getCurrentWebviewWindow?.();
       if (currentWin && typeof currentWin.listen === 'function') {
         return currentWin
           .listen(eventName, (ev) => cb(ev ? ev.payload : null))
@@ -88,18 +166,75 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     getPlatformInfo: () => invoke('aaz_get_platform_info'),
     openNewWindow: () => invoke('aaz_new_window'),
     getAppVersion: () => invoke('aaz_get_app_version'),
-    getLaunchFiles: () => invoke('aaz_get_launch_files'),
+    getLaunchFiles: async () => {
+      const native = getAndroidNative();
+      if (isAndroid && native && typeof native.getLaunchFilesJson === 'function') {
+        try {
+          const parsed = JSON.parse(native.getLaunchFilesJson() || '[]');
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+      return invoke('aaz_get_launch_files');
+    },
     checkForUpdates: () => invoke('aaz_check_updates'),
     downloadUpdate: () => invoke('aaz_download_update'),
     installUpdate: () => invoke('aaz_install_update'),
     onUpdateStatus: (callback) => listen('aaz:update-status', callback),
-    selectFolder: () => invoke('aaz_select_folder'),
-    selectFiles: () => invoke('aaz_select_files'),
-    readFolder: (folderPath) => invoke('aaz_read_folder', { folderPath }),
-    readTextFile: (filePath) => invoke('aaz_read_text_file', { filePath }),
-    findNearbySubtitle: (videoFullPath, preferredLang = 'auto', uiLang = 'en') =>
-      invoke('aaz_find_nearby_subtitle', { videoFullPath, preferredLang, uiLang }),
-    inspectPaths: (paths) => invoke('aaz_inspect_paths', { paths }),
+    selectFolder: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.selectFolder(cbId));
+      }
+      return invoke('aaz_select_folder');
+    },
+    selectFiles: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.selectFiles(cbId));
+      }
+      return invoke('aaz_select_files');
+    },
+    readFolder: (folderPath) => {
+      if (isAndroid && getAndroidNative() && String(folderPath || '').startsWith('content://')) {
+        return callAndroidAsync((native, cbId) => native.readFolder(cbId, String(folderPath)));
+      }
+      return invoke('aaz_read_folder', { folderPath });
+    },
+    readTextFile: (filePath) => {
+      if (isAndroid && getAndroidNative() && String(filePath || '').startsWith('content://')) {
+        return callAndroidAsync((native, cbId) => native.readTextFile(cbId, String(filePath)));
+      }
+      return invoke('aaz_read_text_file', { filePath });
+    },
+    findNearbySubtitle: (videoFullPath, preferredLang = 'auto', uiLang = 'en') => {
+      if (isAndroid && getAndroidNative() && String(videoFullPath || '').startsWith('content://')) {
+        return callAndroidAsync((native, cbId) =>
+          native.findNearbySubtitle(cbId, String(videoFullPath), String(preferredLang || 'auto'), String(uiLang || 'en'))
+        );
+      }
+      return invoke('aaz_find_nearby_subtitle', { videoFullPath, preferredLang, uiLang });
+    },
+    inspectPaths: (paths) => {
+      if (isAndroid && getAndroidNative()) {
+        const list = Array.isArray(paths) ? paths : [];
+        return callAndroidAsync((native, cbId) => native.inspectPaths(cbId, JSON.stringify(list)));
+      }
+      return invoke('aaz_inspect_paths', { paths });
+    },
+    scanDeviceMedia: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.scanDeviceMedia(cbId));
+      }
+      return Promise.resolve(null);
+    },
+    saveTextFile: (filename, content, mimeType = 'text/plain') => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) =>
+          native.saveTextFile(cbId, String(filename || 'aaz-export.txt'), String(content || ''), String(mimeType || 'text/plain'))
+        );
+      }
+      return Promise.resolve(null);
+    },
     setAlwaysOnTop: (enabled) => invoke('aaz_set_always_on_top', { enabled: Boolean(enabled) }),
     setWindowFullscreen: (enabled) => invoke('aaz_set_fullscreen', { enabled: Boolean(enabled) }),
     isWindowFullscreen: () => invoke('aaz_is_fullscreen'),
@@ -136,8 +271,14 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
         lang: lang === 'ar' ? 'ar' : 'en',
       }),
     onTaskbarAction: (callback) => listenWindow('aaz:taskbar-action', callback),
-    saveSnapshot: (dataBase64, suggestedName) =>
-      invoke('aaz_save_snapshot', { dataBase64, suggestedName }),
+    saveSnapshot: (dataBase64, suggestedName) => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) =>
+          native.saveSnapshot(cbId, String(dataBase64 || ''), String(suggestedName || 'aaz-snapshot.png'))
+        );
+      }
+      return invoke('aaz_save_snapshot', { dataBase64, suggestedName });
+    },
     listSystemFonts: () => invoke('aaz_list_system_fonts'),
     castStartServer: (mediaPath, title, subtitleVtt = null) =>
       invoke('aaz_cast_start_server', { mediaPath, title, subtitleVtt }),
@@ -148,30 +289,79 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     castDlnaControl: (controlUrl, action, seekTarget = null) =>
       invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget }),
     castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
-    onOpenExternal: (callback) => listenWindow('aaz:open-external', callback),
+    onOpenExternal: (callback) => {
+      if (isAndroid) {
+        listenAndroidEvent('open-external', callback);
+      }
+      return listenWindow('aaz:open-external', callback);
+    },
     onFileDrop: (callback) => listenWindow('tauri://drag-drop', callback),
 
-    // Android Phase 1 / Phase 3 Native Media3 & System Control Bridge Contract (R13, R20, R35)
-    playerLoad: (mediaRef, positionMs = 0) =>
-      invoke('plugin:aaz-media|load', { mediaRef, positionMs: Math.max(0, Math.round(Number(positionMs) || 0)) }),
-    playerPlay: () => invoke('plugin:aaz-media|play'),
-    playerPause: () => invoke('plugin:aaz-media|pause'),
-    playerSeekTo: (positionMs) =>
-      invoke('plugin:aaz-media|seekTo', { positionMs: Math.max(0, Math.round(Number(positionMs) || 0)) }),
-    playerSetSpeed: (speed) => invoke('plugin:aaz-media|setSpeed', { speed: Number(speed) || 1 }),
-    playerSetVolume: (volume, useSystemStream = false) =>
-      invoke('plugin:aaz-media|setVolume', {
+    // Android Native System & MediaSession Controls
+    onMediaAction: (callback) => {
+      if (isAndroid) {
+        return listenAndroidEvent('media-action', callback);
+      }
+      return listen('aaz:media-action', callback);
+    },
+    setScreenBrightness: (level) => {
+      const native = getAndroidNative();
+      const clamped = Math.min(1, Math.max(0.05, Number(level) || 0.5));
+      if (native && typeof native.setBrightness === 'function') {
+        native.setBrightness(clamped);
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    setOrientation: (mode) => {
+      const native = getAndroidNative();
+      if (native && typeof native.setOrientation === 'function') {
+        native.setOrientation(String(mode || 'auto'));
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    setImmersiveFullscreen: (enabled) => {
+      const native = getAndroidNative();
+      if (native && typeof native.setImmersiveFullscreen === 'function') {
+        native.setImmersiveFullscreen(Boolean(enabled));
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    enterPictureInPicture: () => {
+      const native = getAndroidNative();
+      if (native && typeof native.enterPictureInPicture === 'function') {
+        return Promise.resolve(Boolean(native.enterPictureInPicture()));
+      }
+      return Promise.resolve(false);
+    },
+    updateMediaSession: ({ title = '', artist = '', isPlaying = false, positionMs = 0, durationMs = 0 } = {}) => {
+      const native = getAndroidNative();
+      if (native && typeof native.updateMediaSession === 'function') {
+        native.updateMediaSession(
+          String(title || ''),
+          String(artist || ''),
+          Boolean(isPlaying),
+          Math.max(0, Math.round(Number(positionMs) || 0)),
+          Math.max(0, Math.round(Number(durationMs) || 0))
+        );
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    playerLoad: (mediaRef, startMs = 0) =>
+      invoke('aaz_android_player_load', { mediaRef, startMs: Math.max(0, Math.round(Number(startMs) || 0)) }),
+    playerPlay: () => invoke('aaz_android_player_play'),
+    playerPause: () => invoke('aaz_android_player_pause'),
+    playerSeek: (positionMs) =>
+      invoke('aaz_android_player_seek', { positionMs: Math.max(0, Math.round(Number(positionMs) || 0)) }),
+    playerSetRate: (rate) => invoke('aaz_android_player_set_rate', { rate: Number(rate) || 1 }),
+    playerSetVolume: (volume, systemStream = false) =>
+      invoke('aaz_android_player_set_volume', {
         volume: Math.min(1, Math.max(0, Number(volume) || 0)),
-        useSystemStream: Boolean(useSystemStream),
+        systemStream: Boolean(systemStream),
       }),
-    playerGetState: () => invoke('plugin:aaz-media|getState'),
-    onPlayerState: (callback) => listen('aaz:player-state', callback),
-    onMediaAction: (callback) => listen('aaz:media-action', callback),
-    setScreenBrightness: (level) =>
-      invoke('plugin:aaz-media|setBrightness', { level: Math.min(1, Math.max(0.05, Number(level) || 0.5)) }),
-    setOrientation: (mode) => invoke('plugin:aaz-media|setOrientation', { mode }),
-    setImmersiveFullscreen: (enabled) =>
-      invoke('plugin:aaz-media|setImmersiveFullscreen', { enabled: Boolean(enabled) }),
   };
 
   // Refine capabilities asynchronously from Rust aaz_get_platform_info without blocking boot

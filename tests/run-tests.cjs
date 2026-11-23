@@ -1076,7 +1076,12 @@ async function main() {
 
     const ciYml = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
     assert.ok(ciYml.includes('android-debug-build:'), 'ci.yml must include android-debug-build job');
-    assert.ok(ciYml.includes('tauri android build --apk --debug'), 'ci.yml must build Android debug APK');
+    assert.ok(
+      ciYml.includes('tauri android build --apk --target aarch64'),
+      'ci.yml must build lightweight stripped Android ARM64 release APK'
+    );
+    assert.ok(ciYml.includes('node scripts/configure-android.cjs'), 'ci.yml must run configure-android.cjs');
+    assert.ok(ciYml.includes('apksigner" sign'), 'ci.yml must sign preview APK with apksigner');
 
     const libRs = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/src/lib.rs'), 'utf8');
     assert.ok(libRs.includes('mod media_core;'), 'lib.rs must wire platform-neutral media_core');
@@ -1188,6 +1193,68 @@ async function main() {
     assert.equal(ctrl.handleBackAction({ hasInternalBackView: true, isPlaying: true }), 'navigated-back');
     assert.equal(ctrl.handleBackAction({ isPlaying: true }), 'confirm-exit');
     assert.equal(ctrl.handleBackAction({ isPlaying: false }), 'allow-exit');
+  });
+
+  // 32. Android Phase 2: Native Kotlin Core, Adaptive Icon, Mobile Shell & MediaStore Bridge
+  await runTest('Android Phase 2: Kotlin SAF/MediaStore/Range core, vector adaptive icon, mobile DOM & bridge routing', async () => {
+    const nativeDir = path.join(ROOT, 'desktop/android-native');
+    for (const file of ['AazContentServer.kt', 'AazMediaHelper.kt', 'MainActivity.kt']) {
+      assert.ok(fs.existsSync(path.join(nativeDir, file)), `Missing desktop/android-native/${file}`);
+    }
+    const serverKt = fs.readFileSync(path.join(nativeDir, 'AazContentServer.kt'), 'utf8');
+    assert.ok(serverKt.includes('127.0.0.1'), 'AazContentServer must bind strictly to loopback 127.0.0.1');
+    assert.ok(serverKt.includes('206 Partial Content'), 'AazContentServer must support HTTP Range 206 streaming');
+
+    const configScript = fs.readFileSync(path.join(ROOT, 'desktop/scripts/configure-android.cjs'), 'utf8');
+    assert.ok(configScript.includes('ic_launcher_foreground.xml'), 'configure-android.cjs must install vector adaptive icon foreground');
+    assert.ok(configScript.includes('isMinifyEnabled = true'), 'configure-android.cjs must enable R8 minification for lightweight APK');
+    assert.ok(!configScript.includes('MANAGE_EXTERNAL_STORAGE'), 'configure-android.cjs must never request MANAGE_EXTERNAL_STORAGE (D7)');
+
+    const tauriConf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8'));
+    const csp = tauriConf.app?.security?.csp || '';
+    assert.ok(csp.includes('http://127.0.0.1:*'), 'CSP must permit loopback Android content server media streaming');
+
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('id="mobileBottomNav"'), 'index.html must include #mobileBottomNav');
+    assert.ok(indexHtml.includes('id="mobileMiniNowBar"'), 'index.html must include #mobileMiniNowBar');
+    assert.ok(indexHtml.includes('id="libScanDeviceBtn"'), 'index.html must include #libScanDeviceBtn');
+
+    // Verify Android native bridge callback routing without Tauri desktop invoke
+    const calls = [];
+    const fakeAndroidWin = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36' },
+      AAZAndroid: {
+        isAvailable: () => true,
+        scanDeviceMedia(cbId) {
+          calls.push('scanDeviceMedia');
+          fakeAndroidWin.__aazResolveAndroidCallback(cbId, {
+            permissionDenied: false,
+            folders: [{ folderPath: 'mediastore://Music', folderName: 'Music', entries: [] }],
+          });
+        },
+        saveTextFile(cbId, fileName) {
+          calls.push(`saveTextFile:${fileName}`);
+          fakeAndroidWin.__aazResolveAndroidCallback(cbId, { saved: true });
+        },
+        enterPictureInPicture() {
+          calls.push('enterPictureInPicture');
+          return true;
+        },
+      },
+      __TAURI__: {
+        core: { invoke: async () => ({}) },
+        event: { listen: async () => () => {} },
+      },
+    };
+    const bridge = desktopBridgeMod.attachDesktopBridge(fakeAndroidWin);
+    assert.equal(bridge.isAndroid, true);
+    assert.equal(bridge.capabilities.mediaStoreScan, true);
+    const scanRes = await bridge.scanDeviceMedia();
+    assert.equal(scanRes.folders.length, 1);
+    const saveRes = await bridge.saveTextFile('test.m3u8', '#EXTM3U', 'audio/x-mpegurl');
+    assert.equal(saveRes.saved, true);
+    assert.equal(await bridge.enterPictureInPicture(), true);
+    assert.deepEqual(calls, ['scanDeviceMedia', 'saveTextFile:test.m3u8', 'enterPictureInPicture']);
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);

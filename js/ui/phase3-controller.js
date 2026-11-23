@@ -65,6 +65,12 @@ const P3_I18N = {
     libItemMany: 'items',
     libAddFolder: '+ Folder',
     libAddFolderFull: '+ Add Folder',
+    libScanDevice: 'Scan Device',
+    libScanScanning: 'Scanning device audio & video...',
+    libScanFound: 'Found {items} media items across {folders} folders.',
+    libScanDenied: 'Media permission was not granted. You can still use "+ Folder" to pick any folder.',
+    libScanEmpty: 'No audio or video files were found on this device.',
+    navPlayer: 'Player',
     libRescan: 'Rescan',
     libRemoveFolder: 'Remove folder',
     libAllFolders: 'All Folders',
@@ -155,6 +161,12 @@ const P3_I18N = {
     libItemMany: 'عنصر',
     libAddFolder: '+ مجلد',
     libAddFolderFull: '+ إضافة مجلد',
+    libScanDevice: 'فحص الجهاز',
+    libScanScanning: 'جارٍ فحص ملفات الصوت والفيديو على الجهاز...',
+    libScanFound: 'تم العثور على {items} ملف في {folders} مجلد.',
+    libScanDenied: 'لم يتم منح إذن فحص الوسائط. يمكنك استخدام "+ مجلد" لاختيار أي مجلد يدوياً.',
+    libScanEmpty: 'لم يتم العثور على ملفات صوت أو فيديو على الجهاز.',
+    navPlayer: 'المشغل',
     libRescan: 'تحديث',
     libRemoveFolder: 'إزالة المجلد',
     libAllFolders: 'كل المجلدات',
@@ -321,6 +333,7 @@ export function createPhase3Controller(api) {
     historyClearMenuBtn: document.getElementById('historyClearMenuBtn'),
     // Library UI (unified with Queue)
     libMeta: document.getElementById('libMeta'),
+    libScanDeviceBtn: document.getElementById('libScanDeviceBtn'),
     libAddFolderBtn: document.getElementById('libAddFolderBtn'),
     libRescanAllBtn: document.getElementById('libRescanAllBtn'),
     libFolderChips: document.getElementById('libFolderChips'),
@@ -705,9 +718,17 @@ export function createPhase3Controller(api) {
 
       const actions = document.createElement('div');
       actions.className = 'empty-actions';
+      if (api.desktopBridge?.capabilities?.mediaStoreScan && typeof api.desktopBridge.scanDeviceMedia === 'function') {
+        const scanBtn = document.createElement('button');
+        scanBtn.type = 'button';
+        scanBtn.className = 'btn btn-primary';
+        scanBtn.textContent = p3t('libScanDevice');
+        scanBtn.addEventListener('click', () => scanDeviceMediaLibrary());
+        actions.appendChild(scanBtn);
+      }
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
-      addBtn.className = 'btn btn-primary';
+      addBtn.className = api.desktopBridge?.capabilities?.mediaStoreScan ? 'btn' : 'btn btn-primary';
       addBtn.textContent = p3t('libAddFolderFull');
       addBtn.addEventListener('click', () => addFolderToLibrary());
       actions.appendChild(addBtn);
@@ -833,7 +854,43 @@ export function createPhase3Controller(api) {
     }
   }
 
+  async function scanDeviceMediaLibrary() {
+    if (!api.desktopBridge || typeof api.desktopBridge.scanDeviceMedia !== 'function') {
+      api.showNotice(p3t('libWebUnsupported'), true);
+      return;
+    }
+    try {
+      api.showNotice(p3t('libScanScanning'));
+      const res = await api.desktopBridge.scanDeviceMedia();
+      if (!res) return;
+      if (res.permissionDenied) {
+        api.showNotice(p3t('libScanDenied'), true);
+        return;
+      }
+      const folders = Array.isArray(res.folders) ? res.folders : [];
+      if (folders.length === 0) {
+        api.showNotice(p3t('libScanEmpty'));
+        return;
+      }
+      let totalItems = 0;
+      for (const folder of folders) {
+        if (!folder || !folder.folderPath) continue;
+        const entries = Array.isArray(folder.entries) ? folder.entries : [];
+        libraryManager.addOrUpdateFolder(folder.folderPath, folder.folderName || folder.folderPath, entries);
+        totalItems += entries.length;
+      }
+      renderLibrary();
+      api.showNotice(p3t('libScanFound', { items: totalItems, folders: folders.length }));
+    } catch (err) {
+      api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
+    }
+  }
+
   async function rescanLibraryFolder(folderPath) {
+    if (String(folderPath || '').startsWith('mediastore://')) {
+      await scanDeviceMediaLibrary();
+      return;
+    }
     if (!api.desktopBridge || !api.desktopBridge.readFolder) return;
     try {
       const res = await api.desktopBridge.readFolder(folderPath);
@@ -860,7 +917,15 @@ export function createPhase3Controller(api) {
 
   async function rescanAllLibraryFolders() {
     const folders = [...libraryManager.getFolders()];
+    let scannedMediaStore = false;
     for (const f of folders) {
+      if (String(f.path || '').startsWith('mediastore://')) {
+        if (!scannedMediaStore) {
+          scannedMediaStore = true;
+          await scanDeviceMediaLibrary();
+        }
+        continue;
+      }
       await rescanLibraryFolder(f.path);
     }
   }
@@ -1279,6 +1344,14 @@ export function createPhase3Controller(api) {
     }
 
     // Library controls
+    if (dom.libScanDeviceBtn) {
+      const canScan = Boolean(
+        api.desktopBridge?.capabilities?.mediaStoreScan &&
+        typeof api.desktopBridge.scanDeviceMedia === 'function'
+      );
+      dom.libScanDeviceBtn.hidden = !canScan;
+      dom.libScanDeviceBtn.addEventListener('click', scanDeviceMediaLibrary);
+    }
     if (dom.libAddFolderBtn) {
       dom.libAddFolderBtn.addEventListener('click', addFolderToLibrary);
     }
@@ -1556,18 +1629,28 @@ export function createPhase3Controller(api) {
 
     // JSON Backup Export & Restore
     if (dom.setExportBackupBtn) {
-      dom.setExportBackupBtn.addEventListener('click', () => {
+      dom.setExportBackupBtn.addEventListener('click', async () => {
         const json = api.storageManager.exportBackupJson({
           theme: api.getTheme(),
           skin: api.getSkin ? api.getSkin() : 'foliage',
           lang: api.getLang(),
           subtitleStyle: api.getSubtitleStyle(),
         });
+        const fileName = `aaz-player-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        if (api.desktopBridge?.isAndroid && typeof api.desktopBridge.saveTextFile === 'function') {
+          try {
+            const res = await api.desktopBridge.saveTextFile(fileName, json, 'application/json');
+            if (res && res.saved) api.showNotice(p3t('setBackupExported'));
+          } catch (err) {
+            api.errorHandler.notify(ErrorCategory.FILE_ACCESS, err);
+          }
+          return;
+        }
         const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `aaz-player-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         a.remove();

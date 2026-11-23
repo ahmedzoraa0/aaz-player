@@ -1,8 +1,8 @@
 # AAZ Player — Android Architecture Record
 
 **Baseline commit:** `ed785b4` (AAZ Player `v1.7.0`)
-**Last updated:** 2026-11-22
-**Status:** Phase 1 in progress (repo portability, shared Range core, `MediaRef` contract, mobile UI/gestures, and Android CI job implemented; on-device/emulator verification gates `R3`, `V1`, `V2`, `R27`, `T1–T2`, `T4`, `T9–T10` are **PENDING** until executed with Android SDK/emulator/physical hardware).
+**Last updated:** 2026-11-23
+**Status:** Phase 2 implemented (native Kotlin SAF/MediaStore/Range loopback core, VectorDrawable adaptive icon, lightweight stripped ARM64 preview APK with R8 shrinking, full mobile/tablet touch-first UI shell, touch gestures, PiP, native MediaSession, and nearby Arabic/UTF-8 subtitle discovery). Phase 2 Android CI build and on-device verification remain **PENDING** until executed on GitHub Actions and real Android hardware.
 
 ---
 
@@ -71,13 +71,11 @@ Canonical identity key rules:
 
 | Check | Scope | Status | Evidence / Notes |
 | --- | --- | --- | --- |
-| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all test groups green). |
-| **T3 (Windows Rust)** | `cargo fmt -- --check`, `cargo clippy`, `cargo test`, Windows CI | `PENDING` | Must re-run on Windows / GitHub Actions after Phase 1 Rust edits. |
-| **R4 (Android CI)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PENDING` | Workflow job added; requires GitHub Actions execution to confirm APK artifact build. |
-| **R1–R3** | Android Studio / SDK / NDK / `tauri android init` / `tauri android dev` (API 33 emulator + physical device) | `PENDING` | Requires host with Android SDK/NDK and emulator/device. |
-| **V1** | `aazmedia://` 100 MB MP4 + 20 randomized Range requests on API 33 emulator | `PENDING` | Shared Range core extracted to `media_core.rs`; emulator verification pending. |
-| **V2** | Media3 FFmpeg extension (AC-3/DTS), surface layering with WebView, SAF fd playback + seek on API 26 & 34+ | `PENDING` | Requires Kotlin plugin wiring inside `gen/android` + emulator/device execution. |
-| **R27** | `ACTION_VIEW` / `ACTION_SEND` open-from-file-manager on API 26 & 34+ | `PENDING` | Requires Android manifest inside `gen/android` + device verification. |
+| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 32 test groups green). |
+| **T3 (Windows Rust)** | `cargo fmt -- --check`, `cargo clippy`, `cargo test`, Windows CI | `PASS` | Confirmed green on GitHub Actions Windows runner (Phase 1); re-run required on next push. |
+| **R4 (Android CI — Phase 1)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 debug APK on GitHub Actions; user installed & launched on physical Android phone. |
+| **R4 (Android CI — Phase 2)** | Stripped ARM64 preview APK + Kotlin core (`AazContentServer`, `AazMediaHelper`, `MainActivity`) + Vector adaptive icon + R8 minify | `PENDING` | Ready in `.github/workflows/ci.yml`; awaits GitHub Actions build + user physical device check. |
+| **V1 / V2 / R27** | Loopback Range streaming, SAF/MediaStore scanning, nearby Arabic/UTF-8 subtitles, `ACTION_VIEW`/`ACTION_SEND`, PiP, MediaSession | `PENDING` | Native Kotlin implementation added; awaits on-device verification after Phase 2 APK install. |
 | **T1–T2, T4–T12** | Full Android acceptance suite | `PENDING` | Tracked per phase gate. |
 
 ---

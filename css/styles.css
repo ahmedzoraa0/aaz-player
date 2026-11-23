@@ -4473,153 +4473,539 @@
     }
 
     /* ========================================================================
-       Android Mobile & Tablet Responsive Layout (Phase 1: R19, R21, R23, R24)
+       Android Mobile & Tablet Touch-First Layout (Phases 1 & 2: R19-R24)
+       Strictly scoped to html.is-android so desktop layout remains untouched.
        ======================================================================== */
+    .mobile-bottom-nav[hidden],
+    .mobile-mini-bar[hidden] {
+      display: none !important;
+    }
+
     html.is-android {
       font-size: 14px;
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior-y: contain;
     }
 
-    html.is-android body {
+    html.is-android .app-shell {
+      width: 100%;
+      height: 100dvh;
       padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
       padding-left: env(safe-area-inset-left, 0px);
       padding-right: env(safe-area-inset-right, 0px);
     }
 
-    /* R23: Hide frameless desktop titlebar, multi-tab strip & window controls on Android */
+    /* Hide desktop-only chrome, frameless window controls & unsupported controls on Android */
     html.is-android #workspaceShell,
     html.is-android .win-controls,
-    html.is-android .tab-strip-drag,
+    html.is-android .menubar,
+    html.is-android .sidebar-resizer,
+    html.is-android #pinWindowBtn,
+    html.is-android #miniPlayerBtn,
+    html.is-android #audioOutputBtn,
+    html.is-android .output-picker-wrap,
+    html.is-android #castWindowsBtn,
     html.is-android [data-cmd="new-window"],
+    html.is-android [data-cmd="new-tab"],
     html.is-android [data-cmd="always-on-top"] {
       display: none !important;
     }
 
-    /* R21: Touch-friendly minimum 44x44px hit targets with 8px spacing on Android / coarse pointers */
-    html.is-android .icon-btn,
-    html.is-android .ctrl-btn,
-    html.is-android .sidebar-tab,
-    html.is-android .saved-pl-icon-btn,
-    html.is-android .mini-link-btn {
-      min-width: 44px;
-      min-height: 44px;
-    }
-
-    @media (pointer: coarse) {
-      .icon-btn,
-      .ctrl-btn {
-        min-width: 44px;
-        min-height: 44px;
-      }
-    }
-
-    html.is-android .controls-row,
-    html.is-android .saved-pl-actions {
+    /* Compact Mobile Top App Bar (52px, zero horizontal overflow) */
+    html.is-android .topbar {
+      height: 52px;
+      padding: 0 12px;
       gap: 8px;
+      background-color: var(--bg-canvas);
+      border-bottom: 1px solid var(--border-hairline);
     }
 
-    /* R21: Always-visible affordances instead of hover-only controls on touch screens */
+    html.is-android .topbar-left {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    html.is-android .brand-wordmark {
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    html.is-android .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    html.is-android .topbar-right .btn {
+      height: 36px;
+      min-height: 36px;
+      padding: 0 11px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    html.is-android .topbar-right .btn-icon,
+    html.is-android .topbar-right .lang-toggle-btn {
+      min-width: 40px;
+      min-height: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+
+    /* Touch-friendly minimum hit targets & always-visible affordances (R21) */
+    html.is-android .btn-icon,
+    html.is-android .saved-pl-icon-btn,
+    html.is-android .video-tool-btn {
+      min-width: 40px;
+      min-height: 40px;
+    }
+
+    html.is-android .track-row {
+      min-height: 56px;
+      padding: 9px 12px;
+      gap: 10px;
+    }
+
     html.is-android .track-actions,
     html.is-android .saved-pl-icon-btn {
       opacity: 1;
       visibility: visible;
     }
 
-    /* R19: Phone portrait layout — stage on top, controls below, Library/Queue/Saved bottom area */
+    /* Phone Portrait Layout (<= 768px): Focused 4-Tab Mobile Experience */
     @media (max-width: 768px) {
-      html.is-android .workspace,
-      html.is-android .app-body {
+      /* On narrow phones, keep topbar ultra-clean: Brand + Files + Lang + Theme + Settings */
+      html.is-android #openFolderBtn,
+      html.is-android #toggleSidebarBtn {
+        display: none !important;
+      }
+
+      html.is-android #openFilesBtn {
+        background-color: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 700;
+        padding: 0 12px;
+      }
+
+      html.is-android .workspace {
         display: flex;
         flex-direction: column;
-        height: 100%;
+        flex: 1 1 auto;
         min-height: 0;
+        overflow: hidden;
       }
 
-      html.is-android .stage-pane,
-      html.is-android .player-pane {
-        flex: 0 0 auto;
+      /* View switching: Player vs Queue / Library / Saved */
+      html.is-android[data-mobile-view="player"] .sidebar-pane {
+        display: none !important;
+      }
+
+      html.is-android[data-mobile-view="player"] .stage-column {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
         width: 100%;
-        max-height: 44vh;
       }
 
-      html.is-android .sidebar,
-      html.is-android .playlist-pane {
+      html.is-android[data-mobile-view="queue"] .stage-column,
+      html.is-android[data-mobile-view="library"] .stage-column,
+      html.is-android[data-mobile-view="saved"] .stage-column,
+      html.is-android[data-mobile-view="queue"] .transport-dock,
+      html.is-android[data-mobile-view="library"] .transport-dock,
+      html.is-android[data-mobile-view="saved"] .transport-dock {
+        display: none !important;
+      }
+
+      html.is-android[data-mobile-view="queue"] .sidebar-pane,
+      html.is-android[data-mobile-view="library"] .sidebar-pane,
+      html.is-android[data-mobile-view="saved"] .sidebar-pane {
+        display: flex !important;
+        flex-direction: column;
         flex: 1 1 auto;
         width: 100% !important;
         max-width: 100% !important;
+        min-width: 0 !important;
         min-height: 0;
-        border-inline-start: none;
-        border-top: 1px solid var(--border-hairline);
+        border: none !important;
       }
 
-      html.is-android .sidebar-tabs {
-        position: sticky;
-        bottom: 0;
-        z-index: 12;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-        background: var(--bg-elevated, var(--bg-surface));
-        border-top: 1px solid var(--border-hairline);
+      /* Hide redundant sidebar top tabs on phone because Bottom Nav switches them */
+      html.is-android .sidebar-top-tabs {
+        display: none !important;
       }
 
-      /* R24: Phone-appropriate subtitle size scale */
-      html.is-android .subtitle-cue,
-      html.is-android .subtitle-overlay {
-        font-size: clamp(14px, 4.4vw, 22px);
-        max-width: 94%;
-      }
-    }
-
-    /* R19: Phone landscape immersive video-first mode */
-    @media (max-height: 500px) and (orientation: landscape) {
-      html.is-android .stage-pane,
-      html.is-android .player-pane {
+      /* Stage & Audio Hero tuned for phone screens */
+      html.is-android .media-stage {
         flex: 1 1 auto;
-        max-height: 100vh;
+        min-height: 0;
+        padding: 0;
       }
 
-      html.is-android .sidebar,
-      html.is-android .playlist-pane {
+      html.is-android .audio-stage {
+        padding: 18px 16px 12px;
+        gap: 14px;
+      }
+
+      html.is-android .track-title {
+        font-size: clamp(18px, 5.2vw, 24px);
+        line-height: 1.3;
+        text-wrap: balance;
+      }
+
+      html.is-android .track-subpath {
+        font-size: 12.5px;
+      }
+
+      html.is-android .visualizer-wrap {
+        height: clamp(110px, 22vh, 180px);
+      }
+
+      html.is-android .viz-modes {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      html.is-android .viz-mode-btn {
+        min-height: 34px;
+        padding: 0 11px;
+        font-size: 11.5px;
+      }
+
+      /* Touch-Ergonomic Mobile Transport Dock */
+      html.is-android .transport-dock {
+        padding: 10px 14px 10px;
+        gap: 8px;
+        background-color: var(--bg-canvas);
+        border-top: 1px solid var(--border-hairline);
+        flex-shrink: 0;
+      }
+
+      html.is-android .scrubber-row {
+        gap: 10px;
+      }
+
+      html.is-android #seekBar {
+        height: 28px;
+      }
+
+      html.is-android .dock-controls {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+
+      html.is-android .dock-now {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      html.is-android .dock-now-title {
+        font-size: 13.5px;
+      }
+
+      html.is-android .dock-now-meta {
+        font-size: 11.5px;
+      }
+
+      html.is-android .dock-center {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        width: 100%;
+        padding: 2px 0;
+      }
+
+      html.is-android #abLoopBtn {
         display: none;
       }
-    }
 
-    /* R19: Tablet & foldable two-pane layout with full RTL logical borders */
-    @media (min-width: 769px) {
-      html.is-android .workspace,
-      html.is-android .app-body {
-        display: flex;
-        flex-direction: row;
+      html.is-android .btn-play {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
       }
 
-      html.is-android .sidebar,
-      html.is-android .playlist-pane {
-        width: clamp(280px, 34vw, 380px);
+      html.is-android .dock-right {
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        gap: 6px;
+        width: 100%;
+        padding-top: 4px;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      /* Hide desktop volume slider on phone — hardware keys + right-edge swipe handle volume */
+      html.is-android .dock-right .volume-group {
+        display: none;
+      }
+
+      /* EQ drawer scrollable & compact on phone */
+      html.is-android .eq-drawer {
+        max-height: 34dvh;
+        overflow-y: auto;
+        padding: 10px 12px;
+      }
+
+      html.is-android .eq-presets {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      html.is-android .eq-bands-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      /* Mobile Mini Now-Playing Strip (pinned above Bottom Nav in Queue/Library/Saved) */
+      html.is-android .mobile-mini-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 6px 12px;
+        background-color: var(--bg-surface-elevated);
+        border-top: 1px solid var(--border-strong);
+        flex-shrink: 0;
+      }
+
+      html.is-android .mobile-mini-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+        flex: 1 1 auto;
+        text-align: start;
+        padding: 4px 0;
+      }
+
+      html.is-android .mobile-mini-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      html.is-android .mobile-mini-sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      html.is-android .mobile-mini-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+
+      html.is-android .mobile-mini-play-btn {
+        background-color: var(--accent);
+        color: var(--accent-ink);
+        border-radius: 50%;
+      }
+
+      /* Fixed-Style Bottom Navigation Bar (4 destinations, safe-area inset) */
+      html.is-android .mobile-bottom-nav {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: center;
+        gap: 4px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        background-color: var(--bg-canvas);
+        border-top: 1px solid var(--border-hairline);
+        flex-shrink: 0;
+        z-index: 25;
+      }
+
+      html.is-android .mobile-nav-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        min-height: 46px;
+        padding: 4px 4px;
+        border-radius: 10px;
+        color: var(--text-secondary);
+        font-size: 10.5px;
+        font-weight: 600;
+      }
+
+      html.is-android .mobile-nav-btn.is-active {
+        color: var(--accent);
+        background-color: var(--accent-soft);
+      }
+
+      /* Mobile Bottom-Sheet Modals (Settings, Subtitle Studio, Themes, Cast) */
+      html.is-android .modal-backdrop {
+        align-items: flex-end;
+        padding: 0;
+      }
+
+      html.is-android .modal-card,
+      html.is-android .modal-card.sub-modal-card,
+      html.is-android .modal-card.settings-modal-card,
+      html.is-android .modal-card.theme-gallery-card,
+      html.is-android .modal-card.cast-modal-card {
+        width: 100%;
+        max-width: 100%;
+        max-height: 90dvh;
+        border-radius: 20px 20px 0 0;
+        border-bottom: none;
+        padding-bottom: env(safe-area-inset-bottom, 10px);
+      }
+
+      html.is-android .sub-modal-body {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      html.is-android .sub-grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      html.is-android .theme-gallery-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      html.is-android .settings-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      /* Phone-appropriate subtitle size scale (R24) */
+      html.is-android .subtitle-overlay {
+        max-width: 94%;
+        bottom: 10%;
+      }
+
+      html.is-android .subtitle-cue {
+        font-size: clamp(14px, 4.4vw, 22px) !important;
+      }
+
+      /* Clean video toolbar on mobile */
+      html.is-android .video-toolbar {
+        top: 8px;
+        inset-inline-end: 8px;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      html.is-android #prevFrameBtn,
+      html.is-android #nextFrameBtn {
+        display: none;
+      }
+
+      /* Playlist header & empty state polish */
+      html.is-android .playlist-header {
+        padding: 12px 14px 8px;
+      }
+
+      html.is-android .mode-bar {
+        padding: 8px 12px;
+      }
+
+      html.is-android .empty-actions {
+        flex-direction: column;
+        width: 100%;
+        max-width: 240px;
+      }
+
+      html.is-android .empty-actions .btn {
+        width: 100%;
+        height: 44px;
+        font-size: 13.5px;
+      }
+    }
+
+    /* Phone Landscape Immersive Video-First Mode (R19) */
+    @media (max-height: 500px) and (orientation: landscape) {
+      html.is-android .topbar,
+      html.is-android .sidebar-pane,
+      html.is-android .mobile-bottom-nav,
+      html.is-android .mobile-mini-bar {
+        display: none !important;
+      }
+
+      html.is-android .stage-column {
+        display: flex !important;
+        flex: 1 1 auto;
+        height: 100%;
+      }
+
+      html.is-android .transport-dock {
+        display: flex !important;
+        padding: 6px 14px;
+      }
+
+      html.is-android .dock-now,
+      html.is-android .dock-right {
+        display: none !important;
+      }
+    }
+
+    /* Tablet & Foldable Two-Pane Layout (min-width: 769px on Android) */
+    @media (min-width: 769px) {
+      html.is-android .mobile-bottom-nav,
+      html.is-android .mobile-mini-bar {
+        display: none !important;
+      }
+
+      html.is-android .workspace {
+        display: flex;
+        flex-direction: row;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      html.is-android .stage-column {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      html.is-android .sidebar-pane {
+        width: clamp(300px, 35vw, 380px);
+        flex-shrink: 0;
         border-inline-start: 1px solid var(--border-hairline);
       }
     }
 
-    /* R20: Touch gesture HUD & Screen Lock badge */
+    /* Touch Gesture HUD & Screen Lock Pill (R20) */
     .mobile-gesture-hud {
       position: absolute;
       inset-inline-start: 50%;
-      top: 18%;
+      top: 16%;
       transform: translateX(-50%);
-      padding: 8px 16px;
-      border-radius: 10px;
-      background: rgba(6, 12, 9, 0.84);
+      padding: 8px 18px;
+      border-radius: 12px;
+      background: rgba(6, 12, 9, 0.88);
       border: 1px solid var(--accent-border, rgba(61, 196, 121, 0.45));
       color: var(--text-primary, #edf5ef);
       font-size: 14px;
       font-weight: 700;
       pointer-events: none;
-      z-index: 30;
+      z-index: 40;
+      backdrop-filter: blur(8px);
     }
 
     html[dir="rtl"] .mobile-gesture-hud {
       transform: translateX(50%);
     }
+
