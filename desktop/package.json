@@ -6,6 +6,7 @@
   "author": "AAZ",
   "license": "MIT",
   "scripts": {
+    "tauri": "tauri",
     "prepare": "node scripts/prepare-ci.cjs",
     "dev": "node scripts/prepare-ci.cjs && tauri dev",
     "build": "node scripts/prepare-ci.cjs && tauri build --bundles nsis",

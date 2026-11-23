@@ -774,6 +774,7 @@ fn validate_lan_http_url(raw_url: &str) -> Result<String, String> {
     Ok(format!("{scheme}://{normalized_authority}{path}"))
 }
 
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn clamp_window_geometry_to_monitors(
     x: i32,
     y: i32,
