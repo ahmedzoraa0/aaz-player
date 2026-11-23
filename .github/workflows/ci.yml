@@ -164,7 +164,8 @@ jobs:
             -keysize 2048 \
             -validity 3650 \
             -dname "CN=AAZ Player Preview,O=AAZ,C=US"
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          echo "Using Android build-tools: $BUILD_TOOLS"
           ALIGNED_APK="$RUNNER_TEMP/aaz-aligned.apk"
           SIGNED_APK="android-out/AAZ-Player-Android-Preview.apk"
           "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"

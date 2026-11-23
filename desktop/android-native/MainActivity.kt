@@ -201,11 +201,11 @@ class MainActivity : TauriActivity() {
         try {
             val session = MediaSession(this, "AAZPlayerSession")
             session.setCallback(object : MediaSession.Callback() {
-                override fun onPlay() = emitJsEvent("media-action", JSONObject().put("action", "play"))
-                override fun onPause() = emitJsEvent("media-action", JSONObject().put("action", "pause"))
-                override fun onSkipToNext() = emitJsEvent("media-action", JSONObject().put("action", "next"))
-                override fun onSkipToPrevious() = emitJsEvent("media-action", JSONObject().put("action", "prev"))
-                override fun onStop() = emitJsEvent("media-action", JSONObject().put("action", "pause"))
+                override fun onPlay() = emitJsEvent("media-action", JSONObject.quote("play"))
+                override fun onPause() = emitJsEvent("media-action", JSONObject.quote("pause"))
+                override fun onSkipToNext() = emitJsEvent("media-action", JSONObject.quote("next"))
+                override fun onSkipToPrevious() = emitJsEvent("media-action", JSONObject.quote("prev"))
+                override fun onStop() = emitJsEvent("media-action", JSONObject.quote("stop"))
             })
             session.isActive = true
             mediaSession = session

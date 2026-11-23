@@ -182,7 +182,7 @@ if (fs.existsSync(themesXmlPath)) {
   }
 }
 
-// 5. Patch AndroidManifest.xml (networkSecurityConfig, scoped Phase 1+2 perms, PiP, configChanges, ACTION_VIEW/SEND)
+// 5. Patch AndroidManifest.xml (networkSecurityConfig, scoped Phase 1+2 perms, PiP, ACTION_VIEW/SEND)
 const manifestPath = path.join(mainDir, 'AndroidManifest.xml');
 if (fs.existsSync(manifestPath)) {
   let manifest = fs.readFileSync(manifestPath, 'utf8');
@@ -196,24 +196,34 @@ if (fs.existsSync(manifestPath)) {
   for (const perm of requiredPerms) {
     const nameMatch = perm.match(/android:name="([^"]+)"/);
     if (nameMatch && !manifest.includes(nameMatch[1])) {
-      manifest = manifest.replace('<application', `    ${perm}\n    <application`);
+      manifest = manifest.replace(/<application(?=\s|>)/, `${perm}\n    <application`);
     }
   }
 
-  if (!manifest.includes('android:networkSecurityConfig')) {
+  if (!manifest.includes('android:networkSecurityConfig=')) {
     manifest = manifest.replace(
-      '<application',
+      /<application(?=\s|>)/,
       '<application\n        android:networkSecurityConfig="@xml/network_security_config"'
     );
   }
 
-  // Ensure MainActivity supports PiP & singleTask safely on single or multi-line <activity> tags
-  if (!manifest.includes('android:supportsPictureInPicture')) {
-    manifest = manifest.replace(
-      'android:name=".MainActivity"',
-      'android:name=".MainActivity"\n            android:supportsPictureInPicture="true"\n            android:launchMode="singleTask"'
-    );
-  }
+  // Patch MainActivity attributes individually without duplicating attributes Tauri already emitted (e.g. launchMode)
+  manifest = manifest.replace(/<activity\b[^>]*android:name="\.MainActivity"[^>]*>/, (activityTag) => {
+    let updated = activityTag;
+    if (!/\bandroid:supportsPictureInPicture\s*=/.test(updated)) {
+      updated = updated.replace(
+        'android:name=".MainActivity"',
+        'android:name=".MainActivity"\n            android:supportsPictureInPicture="true"'
+      );
+    }
+    if (!/\bandroid:launchMode\s*=/.test(updated)) {
+      updated = updated.replace(
+        'android:name=".MainActivity"',
+        'android:name=".MainActivity"\n            android:launchMode="singleTask"'
+      );
+    }
+    return updated;
+  });
 
   // Add ACTION_VIEW & ACTION_SEND / ACTION_SEND_MULTIPLE intent filters (D8 / R27)
   if (!manifest.includes('android.intent.action.VIEW')) {
@@ -242,8 +252,26 @@ if (fs.existsSync(manifestPath)) {
     manifest = manifest.replace('</activity>', `${intentFilters}\n        </activity>`);
   }
 
+  // Self-check: ensure no XML opening tag contains duplicate attributes before Gradle parses it
+  const tagRegex = /<([A-Za-z0-9_:-]+)(\s[^>]*?)?\/?>/g;
+  let tagMatch;
+  while ((tagMatch = tagRegex.exec(manifest)) !== null) {
+    const tagName = tagMatch[1];
+    const attrsBody = tagMatch[2] || '';
+    const seen = new Set();
+    const attrRegex = /([A-Za-z0-9_:-]+)\s*=\s*"[^"]*"/g;
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(attrsBody)) !== null) {
+      const attrName = attrMatch[1];
+      if (seen.has(attrName)) {
+        throw new Error(`[configure-android] Duplicate XML attribute "${attrName}" on <${tagName}> in AndroidManifest.xml`);
+      }
+      seen.add(attrName);
+    }
+  }
+
   fs.writeFileSync(manifestPath, manifest, 'utf8');
-  console.log('[configure-android] Patched AndroidManifest.xml (PiP, ACTION_VIEW/SEND, scoped perms, loopback config).');
+  console.log('[configure-android] Patched & validated AndroidManifest.xml (PiP, ACTION_VIEW/SEND, scoped perms, loopback config).');
 }
 
 // 6. Enable R8 shrinking & add ProGuard keep rules for compact APK (~5 MB)
@@ -266,8 +294,11 @@ const buildGradlePath = path.join(appDir, 'build.gradle.kts');
 if (fs.existsSync(buildGradlePath)) {
   let gradle = fs.readFileSync(buildGradlePath, 'utf8');
   if (!gradle.includes('isShrinkResources')) {
-    if (gradle.includes('isMinifyEnabled = true')) {
-      gradle = gradle.replace('isMinifyEnabled = true', 'isMinifyEnabled = true\n            isShrinkResources = true');
+    if (/isMinifyEnabled\s*=\s*(true|false)/.test(gradle)) {
+      gradle = gradle.replace(
+        /isMinifyEnabled\s*=\s*(true|false)/,
+        'isMinifyEnabled = true\n            isShrinkResources = true'
+      );
     } else {
       gradle = gradle.replace(
         /getByName\("release"\)\s*\{/,
