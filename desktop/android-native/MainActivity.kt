@@ -5,14 +5,15 @@ import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
-import android.media.MediaMetadata
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
+import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import android.view.OrientationEventListener
+import android.view.Surface
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -33,7 +34,23 @@ class MainActivity : TauriActivity() {
 
     @Volatile
     private var activeWebView: WebView? = null
-    private var mediaSession: MediaSession? = null
+
+    @Volatile
+    private var isVideoActive = false
+
+    @Volatile
+    private var isPlaybackActive = false
+
+    @Volatile
+    private var orientationLocked = false
+
+    @Volatile
+    private var currentForcedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
+    private var orientationListener: OrientationEventListener? = null
+    private var pendingSensorTarget = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    private var pendingSensorSinceMs = 0L
+    private var askedNotificationPermission = false
 
     private val pendingLaunchUris = ArrayList<String>()
     private var pendingFilesCallbackId: String? = null
@@ -46,6 +63,7 @@ class MainActivity : TauriActivity() {
     private lateinit var openFolderLauncher: ActivityResultLauncher<Intent>
     private lateinit var createDocLauncher: ActivityResultLauncher<Intent>
     private lateinit var mediaPermLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var notifPermLauncher: ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         contentServer = AazContentServer(applicationContext)
@@ -127,10 +145,17 @@ class MainActivity : TauriActivity() {
             }
         }
 
+        notifPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            // Playback works whether or not notification permission is granted
+        }
+
         super.onCreate(savedInstanceState)
 
         applyDarkSystemBars()
-        setupMediaSession()
+        setupSensorOrientationListener()
+        AazPlaybackService.actionDispatch = { action ->
+            emitJsEvent("media-action", JSONObject.quote(action))
+        }
         collectIncomingIntent(intent, deliverImmediately = false)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -154,6 +179,41 @@ class MainActivity : TauriActivity() {
         })
     }
 
+    override fun onResume() {
+        super.onResume()
+        try {
+            orientationListener?.enable()
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun onPause() {
+        try {
+            orientationListener?.disable()
+        } catch (_: Exception) {
+        }
+        super.onPause()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Auto-enter Picture-in-Picture when user leaves app while video is actively playing (API 26+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isVideoActive && isPlaybackActive) {
+            try {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        emitJsEvent("pip-change", if (isInPictureInPictureMode) "true" else "false")
+    }
+
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
         activeWebView = webView
@@ -171,13 +231,88 @@ class MainActivity : TauriActivity() {
 
     override fun onDestroy() {
         try {
-            mediaSession?.isActive = false
-            mediaSession?.release()
+            orientationListener?.disable()
+        } catch (_: Exception) {
+        }
+        AazPlaybackService.actionDispatch = null
+        try {
+            stopService(Intent(this, AazPlaybackService::class.java))
         } catch (_: Exception) {
         }
         contentServer.stop()
         ioExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    /**
+     * VLC-style physical orientation sensor listener:
+     * Forces portrait/landscape rotation when tilting the phone during video playback EVEN IF
+     * Android's system Auto-Rotate is turned OFF — unless the user taps the Rotation Lock button.
+     */
+    private fun setupSensorOrientationListener() {
+        orientationListener = object : OrientationEventListener(this, SensorManager.SENSOR_DELAY_NORMAL) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                if (!isVideoActive || orientationLocked) return
+
+                val desired = when {
+                    orientation in 65..115 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                    orientation in 245..295 -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    orientation <= 25 || orientation >= 335 -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    else -> return
+                }
+
+                if (desired == currentForcedOrientation) {
+                    pendingSensorTarget = desired
+                    pendingSensorSinceMs = 0L
+                    return
+                }
+
+                val now = System.currentTimeMillis()
+                if (pendingSensorTarget != desired) {
+                    pendingSensorTarget = desired
+                    pendingSensorSinceMs = now
+                    return
+                }
+                if (now - pendingSensorSinceMs < 320L) return
+
+                currentForcedOrientation = desired
+                pendingSensorSinceMs = 0L
+                runOnUiThread {
+                    requestedOrientation = desired
+                    emitOrientationEvent()
+                }
+            }
+        }
+    }
+
+    private fun resolveCurrentScreenOrientationConstant(): Int {
+        val rotation = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display?.rotation ?: Surface.ROTATION_0
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.rotation
+            }
+        } catch (_: Exception) {
+            Surface.ROTATION_0
+        }
+        val isLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        return when {
+            isLand && rotation == Surface.ROTATION_270 -> ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+            isLand -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
+
+    private fun emitOrientationEvent() {
+        val isLand = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
+            currentForcedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE ||
+            currentForcedOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+        val payload = JSONObject()
+            .put("locked", orientationLocked)
+            .put("landscape", isLand)
+        emitJsEvent("orientation-change", payload)
     }
 
     private fun applyDarkSystemBars() {
@@ -197,19 +332,19 @@ class MainActivity : TauriActivity() {
         }
     }
 
-    private fun setupMediaSession() {
-        try {
-            val session = MediaSession(this, "AAZPlayerSession")
-            session.setCallback(object : MediaSession.Callback() {
-                override fun onPlay() = emitJsEvent("media-action", JSONObject.quote("play"))
-                override fun onPause() = emitJsEvent("media-action", JSONObject.quote("pause"))
-                override fun onSkipToNext() = emitJsEvent("media-action", JSONObject.quote("next"))
-                override fun onSkipToPrevious() = emitJsEvent("media-action", JSONObject.quote("prev"))
-                override fun onStop() = emitJsEvent("media-action", JSONObject.quote("stop"))
-            })
-            session.isActive = true
-            mediaSession = session
-        } catch (_: Exception) {
+    private fun maybeRequestNotificationPermission() {
+        if (askedNotificationPermission) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        askedNotificationPermission = true
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            runOnUiThread {
+                try {
+                    notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 
@@ -463,13 +598,67 @@ class MainActivity : TauriActivity() {
         }
 
         @JavascriptInterface
+        fun setVideoMode(active: Boolean) {
+            isVideoActive = active
+            if (!active && !orientationLocked && currentForcedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+                currentForcedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                runOnUiThread {
+                    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    emitOrientationEvent()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun toggleOrientationLock(): Boolean {
+            val nextLocked = !orientationLocked
+            orientationLocked = nextLocked
+            runOnUiThread {
+                if (nextLocked) {
+                    val lockedConst = resolveCurrentScreenOrientationConstant()
+                    currentForcedOrientation = lockedConst
+                    requestedOrientation = lockedConst
+                } else {
+                    currentForcedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    if (!isVideoActive) {
+                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    }
+                }
+                emitOrientationEvent()
+            }
+            return nextLocked
+        }
+
+        @JavascriptInterface
+        fun isOrientationLocked(): Boolean = orientationLocked
+
+        @JavascriptInterface
+        fun rotateScreenNow(): Boolean {
+            val currentlyLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val target = if (currentlyLandscape) {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            currentForcedOrientation = target
+            runOnUiThread {
+                requestedOrientation = target
+                emitOrientationEvent()
+            }
+            return !currentlyLandscape
+        }
+
+        @JavascriptInterface
         fun setOrientation(mode: String) {
             runOnUiThread {
-                requestedOrientation = when (mode) {
-                    "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                val target = when (mode) {
+                    "landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
+                currentForcedOrientation = target
+                requestedOrientation = target
+                emitOrientationEvent()
             }
         }
 
@@ -518,34 +707,25 @@ class MainActivity : TauriActivity() {
 
         @JavascriptInterface
         fun updateMediaSession(title: String, artist: String, isPlaying: Boolean, positionMs: Long, durationMs: Long) {
-            val session = mediaSession ?: return
-            runOnUiThread {
-                try {
-                    val meta = MediaMetadata.Builder()
-                        .putString(MediaMetadata.METADATA_KEY_TITLE, title.ifBlank { "AAZ Player" })
-                        .putString(MediaMetadata.METADATA_KEY_ARTIST, artist.ifBlank { "AAZ Player" })
-                        .apply {
-                            if (durationMs > 0L) putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
-                        }
-                        .build()
-                    session.setMetadata(meta)
-
-                    val actions = PlaybackState.ACTION_PLAY or
-                        PlaybackState.ACTION_PAUSE or
-                        PlaybackState.ACTION_PLAY_PAUSE or
-                        PlaybackState.ACTION_SKIP_TO_NEXT or
-                        PlaybackState.ACTION_SKIP_TO_PREVIOUS
-                    val pbState = PlaybackState.Builder()
-                        .setActions(actions)
-                        .setState(
-                            if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                            positionMs.coerceAtLeast(0L),
-                            if (isPlaying) 1.0f else 0.0f
-                        )
-                        .build()
-                    session.setPlaybackState(pbState)
-                } catch (_: Exception) {
+            isPlaybackActive = isPlaying
+            if (isPlaying) {
+                maybeRequestNotificationPermission()
+            }
+            val svcIntent = Intent(this@MainActivity, AazPlaybackService::class.java).apply {
+                action = AazPlaybackService.ACTION_UPDATE
+                putExtra(AazPlaybackService.EXTRA_TITLE, title.ifBlank { "AAZ Player" })
+                putExtra(AazPlaybackService.EXTRA_ARTIST, artist.ifBlank { "AAZ Player" })
+                putExtra(AazPlaybackService.EXTRA_PLAYING, isPlaying)
+                putExtra(AazPlaybackService.EXTRA_POSITION, positionMs.coerceAtLeast(0L))
+                putExtra(AazPlaybackService.EXTRA_DURATION, durationMs.coerceAtLeast(0L))
+            }
+            try {
+                if (isPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(this@MainActivity, svcIntent)
+                } else {
+                    startService(svcIntent)
                 }
+            } catch (_: Exception) {
             }
         }
     }

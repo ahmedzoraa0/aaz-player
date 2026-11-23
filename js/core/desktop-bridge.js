@@ -29,6 +29,8 @@ export function buildPlatformCapabilities(isAndroid) {
     touchGestures: isAndroid,
     windowsCast: !isAndroid,
     nativeMedia3: isAndroid,
+    foregroundPlayback: isAndroid,
+    sensorRotation: isAndroid,
   };
 }
 
@@ -304,12 +306,53 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
       }
       return listen('aaz:media-action', callback);
     },
+    onOrientationChange: (callback) => {
+      if (isAndroid) {
+        return listenAndroidEvent('orientation-change', callback);
+      }
+      return Promise.resolve(() => {});
+    },
+    onPipChange: (callback) => {
+      if (isAndroid) {
+        return listenAndroidEvent('pip-change', callback);
+      }
+      return Promise.resolve(() => {});
+    },
     setScreenBrightness: (level) => {
       const native = getAndroidNative();
       const clamped = Math.min(1, Math.max(0.05, Number(level) || 0.5));
       if (native && typeof native.setBrightness === 'function') {
         native.setBrightness(clamped);
         return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    setVideoMode: (active) => {
+      const native = getAndroidNative();
+      if (native && typeof native.setVideoMode === 'function') {
+        native.setVideoMode(Boolean(active));
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
+    toggleOrientationLock: () => {
+      const native = getAndroidNative();
+      if (native && typeof native.toggleOrientationLock === 'function') {
+        return Promise.resolve(Boolean(native.toggleOrientationLock()));
+      }
+      return Promise.resolve(false);
+    },
+    isOrientationLocked: () => {
+      const native = getAndroidNative();
+      if (native && typeof native.isOrientationLocked === 'function') {
+        return Promise.resolve(Boolean(native.isOrientationLocked()));
+      }
+      return Promise.resolve(false);
+    },
+    rotateScreenNow: () => {
+      const native = getAndroidNative();
+      if (native && typeof native.rotateScreenNow === 'function') {
+        return Promise.resolve(Boolean(native.rotateScreenNow()));
       }
       return Promise.resolve(false);
     },

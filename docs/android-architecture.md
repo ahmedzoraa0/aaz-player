@@ -2,7 +2,7 @@
 
 **Baseline commit:** `ed785b4` (AAZ Player `v1.7.0`)
 **Last updated:** 2026-11-23
-**Status:** Phase 2 implemented (native Kotlin SAF/MediaStore/Range loopback core, VectorDrawable adaptive icon, lightweight stripped ARM64 preview APK with R8 shrinking, full mobile/tablet touch-first UI shell, touch gestures, PiP, native MediaSession, and nearby Arabic/UTF-8 subtitle discovery). Phase 2 Android CI build and on-device verification remain **PENDING** until executed on GitHub Actions and real Android hardware.
+**Status:** Phase 3 implemented (Android Foreground Media Playback Service `AazPlaybackService` with MediaStyle lock-screen/shade notification, AudioFocus, WakeLock, & headphone-unplug auto-pause; auto-PiP + full-bleed PiP UI; VLC-style physical orientation sensor forced auto-rotation with Rotation Lock HUD; Hold-to-2x speed boost across desktop mouse/Spacebar and Android touch; keyboard speed shortcuts up to 100x with turbo playback engine; and cleaner mobile-first Android UI). Phase 3 Android CI APK build and physical-device acceptance checks remain **PENDING** until executed on GitHub Actions and Android hardware.
 
 ---
 
@@ -71,11 +71,11 @@ Canonical identity key rules:
 
 | Check | Scope | Status | Evidence / Notes |
 | --- | --- | --- | --- |
-| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 32 test groups green). |
+| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 33 test groups green). |
 | **T3 (Windows Rust)** | `cargo fmt -- --check`, `cargo clippy`, `cargo test`, Windows CI | `PASS` | Confirmed green on GitHub Actions Windows runner (Phase 1); re-run required on next push. |
-| **R4 (Android CI — Phase 1)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 debug APK on GitHub Actions; user installed & launched on physical Android phone. |
-| **R4 (Android CI — Phase 2)** | Stripped ARM64 preview APK + Kotlin core (`AazContentServer`, `AazMediaHelper`, `MainActivity`) + Vector adaptive icon + R8 minify | `PENDING` | Ready in `.github/workflows/ci.yml`; awaits GitHub Actions build + user physical device check. |
-| **V1 / V2 / R27** | Loopback Range streaming, SAF/MediaStore scanning, nearby Arabic/UTF-8 subtitles, `ACTION_VIEW`/`ACTION_SEND`, PiP, MediaSession | `PENDING` | Native Kotlin implementation added; awaits on-device verification after Phase 2 APK install. |
+| **R4 (Android CI — Phase 1 & 2)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 preview APK on GitHub Actions; user installed & verified launch on physical Android phone. |
+| **R4 (Android CI — Phase 3)** | `AazPlaybackService` FGS + sensor-forced rotation & Rotation Lock + auto-PiP + Hold-to-2x + 100x speed + mobile UI polish | `PENDING` | Ready in `.github/workflows/ci.yml`; awaits GitHub Actions build + user physical device check. |
+| **R35–R41 / V1 / V2** | Background FGS notification, AudioFocus, noisy headphone pause, auto-PiP, VLC sensor rotation lock, SAF JSON backup | `PENDING` | Native Kotlin + JS integration complete; awaits on-device verification after Phase 3 APK install. |
 | **T1–T2, T4–T12** | Full Android acceptance suite | `PENDING` | Tracked per phase gate. |
 
 ---

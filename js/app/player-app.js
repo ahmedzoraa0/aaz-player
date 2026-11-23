@@ -100,6 +100,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       const PLAYLIST_EXTENSIONS = new Set(['xspf', 'm3u8', 'm3u', 'pls']);
 
       const SPEED_STEPS = [0.75, 1, 1.25, 1.5, 2];
+      const MIN_PLAYBACK_RATE = 0.1;
+      const MAX_KEYBOARD_PLAYBACK_RATE = 100;
+      const NATIVE_MAX_PLAYBACK_RATE = 16;
+      const HOLD_BOOST_DELAY_MS = 260;
       const EQ_FREQUENCIES = [60, 230, 910, 3600, 14000];
       const EQ_PRESETS = {
         flat:     [0, 0, 0, 0, 0],
@@ -178,6 +182,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         videoFrame: document.getElementById('videoFrame'),
         videoViewportStage: document.getElementById('videoViewportStage'),
         videoSnapshotFlash: document.getElementById('videoSnapshotFlash'),
+        speedBoostBadge: document.getElementById('speedBoostBadge'),
+        speedBoostText: document.getElementById('speedBoostText'),
         subtitleOverlay: document.getElementById('subtitleOverlay'),
         subtitleCueStack: document.getElementById('subtitleCueStack'),
         videoToolbar: document.getElementById('videoToolbar'),
@@ -186,6 +192,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         snapshotBtn: document.getElementById('snapshotBtn'),
         audioOnlyViewBtn: document.getElementById('audioOnlyViewBtn'),
         subtitleBtn: document.getElementById('subtitleBtn'),
+        rotateVideoBtn: document.getElementById('rotateVideoBtn'),
+        orientLockBtn: document.getElementById('orientLockBtn'),
+        orientUnlockedIcon: document.getElementById('orientUnlockedIcon'),
+        orientLockedIcon: document.getElementById('orientLockedIcon'),
         videoCastBtn: document.getElementById('videoCastBtn'),
         pipBtn: document.getElementById('pipBtn'),
 
@@ -231,6 +241,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         fsPrevFrameBtn: document.getElementById('fsPrevFrameBtn'),
         fsNextFrameBtn: document.getElementById('fsNextFrameBtn'),
         fsSnapshotBtn: document.getElementById('fsSnapshotBtn'),
+        fsOrientLockBtn: document.getElementById('fsOrientLockBtn'),
+        fsOrientUnlockedIcon: document.getElementById('fsOrientUnlockedIcon'),
+        fsOrientLockedIcon: document.getElementById('fsOrientLockedIcon'),
         fsTimeLabel: document.getElementById('fsTimeLabel'),
         fsTitleLabel: document.getElementById('fsTitleLabel'),
         fsExitBtn: document.getElementById('fsExitBtn'),
@@ -241,6 +254,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         trackTitle: document.getElementById('trackTitle'),
         trackSubpath: document.getElementById('trackSubpath'),
         showVideoBtn: document.getElementById('showVideoBtn'),
+        mobileStageCta: document.getElementById('mobileStageCta'),
+        mobileStageOpenFilesBtn: document.getElementById('mobileStageOpenFilesBtn'),
+        mobileStageOpenLibBtn: document.getElementById('mobileStageOpenLibBtn'),
         visualizerCanvas: document.getElementById('visualizerCanvas'),
         vizModeBtns: Array.from(document.querySelectorAll('.viz-mode-btn')),
 
@@ -541,6 +557,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           btnExitFull: 'Exit Full',
           stageEmptyTitle: 'Open a folder or drop audio & video files',
           stageEmptySub: 'Audio, video, subtitles & playlists (.xspf, .m3u8, .pls)',
+          stageEmptyTitleMobile: 'Choose audio or video files to play',
+          stageEmptySubMobile: 'Open files from your phone or scan your device media library',
+          speedNotice: 'Speed: {rate}',
+          orientLockedNotice: 'Screen rotation locked',
+          orientUnlockedNotice: 'Auto-rotation unlocked',
           btnShowVideo: 'Switch to Video View',
           vizSpectrum: 'Spectrum',
           vizWave: 'Aurora Wave',
@@ -823,6 +844,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           btnExitFull: 'خروج',
           stageEmptyTitle: 'افتح مجلدا أو اسحب ملفات الصوت والفيديو هنا',
           stageEmptySub: 'يدعم جميع صيغ الصوت والفيديو والترجمة وقوائم التشغيل (.xspf / .m3u8 / .pls)',
+          stageEmptyTitleMobile: 'اختر ملفات الصوت أو الفيديو للتشغيل',
+          stageEmptySubMobile: 'افتح الملفات من هاتفك أو امسح مكتبة الوسائط على الجهاز',
+          speedNotice: 'السرعة: {rate}',
+          orientLockedNotice: 'تم قفل اتجاه الشاشة',
+          orientUnlockedNotice: 'تم فتح دوران الشاشة التلقائي',
           btnShowVideo: 'العودة إلى عرض الفيديو',
           vizSpectrum: 'طيف متناظر',
           vizWave: 'موجة حريرية',
@@ -4142,8 +4168,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
           }
 
+          stopSpeedBoost();
           el.media.src = srcUrl;
-          el.media.playbackRate = state.playbackRate || 1;
+          applyEffectivePlaybackRate(state.playbackRate || 1);
           el.media.load();
 
           updateStageVisibility();
@@ -4342,21 +4369,171 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         persistPlaybackState();
       }
 
+      function formatPlaybackRate(rate) {
+        const clean = Number(Number(rate || 1).toFixed(2));
+        return `${clean}x`;
+      }
+
+      // Turbo hyper-speed loop for rates > 16x up to 100x (exceeds Chromium's 16x native HTMLMediaElement cap safely)
+      let turboSpeedRaf = null;
+      let turboLastTs = 0;
+      let turboLastSeekTs = 0;
+      let turboTargetRate = 1;
+      let turboNativeAppliedRate = 1;
+
+      function stopTurboSpeedLoop() {
+        if (turboSpeedRaf !== null) {
+          cancelAnimationFrame(turboSpeedRaf);
+          turboSpeedRaf = null;
+        }
+        turboLastTs = 0;
+        turboLastSeekTs = 0;
+      }
+
+      function tickTurboSpeedLoop(nowTs) {
+        if (turboTargetRate <= NATIVE_MAX_PLAYBACK_RATE || el.media.paused || el.media.ended) {
+          stopTurboSpeedLoop();
+          return;
+        }
+        if (turboLastTs > 0 && Number.isFinite(el.media.duration) && el.media.duration > 0) {
+          const dtSec = Math.min(0.25, Math.max(0, (nowTs - turboLastTs) / 1000));
+          const extraRate = Math.max(0, turboTargetRate - turboNativeAppliedRate);
+          if (extraRate > 0 && nowTs - turboLastSeekTs >= 55) {
+            const elapsedSinceSeek = turboLastSeekTs > 0 ? Math.min(0.25, (nowTs - turboLastSeekTs) / 1000) : dtSec;
+            const jump = extraRate * elapsedSinceSeek;
+            const nextTime = Math.min(Math.max(0, el.media.duration - 0.05), el.media.currentTime + jump);
+            if (nextTime > el.media.currentTime + 0.01) {
+              try {
+                el.media.currentTime = nextTime;
+              } catch (err) {
+                errorHandler.log('media.turboSeek', err);
+              }
+            }
+            turboLastSeekTs = nowTs;
+          }
+        }
+        turboLastTs = nowTs;
+        turboSpeedRaf = requestAnimationFrame(tickTurboSpeedLoop);
+      }
+
+      function applyEffectivePlaybackRate(targetRate) {
+        const clamped = Math.max(
+          MIN_PLAYBACK_RATE,
+          Math.min(MAX_KEYBOARD_PLAYBACK_RATE, Number(Number(targetRate || 1).toFixed(2)))
+        );
+        turboTargetRate = clamped;
+        const nativeTarget = Math.min(NATIVE_MAX_PLAYBACK_RATE, clamped);
+        let applied = nativeTarget;
+        try {
+          el.media.playbackRate = nativeTarget;
+          applied = el.media.playbackRate || nativeTarget;
+        } catch {
+          try {
+            el.media.playbackRate = Math.min(8, nativeTarget);
+            applied = el.media.playbackRate || 1;
+          } catch (err) {
+            errorHandler.log('media.playbackRate', err);
+          }
+        }
+        turboNativeAppliedRate = applied;
+        if (clamped > NATIVE_MAX_PLAYBACK_RATE && !el.media.paused && !el.media.ended) {
+          if (turboSpeedRaf === null) {
+            turboLastTs = performance.now();
+            turboLastSeekTs = turboLastTs;
+            turboSpeedRaf = requestAnimationFrame(tickTurboSpeedLoop);
+          }
+        } else {
+          stopTurboSpeedLoop();
+        }
+        return clamped;
+      }
+
+      const speedBoost = {
+        active: false,
+        source: null,
+        baseRate: 1,
+        boostedRate: 2,
+      };
+
+      function startSpeedBoost(source) {
+        if (!getCurrentTrack() || el.media.paused || el.media.ended) return false;
+        if (speedBoost.active && speedBoost.source === source) return true;
+        const base = Number.isFinite(state.playbackRate) && state.playbackRate > 0 ? state.playbackRate : 1;
+        const boosted = Math.max(
+          MIN_PLAYBACK_RATE,
+          Math.min(MAX_KEYBOARD_PLAYBACK_RATE, Number((base * 2).toFixed(2)))
+        );
+        speedBoost.active = true;
+        speedBoost.source = source;
+        speedBoost.baseRate = base;
+        speedBoost.boostedRate = boosted;
+        applyEffectivePlaybackRate(boosted);
+        const label = formatPlaybackRate(boosted);
+        if (el.speedBoostText) el.speedBoostText.textContent = label;
+        if (el.speedBoostBadge) el.speedBoostBadge.hidden = false;
+        if (el.speedCycleBtn) {
+          el.speedCycleBtn.textContent = label;
+          el.speedCycleBtn.classList.add('is-active');
+        }
+        return true;
+      }
+
+      function stopSpeedBoost(source = null) {
+        if (!speedBoost.active) return false;
+        if (source && speedBoost.source !== source) return false;
+        const restoreRate = Number.isFinite(state.playbackRate) && state.playbackRate > 0
+          ? state.playbackRate
+          : speedBoost.baseRate;
+        speedBoost.active = false;
+        speedBoost.source = null;
+        applyEffectivePlaybackRate(restoreRate);
+        if (el.speedBoostBadge) el.speedBoostBadge.hidden = true;
+        if (el.speedCycleBtn) {
+          el.speedCycleBtn.textContent = formatPlaybackRate(restoreRate);
+          el.speedCycleBtn.classList.toggle('is-active', restoreRate !== 1);
+        }
+        return true;
+      }
+
       function setPlaybackRate(rate, persist = true) {
-        const chosen = SPEED_STEPS.includes(Number(rate)) ? Number(rate) : 1;
+        const parsed = Number(rate);
+        const chosen = Number.isFinite(parsed)
+          ? Math.max(MIN_PLAYBACK_RATE, Math.min(MAX_KEYBOARD_PLAYBACK_RATE, Number(parsed.toFixed(2))))
+          : 1;
         state.playbackRate = chosen;
-        el.media.playbackRate = chosen;
-        el.speedCycleBtn.textContent = `${chosen}x`;
-        el.speedCycleBtn.classList.toggle('is-active', chosen !== 1);
+        if (!speedBoost.active) {
+          applyEffectivePlaybackRate(chosen);
+          el.speedCycleBtn.textContent = formatPlaybackRate(chosen);
+          el.speedCycleBtn.classList.toggle('is-active', chosen !== 1);
+        } else {
+          speedBoost.baseRate = chosen;
+        }
         document.querySelectorAll('.menu-action[data-speed]').forEach((item) => {
           item.classList.toggle('is-checked', Number(item.dataset.speed) === chosen);
         });
         if (persist) persistPlaybackState();
+        return chosen;
+      }
+
+      function adjustPlaybackSpeed(delta, announce = true) {
+        const cur = Number.isFinite(state.playbackRate) ? state.playbackRate : 1;
+        const nextRaw = Math.round((cur + Number(delta || 0)) * 100) / 100;
+        const applied = setPlaybackRate(nextRaw, true);
+        if (announce) {
+          showNotice(t('speedNotice', { rate: formatPlaybackRate(applied) }));
+        }
+        return applied;
       }
 
       function cycleSpeed() {
-        const idx = SPEED_STEPS.indexOf(state.playbackRate || 1);
-        setPlaybackRate(SPEED_STEPS[(idx + 1) % SPEED_STEPS.length], true);
+        const cur = state.playbackRate || 1;
+        const idx = SPEED_STEPS.indexOf(cur);
+        if (idx >= 0) {
+          setPlaybackRate(SPEED_STEPS[(idx + 1) % SPEED_STEPS.length], true);
+        } else {
+          const nextStep = SPEED_STEPS.find((s) => s > cur) || 1;
+          setPlaybackRate(nextStep, true);
+        }
       }
 
       /* =======================================================================
@@ -4948,6 +5125,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.videoFrame.hidden = !showVideo;
         el.audioStage.hidden = showVideo;
         el.showVideoBtn.hidden = !(isVideo && !showVideo);
+        document.documentElement.classList.toggle('is-video-playing', showVideo);
+        if (el.mobileStageCta) {
+          el.mobileStageCta.hidden = !(Boolean(desktopBridge?.isAndroid) && !track);
+        }
+        if (desktopBridge?.isAndroid && typeof desktopBridge.setVideoMode === 'function') {
+          desktopBridge.setVideoMode(showVideo).catch((err) => errorHandler.log('android.setVideoMode', err));
+        }
         if (!showVideo) requestAnimationFrame(() => AudioStudio.renderIdleFrame());
       }
 
@@ -4956,10 +5140,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         updateStarButtonsUI();
 
         if (!track) {
+          const isAndroid = Boolean(desktopBridge?.isAndroid);
           el.nowPlayingKicker.textContent = 'AAZ Player';
-          el.trackTitle.textContent = t('stageEmptyTitle');
+          el.trackTitle.textContent = t(isAndroid ? 'stageEmptyTitleMobile' : 'stageEmptyTitle');
           el.trackTitle.classList.add('is-empty');
-          el.trackSubpath.textContent = t('stageEmptySub');
+          el.trackSubpath.textContent = t(isAndroid ? 'stageEmptySubMobile' : 'stageEmptySub');
           el.dockNowTitle.textContent = t('nothingPlaying');
           el.dockNowMeta.textContent = t('idle');
           el.fsTitleLabel.textContent = '';
@@ -4969,10 +5154,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.fsSeekBar.value = '0';
           setRangeFill(el.seekBar, 0);
           setRangeFill(el.fsSeekBar, 0);
+          if (el.mobileStageCta) el.mobileStageCta.hidden = !isAndroid;
           document.title = 'AAZ Player';
           notifyShellTabState();
           return;
         }
+        if (el.mobileStageCta) el.mobileStageCta.hidden = true;
 
         const { queue, idx } = getCurrentQueuePosition();
         const pos = idx >= 0 ? `${String(idx + 1).padStart(2, '0')} / ${String(queue.length).padStart(2, '0')}` : '';
@@ -6932,7 +7119,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             state.pendingSeekTime = null;
           }
         }
-        el.media.playbackRate = state.playbackRate || 1;
+        applyEffectivePlaybackRate(speedBoost.active ? speedBoost.boostedRate : (state.playbackRate || 1));
         updateSeekUI();
         updateTransportAvailability();
         updateABLoopUI();
@@ -6974,6 +7161,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         else if (AudioStudio.initialized && AudioStudio.ctx && AudioStudio.ctx.state === 'suspended') {
           AudioStudio.ctx.resume().catch((err) => errorHandler.log('audio.ctx.resumeOnPlay', err));
         }
+        applyEffectivePlaybackRate(speedBoost.active ? speedBoost.boostedRate : (state.playbackRate || 1));
         updatePlayButtonUI();
         startAutosaveTimer();
         if (!el.audioStage.hidden) AudioStudio.startVisualizer();
@@ -6986,6 +7174,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       });
 
       el.media.addEventListener('pause', () => {
+        stopTurboSpeedLoop();
+        stopSpeedBoost();
         updatePlayButtonUI();
         stopAutosaveTimer();
         AudioStudio.stopVisualizer();
@@ -6998,6 +7188,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       });
 
       el.media.addEventListener('ended', () => {
+        stopTurboSpeedLoop();
+        stopSpeedBoost();
         stopAutosaveTimer();
         updatePlayButtonUI();
         AudioStudio.stopVisualizer();
@@ -7035,11 +7227,59 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       });
 
       // Single-click = Play/Pause (debounced so Double-Click cleanly toggles Fullscreen without pause/play flicker!)
+      // Desktop Left-Mouse Press-and-Hold (>=260ms) = Instant 2x Speed Boost while held!
       let videoClickTimer = null;
+      let mouseHoldTimer = null;
+      let mouseHoldStartX = 0;
+      let mouseHoldStartY = 0;
+      let suppressNextVideoClick = false;
       const isVideoSurfaceClick = (e) => !e.target.closest('.video-toolbar, .fs-bottom-hud, button, input');
 
-      el.videoFrame.addEventListener('click', (e) => {
+      el.videoFrame.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
         if (!isVideoSurfaceClick(e)) return;
+        if (el.media.paused || el.media.ended || !getCurrentTrack()) return;
+        mouseHoldStartX = e.clientX;
+        mouseHoldStartY = e.clientY;
+        if (mouseHoldTimer !== null) clearTimeout(mouseHoldTimer);
+        mouseHoldTimer = window.setTimeout(() => {
+          mouseHoldTimer = null;
+          if (startSpeedBoost('mouse')) {
+            suppressNextVideoClick = true;
+          }
+        }, HOLD_BOOST_DELAY_MS);
+      });
+
+      el.videoFrame.addEventListener('pointermove', (e) => {
+        if (mouseHoldTimer === null || e.pointerType !== 'mouse') return;
+        if (Math.hypot(e.clientX - mouseHoldStartX, e.clientY - mouseHoldStartY) > 10) {
+          clearTimeout(mouseHoldTimer);
+          mouseHoldTimer = null;
+        }
+      });
+
+      const endMouseHoldBoost = () => {
+        if (mouseHoldTimer !== null) {
+          clearTimeout(mouseHoldTimer);
+          mouseHoldTimer = null;
+        }
+        if (stopSpeedBoost('mouse')) {
+          suppressNextVideoClick = true;
+          window.setTimeout(() => {
+            suppressNextVideoClick = false;
+          }, 320);
+        }
+      };
+      window.addEventListener('pointerup', endMouseHoldBoost);
+      window.addEventListener('pointercancel', endMouseHoldBoost);
+
+      el.videoFrame.addEventListener('click', (e) => {
+        if (desktopBridge?.isAndroid) return;
+        if (!isVideoSurfaceClick(e)) return;
+        if (suppressNextVideoClick) {
+          suppressNextVideoClick = false;
+          return;
+        }
         if (videoClickTimer !== null) clearTimeout(videoClickTimer);
         videoClickTimer = window.setTimeout(() => {
           videoClickTimer = null;
@@ -7048,8 +7288,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       });
 
       el.videoFrame.addEventListener('dblclick', (e) => {
+        if (desktopBridge?.isAndroid) return;
         if (!isVideoSurfaceClick(e)) return;
         e.preventDefault();
+        if (mouseHoldTimer !== null) {
+          clearTimeout(mouseHoldTimer);
+          mouseHoldTimer = null;
+        }
+        stopSpeedBoost('mouse');
         if (videoClickTimer !== null) {
           clearTimeout(videoClickTimer);
           videoClickTimer = null;
@@ -7586,6 +7832,38 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       /* =======================================================================
          16. Global Keyboard Shortcuts
          ======================================================================= */
+      // Spacebar Hold-to-2x Speed Boost (when playing: hold >=260ms for 2x, quick tap pauses; when paused: plays immediately)
+      let spaceHoldTimer = null;
+      let spaceHoldPending = false;
+      let spaceHoldActivated = false;
+
+      function cancelSpaceHold(restoreBoost = true) {
+        if (spaceHoldTimer !== null) {
+          clearTimeout(spaceHoldTimer);
+          spaceHoldTimer = null;
+        }
+        spaceHoldPending = false;
+        const wasActive = spaceHoldActivated;
+        spaceHoldActivated = false;
+        if (restoreBoost && wasActive) stopSpeedBoost('space');
+        return wasActive;
+      }
+
+      window.addEventListener('keyup', (e) => {
+        if (e.code !== 'Space' && e.key !== ' ') return;
+        if (!spaceHoldPending && !spaceHoldActivated) return;
+        e.preventDefault();
+        const wasBoosted = cancelSpaceHold(true);
+        if (!wasBoosted) {
+          togglePlayPause();
+        }
+      });
+
+      window.addEventListener('blur', () => {
+        cancelSpaceHold(true);
+        stopSpeedBoost();
+      });
+
       window.addEventListener('keydown', (e) => {
         if (isFullscreenActive()) wakeFullscreenHud();
 
@@ -7660,15 +7938,43 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           document.activeElement?.isContentEditable;
         if (isTyping) return;
 
-        // Dispatch user-customizable shortcuts first
+        // Spacebar Hold-to-2x Speed Boost (only when unmodified Space is pressed while playing)
+        if ((e.code === 'Space' || e.key === ' ') && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+          if (e.repeat) {
+            e.preventDefault();
+            return;
+          }
+          if (getCurrentTrack() && !el.media.paused && !el.media.ended) {
+            e.preventDefault();
+            spaceHoldPending = true;
+            spaceHoldActivated = false;
+            if (spaceHoldTimer !== null) clearTimeout(spaceHoldTimer);
+            spaceHoldTimer = window.setTimeout(() => {
+              spaceHoldTimer = null;
+              if (spaceHoldPending && startSpeedBoost('space')) {
+                spaceHoldActivated = true;
+              }
+            }, HOLD_BOOST_DELAY_MS);
+            return;
+          }
+        }
+
+        // Dispatch user-customizable shortcuts first (includes ]/[ fine ±0.05x & =/+/- coarse ±0.50x up to 100x)
         if (phase3 && phase3.matchAndDispatchShortcut(e)) {
           return;
         }
 
-        if (e.key === ',') {
+        // Direct VLC/user aliases: > (Shift+.) = +0.05x fine speed, < (Shift+,) = -0.05x fine speed (up to 100x)
+        if (!e.ctrlKey && !e.altKey && !e.metaKey && (e.key === '>' || (e.shiftKey && e.code === 'Period'))) {
+          e.preventDefault();
+          adjustPlaybackSpeed(0.05, true);
+        } else if (!e.ctrlKey && !e.altKey && !e.metaKey && (e.key === '<' || (e.shiftKey && e.code === 'Comma'))) {
+          e.preventDefault();
+          adjustPlaybackSpeed(-0.05, true);
+        } else if (e.key === ',' && !e.shiftKey) {
           e.preventDefault();
           stepVideoFrame(-1);
-        } else if (e.key === '.') {
+        } else if (e.key === '.' && !e.shiftKey) {
           e.preventDefault();
           stepVideoFrame(1);
         } else if (e.key === '0') {
@@ -7881,8 +8187,107 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (desktopBridge.onMediaAction) desktopBridge.onMediaAction(handleTaskbarMediaAction);
           }
 
-          // Android Phone & Tablet Shell Navigation, Touch Gestures, & Back Stack
+          // Android Phone & Tablet Shell Navigation, Orientation Lock, PiP, Touch Gestures & Hold-to-2x
           if (isAndroid) {
+            let mobileHudAutoHideTimer = null;
+            let androidOrientationLocked = false;
+
+            const showMobileVideoHud = (autoHide = true) => {
+              if (!el.videoFrame) return;
+              el.videoFrame.classList.add('is-hud-visible');
+              if (mobileHudAutoHideTimer !== null) clearTimeout(mobileHudAutoHideTimer);
+              if (autoHide && !el.media.paused) {
+                mobileHudAutoHideTimer = window.setTimeout(() => {
+                  mobileHudAutoHideTimer = null;
+                  if (!el.media.paused) el.videoFrame.classList.remove('is-hud-visible');
+                }, 3200);
+              }
+            };
+
+            const syncOrientationUI = (locked, landscape = null) => {
+              androidOrientationLocked = Boolean(locked);
+              const buttons = [
+                [el.orientLockBtn, el.orientUnlockedIcon, el.orientLockedIcon],
+                [el.fsOrientLockBtn, el.fsOrientUnlockedIcon, el.fsOrientLockedIcon],
+              ];
+              for (const [btn, unlockIcon, lockIcon] of buttons) {
+                if (!btn) continue;
+                btn.classList.toggle('is-orient-locked', androidOrientationLocked);
+                btn.setAttribute('aria-pressed', String(androidOrientationLocked));
+                if (unlockIcon) unlockIcon.style.display = androidOrientationLocked ? 'none' : '';
+                if (lockIcon) lockIcon.style.display = androidOrientationLocked ? '' : 'none';
+              }
+              if (typeof landscape === 'boolean') {
+                document.documentElement.classList.toggle('is-android-landscape', landscape);
+                const videoVisible = Boolean(el.videoFrame && !el.videoFrame.hidden);
+                if (desktopBridge.setImmersiveFullscreen) {
+                  desktopBridge
+                    .setImmersiveFullscreen(landscape && videoVisible)
+                    .catch((err) => errorHandler.log('android.landscapeImmersive', err));
+                }
+                if (landscape && videoVisible) showMobileVideoHud(true);
+                window.setTimeout(() => applyVideoTransform(), 80);
+              }
+            };
+
+            // Reveal VLC-style Rotate & Orientation Lock controls on Android video HUD
+            if (el.rotateVideoBtn) {
+              el.rotateVideoBtn.hidden = false;
+              el.rotateVideoBtn.addEventListener('click', () => {
+                if (desktopBridge.rotateScreenNow) {
+                  desktopBridge.rotateScreenNow().catch((err) => errorHandler.log('android.rotateNow', err));
+                }
+              });
+            }
+
+            const handleToggleOrientationLock = async () => {
+              if (!desktopBridge.toggleOrientationLock) return;
+              try {
+                const locked = await desktopBridge.toggleOrientationLock();
+                syncOrientationUI(locked);
+                showNotice(t(locked ? 'orientLockedNotice' : 'orientUnlockedNotice'));
+                showMobileVideoHud(true);
+              } catch (err) {
+                errorHandler.log('android.toggleOrientLock', err);
+              }
+            };
+            if (el.orientLockBtn) {
+              el.orientLockBtn.hidden = false;
+              el.orientLockBtn.addEventListener('click', handleToggleOrientationLock);
+            }
+            if (el.fsOrientLockBtn) {
+              el.fsOrientLockBtn.hidden = false;
+              el.fsOrientLockBtn.addEventListener('click', handleToggleOrientationLock);
+            }
+
+            if (desktopBridge.onOrientationChange) {
+              desktopBridge
+                .onOrientationChange((info) => {
+                  if (!info || typeof info !== 'object') return;
+                  syncOrientationUI(Boolean(info.locked), Boolean(info.landscape));
+                })
+                .catch((err) => errorHandler.log('android.onOrientationChange', err));
+            }
+            if (desktopBridge.onPipChange) {
+              desktopBridge
+                .onPipChange((inPip) => {
+                  document.documentElement.classList.toggle('is-android-pip', Boolean(inPip));
+                  window.setTimeout(() => applyVideoTransform(), 60);
+                })
+                .catch((err) => errorHandler.log('android.onPipChange', err));
+            }
+
+            if (el.mobileStageOpenFilesBtn) {
+              el.mobileStageOpenFilesBtn.addEventListener('click', openFilesPicker);
+            }
+            if (el.mobileStageOpenLibBtn) {
+              el.mobileStageOpenLibBtn.addEventListener('click', () => {
+                setMobileView('library');
+                const scanBtn = document.getElementById('libScanDeviceBtn');
+                if (scanBtn) scanBtn.click();
+              });
+            }
+
             if (el.mobileBottomNav) {
               el.mobileBottomNav.hidden = false;
               el.mobileNavBtns.forEach((btn) => {
@@ -7902,7 +8307,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               el.mobileMiniNextBtn.addEventListener('click', () => playNextTrack(true, false));
             }
             setMobileView('player');
-            window.addEventListener('resize', syncMobileMiniBar);
+            window.addEventListener('resize', () => {
+              syncMobileMiniBar();
+              const isLandNow = window.innerWidth > window.innerHeight && window.innerHeight <= 520;
+              document.documentElement.classList.toggle('is-android-landscape', isLandNow);
+              if (el.videoFrame && !el.videoFrame.hidden) applyVideoTransform();
+            });
 
             let lastBackConfirmAt = 0;
             const mobileGestures = createMobileGestureController({
@@ -7961,12 +8371,28 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               let pinchStartDist = 0;
               let pinchStartZoom = 1;
               let touchMoved = false;
+              let touchHoldTimer = null;
+              let touchHoldActivated = false;
+
+              const clearTouchHold = (stopBoost = false) => {
+                if (touchHoldTimer !== null) {
+                  clearTimeout(touchHoldTimer);
+                  touchHoldTimer = null;
+                }
+                if (stopBoost && touchHoldActivated) {
+                  stopSpeedBoost('touch');
+                }
+                touchHoldActivated = false;
+              };
 
               el.mediaStage.addEventListener(
                 'touchstart',
                 (ev) => {
-                  if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-hud')) return;
+                  if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-bottom-hud, .video-toolbar')) {
+                    return;
+                  }
                   if (ev.touches.length === 2) {
+                    clearTouchHold(true);
                     const dx = ev.touches[0].clientX - ev.touches[1].clientX;
                     const dy = ev.touches[0].clientY - ev.touches[1].clientY;
                     pinchStartDist = Math.hypot(dx, dy);
@@ -7976,11 +8402,21 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                     return;
                   }
                   if (ev.touches.length === 1) {
+                    clearTouchHold(false);
                     touchStartX = ev.touches[0].clientX;
                     touchStartY = ev.touches[0].clientY;
                     touchLastY = touchStartY;
                     touchAxis = 'none';
                     touchMoved = false;
+                    // Single-finger Hold-to-2x Speed Boost on mobile stage while playing
+                    if (!mobileGestures.isLocked() && getCurrentTrack() && !el.media.paused && !el.media.ended) {
+                      touchHoldTimer = window.setTimeout(() => {
+                        touchHoldTimer = null;
+                        if (!touchMoved && touchAxis === 'none' && startSpeedBoost('touch')) {
+                          touchHoldActivated = true;
+                        }
+                      }, 280);
+                    }
                   }
                 },
                 { passive: true }
@@ -7989,6 +8425,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               el.mediaStage.addEventListener(
                 'touchmove',
                 (ev) => {
+                  if (touchHoldActivated) return;
                   if (touchAxis === 'pinch' && ev.touches.length === 2 && pinchStartDist > 20) {
                     const dx = ev.touches[0].clientX - ev.touches[1].clientX;
                     const dy = ev.touches[0].clientY - ev.touches[1].clientY;
@@ -7999,6 +8436,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                   if (ev.touches.length !== 1) return;
                   const curX = ev.touches[0].clientX;
                   const curY = ev.touches[0].clientY;
+                  if (Math.hypot(curX - touchStartX, curY - touchStartY) > TOUCH_SLOP_PX) {
+                    clearTouchHold(false);
+                  }
                   if (touchAxis === 'none') {
                     touchAxis = decideGestureAxis(curX - touchStartX, curY - touchStartY, TOUCH_SLOP_PX);
                   }
@@ -8019,23 +8459,38 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 { passive: true }
               );
 
-              el.mediaStage.addEventListener(
-                'touchend',
-                (ev) => {
-                  if (touchMoved || touchAxis !== 'none') {
-                    touchAxis = 'none';
-                    touchMoved = false;
-                    return;
+              const handleTouchFinish = (ev, isCancel) => {
+                const wasHoldBoost = touchHoldActivated;
+                clearTouchHold(true);
+                if (wasHoldBoost || isCancel) {
+                  touchAxis = 'none';
+                  touchMoved = false;
+                  return;
+                }
+                if (touchMoved || touchAxis !== 'none') {
+                  touchAxis = 'none';
+                  touchMoved = false;
+                  return;
+                }
+                const changed = ev.changedTouches && ev.changedTouches[0];
+                if (!changed) return;
+                if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-bottom-hud, .video-toolbar')) {
+                  return;
+                }
+                const rect = el.mediaStage.getBoundingClientRect();
+                const relX = rect.width > 0 ? (changed.clientX - rect.left) / rect.width : 0.5;
+                const res = mobileGestures.handleTap(relX, Date.now());
+                if (res && res.action === 'single-tap' && el.videoFrame && !el.videoFrame.hidden) {
+                  if (el.videoFrame.classList.contains('is-hud-visible')) {
+                    el.videoFrame.classList.remove('is-hud-visible');
+                  } else {
+                    showMobileVideoHud(true);
                   }
-                  const changed = ev.changedTouches && ev.changedTouches[0];
-                  if (!changed) return;
-                  if (ev.target && ev.target.closest('button, input, select, .context-menu, .fs-hud')) return;
-                  const rect = el.mediaStage.getBoundingClientRect();
-                  const relX = rect.width > 0 ? (changed.clientX - rect.left) / rect.width : 0.5;
-                  mobileGestures.handleTap(relX, Date.now());
-                },
-                { passive: true }
-              );
+                }
+              };
+
+              el.mediaStage.addEventListener('touchend', (ev) => handleTouchFinish(ev, false), { passive: true });
+              el.mediaStage.addEventListener('touchcancel', (ev) => handleTouchFinish(ev, true), { passive: true });
             }
 
             window.__aazHandleAndroidBack = () => {
@@ -8205,6 +8660,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           adjustVolume: (delta) => setVolume(el.media.volume + delta, true),
           setVolume: (vol) => setVolume(vol, true),
           setPlaybackRate: (rate) => setPlaybackRate(rate, true),
+          adjustPlaybackSpeed: (delta) => adjustPlaybackSpeed(delta, true),
           setVideoAspect: (aspect) => {
             state.videoAspect = aspect || 'default';
             applyVideoTransform();

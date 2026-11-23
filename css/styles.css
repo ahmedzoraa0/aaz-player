@@ -4987,6 +4987,190 @@
       }
     }
 
+    /* Hide desktop-only controls, shortcut hints & unsupported settings on Android */
+    html.is-android [data-desktop-only="true"],
+    html.is-android .menu-shortcut,
+    html.is-android #fsPrevFrameBtn,
+    html.is-android #fsNextFrameBtn,
+    html.is-android #videoCastBtn {
+      display: none !important;
+    }
+
+    /* Mobile quick-launch CTAs on idle Audio Stage */
+    .mobile-stage-cta[hidden] {
+      display: none !important;
+    }
+
+    html.is-android .mobile-stage-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 6px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    html.is-android .mobile-stage-cta .btn {
+      flex: 1 1 0;
+      height: 44px;
+      min-height: 44px;
+      font-size: 13.5px;
+      font-weight: 700;
+      border-radius: 12px;
+      justify-content: center;
+    }
+
+    /* Portrait Video Mode on Phone: Maximize video height & keep dock sleek */
+    @media (max-width: 768px) and (orientation: portrait) {
+      html.is-android.is-video-playing .video-frame {
+        background-color: #000000;
+      }
+
+      html.is-android.is-video-playing .dock-now {
+        display: none;
+      }
+
+      html.is-android.is-video-playing .transport-dock {
+        padding: 8px 12px 8px;
+        gap: 6px;
+      }
+
+      html.is-android.is-video-playing .video-toolbar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+
+      html.is-android.is-video-playing .video-frame.is-hud-visible .video-toolbar {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+
+    /* Android Sensor-Forced Landscape Cinema Mode (VLC-style) */
+    html.is-android.is-android-landscape.is-video-playing .topbar,
+    html.is-android.is-android-landscape.is-video-playing .sidebar-pane,
+    html.is-android.is-android-landscape.is-video-playing .mobile-bottom-nav,
+    html.is-android.is-android-landscape.is-video-playing .mobile-mini-bar,
+    html.is-android.is-android-landscape.is-video-playing .transport-dock,
+    html.is-android.is-android-landscape.is-video-playing .stage-banners,
+    html.is-android.is-android-landscape.is-video-playing .eq-drawer,
+    html.is-android.is-android-landscape.is-video-playing .bookmarks-strip {
+      display: none !important;
+    }
+
+    html.is-android.is-android-landscape.is-video-playing .app-shell {
+      padding: 0 !important;
+    }
+
+    html.is-android.is-android-landscape.is-video-playing .stage-column,
+    html.is-android.is-android-landscape.is-video-playing .media-stage,
+    html.is-android.is-android-landscape.is-video-playing .video-frame {
+      width: 100vw !important;
+      height: 100dvh !important;
+      max-width: 100vw !important;
+      max-height: 100dvh !important;
+      background-color: #000000;
+    }
+
+    html.is-android.is-android-landscape.is-video-playing .video-frame .video-toolbar,
+    html.is-android.is-android-landscape.is-video-playing .video-frame .fs-bottom-hud {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    html.is-android.is-android-landscape.is-video-playing .video-frame.is-hud-visible .video-toolbar,
+    html.is-android.is-android-landscape.is-video-playing .video-frame.is-hud-visible .fs-bottom-hud {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    html.is-android.is-android-landscape.is-video-playing .fs-bottom-hud {
+      display: flex !important;
+      padding: 12px calc(16px + env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+    }
+
+    /* Android Picture-in-Picture Full-Bleed Mode (hides all UI chrome inside small PiP window) */
+    html.is-android.is-android-pip .topbar,
+    html.is-android.is-android-pip .sidebar-pane,
+    html.is-android.is-android-pip .transport-dock,
+    html.is-android.is-android-pip .mobile-bottom-nav,
+    html.is-android.is-android-pip .mobile-mini-bar,
+    html.is-android.is-android-pip .stage-banners,
+    html.is-android.is-android-pip .video-toolbar,
+    html.is-android.is-android-pip .fs-bottom-hud,
+    html.is-android.is-android-pip .eq-drawer,
+    html.is-android.is-android-pip .bookmarks-strip {
+      display: none !important;
+    }
+
+    html.is-android.is-android-pip .app-shell {
+      padding: 0 !important;
+    }
+
+    html.is-android.is-android-pip .video-frame {
+      width: 100vw !important;
+      height: 100vh !important;
+      background: #000000;
+    }
+
+    /* Rotation Lock Active Highlight (VLC-style Lock State) */
+    .video-tool-btn.is-orient-locked {
+      background: var(--accent) !important;
+      color: var(--accent-ink) !important;
+      border-color: var(--accent) !important;
+      box-shadow: 0 0 0 2px rgba(61, 196, 121, 0.35);
+    }
+
+    /* Hold-to-2x Speed Boost Floating Indicator (Desktop Mouse/Space Hold & Android Touch Hold) */
+    .speed-boost-badge[hidden] {
+      display: none !important;
+    }
+
+    .speed-boost-badge {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 10px;
+      background: rgba(6, 14, 10, 0.88);
+      border: 1px solid var(--accent-border, rgba(61, 196, 121, 0.55));
+      color: #eef7f1;
+      font-family: var(--font-mono, ui-monospace, monospace);
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      pointer-events: none;
+      z-index: 42;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .speed-boost-arrows {
+      color: var(--accent, #3dc479);
+      font-size: 15px;
+      line-height: 1;
+      animation: aazBoostPulse 0.7s ease-in-out infinite;
+    }
+
+    @keyframes aazBoostPulse {
+      0%, 100% { opacity: 0.55; transform: translateX(0); }
+      50% { opacity: 1; transform: translateX(2px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .speed-boost-arrows {
+        animation: none;
+      }
+    }
+
     /* Touch Gesture HUD & Screen Lock Pill (R20) */
     .mobile-gesture-hud {
       position: absolute;
@@ -5008,4 +5192,5 @@
     html[dir="rtl"] .mobile-gesture-hud {
       transform: translateX(50%);
     }
+
 

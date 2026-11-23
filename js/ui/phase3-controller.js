@@ -1098,6 +1098,10 @@ export function createPhase3Controller(api) {
       snapshot: () => api.captureVideoSnapshot(),
       abLoop: () => api.cycleABLoop(),
       bookmark: () => api.addBookmarkAtCurrentTime(),
+      speedFineUp: () => api.adjustPlaybackSpeed?.(0.05),
+      speedFineDown: () => api.adjustPlaybackSpeed?.(-0.05),
+      speedCoarseUp: () => api.adjustPlaybackSpeed?.(0.5),
+      speedCoarseDown: () => api.adjustPlaybackSpeed?.(-0.5),
       settings: () => openSettingsModal(),
     };
 

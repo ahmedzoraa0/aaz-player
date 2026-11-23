@@ -1257,6 +1257,84 @@ async function main() {
     assert.deepEqual(calls, ['scanDeviceMedia', 'saveTextFile:test.m3u8', 'enterPictureInPicture']);
   });
 
+  // 33. Phase 3: Foreground Service, VLC Sensor Rotation + Lock, Hold-to-2x Boost, & 100x Speed Shortcuts
+  await runTest('Phase 3: Foreground playback service, VLC sensor orientation lock, Hold-to-2x boost & 100x speed shortcuts', async () => {
+    const nativeDir = path.join(ROOT, 'desktop/android-native');
+    const svcPath = path.join(nativeDir, 'AazPlaybackService.kt');
+    assert.ok(fs.existsSync(svcPath), 'Missing desktop/android-native/AazPlaybackService.kt');
+    const svcKt = fs.readFileSync(svcPath, 'utf8');
+    assert.ok(svcKt.includes('FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK'), 'AazPlaybackService must declare mediaPlayback FGS type');
+    assert.ok(svcKt.includes('Notification.MediaStyle'), 'AazPlaybackService must build MediaStyle notification');
+    assert.ok(svcKt.includes('ACTION_AUDIO_BECOMING_NOISY'), 'AazPlaybackService must pause on headphone disconnect');
+    assert.ok(svcKt.includes('PARTIAL_WAKE_LOCK'), 'AazPlaybackService must hold partial WakeLock while playing');
+
+    const mainKt = fs.readFileSync(path.join(nativeDir, 'MainActivity.kt'), 'utf8');
+    assert.ok(mainKt.includes('OrientationEventListener'), 'MainActivity must force sensor rotation via OrientationEventListener');
+    assert.ok(mainKt.includes('fun toggleOrientationLock()'), 'MainActivity must expose toggleOrientationLock()');
+    assert.ok(mainKt.includes('fun rotateScreenNow()'), 'MainActivity must expose rotateScreenNow()');
+    assert.ok(mainKt.includes('fun setVideoMode('), 'MainActivity must expose setVideoMode()');
+    assert.ok(mainKt.includes('override fun onUserLeaveHint()'), 'MainActivity must support auto-PiP on user leave');
+
+    const cfgScript = fs.readFileSync(path.join(ROOT, 'desktop/scripts/configure-android.cjs'), 'utf8');
+    assert.ok(cfgScript.includes('AazPlaybackService.kt'), 'configure-android.cjs must copy AazPlaybackService.kt');
+    assert.ok(cfgScript.includes('FOREGROUND_SERVICE_MEDIA_PLAYBACK'), 'configure-android.cjs must add FOREGROUND_SERVICE_MEDIA_PLAYBACK');
+    assert.ok(cfgScript.includes('android:name=".AazPlaybackService"'), 'configure-android.cjs must register AazPlaybackService in manifest');
+
+    // Verify keyboard speed shortcuts (Arabic/English physical codes + Shift+= '+' normalization)
+    const shortcutsMod = await import('../js/modules/shortcuts-manager.js');
+    assert.equal(shortcutsMod.normalizeKeyCombo({ key: 'د', code: 'BracketRight' }), ']', 'Arabic د (BracketRight) must normalize to ]');
+    assert.equal(shortcutsMod.normalizeKeyCombo({ key: 'ج', code: 'BracketLeft' }), '[', 'Arabic ج (BracketLeft) must normalize to [');
+    assert.equal(shortcutsMod.normalizeKeyCombo({ key: '+', code: 'Equal', shiftKey: true }), '=', 'Shift+= (+) must normalize to =');
+    assert.equal(shortcutsMod.normalizeKeyCombo({ key: '+', code: 'NumpadAdd' }), '=', 'NumpadAdd must normalize to =');
+    assert.equal(shortcutsMod.normalizeKeyCombo({ key: '-', code: 'Minus' }), '-', 'Minus must normalize to -');
+
+    const mgr = shortcutsMod.createShortcutsManager({ getStore: () => ({}), persist: () => true });
+    assert.equal(mgr.matchAction({ key: 'د', code: 'BracketRight', target: {} }), 'speedFineUp');
+    assert.equal(mgr.matchAction({ key: 'ج', code: 'BracketLeft', target: {} }), 'speedFineDown');
+    assert.equal(mgr.matchAction({ key: '+', code: 'Equal', shiftKey: true, target: {} }), 'speedCoarseUp');
+    assert.equal(mgr.matchAction({ key: '-', code: 'Minus', target: {} }), 'speedCoarseDown');
+
+    // Verify player-app, index.html, and CSS wiring
+    const appJs = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appJs.includes('MAX_KEYBOARD_PLAYBACK_RATE = 100'), 'player-app.js must allow keyboard speed up to 100x');
+    assert.ok(appJs.includes('function tickTurboSpeedLoop'), 'player-app.js must include turbo loop for rates > 16x');
+    assert.ok(appJs.includes("startSpeedBoost('mouse')"), 'player-app.js must support desktop mouse hold-to-2x');
+    assert.ok(appJs.includes("startSpeedBoost('space')"), 'player-app.js must support desktop Spacebar hold-to-2x');
+    assert.ok(appJs.includes("startSpeedBoost('touch')"), 'player-app.js must support Android touch hold-to-2x');
+    assert.ok(appJs.includes('toggleOrientationLock'), 'player-app.js must wire Android orientation lock button');
+
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('id="speedBoostBadge"'), 'index.html must include #speedBoostBadge');
+    assert.ok(indexHtml.includes('id="rotateVideoBtn"'), 'index.html must include #rotateVideoBtn');
+    assert.ok(indexHtml.includes('id="orientLockBtn"'), 'index.html must include #orientLockBtn');
+    assert.ok(indexHtml.includes('id="fsOrientLockBtn"'), 'index.html must include #fsOrientLockBtn');
+    assert.ok(indexHtml.includes('id="mobileStageCta"'), 'index.html must include #mobileStageCta');
+
+    // Verify desktop-bridge exposes Phase 3 orientation & PiP methods
+    const bridgeCalls = [];
+    let orientCb = null;
+    const fakeWin3 = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36' },
+      AAZAndroid: {
+        isAvailable: () => true,
+        setVideoMode(active) { bridgeCalls.push(`videoMode:${active}`); },
+        toggleOrientationLock() { bridgeCalls.push('toggleLock'); return true; },
+        rotateScreenNow() { bridgeCalls.push('rotateNow'); return true; },
+      },
+      __TAURI__: { core: { invoke: async () => ({}) }, event: { listen: async () => () => {} } },
+    };
+    const b3 = desktopBridgeMod.attachDesktopBridge(fakeWin3);
+    assert.equal(b3.capabilities.foregroundPlayback, true);
+    assert.equal(b3.capabilities.sensorRotation, true);
+    await b3.onOrientationChange((p) => { orientCb = p; });
+    fakeWin3.__aazOnAndroidEvent('orientation-change', { locked: true, landscape: true });
+    assert.deepEqual(orientCb, { locked: true, landscape: true });
+    await b3.setVideoMode(true);
+    assert.equal(await b3.toggleOrientationLock(), true);
+    assert.equal(await b3.rotateScreenNow(), true);
+    assert.deepEqual(bridgeCalls, ['videoMode:true', 'toggleLock', 'rotateNow']);
+  });
+
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 }

@@ -32,13 +32,13 @@ function writeFileEnsureDir(targetPath, content) {
 
 // 1. Copy native Kotlin sources into app/src/main/java/com/aaz/player/
 fs.mkdirSync(javaPkgDir, { recursive: true });
-for (const fileName of ['AazContentServer.kt', 'AazMediaHelper.kt', 'MainActivity.kt']) {
+for (const fileName of ['AazContentServer.kt', 'AazMediaHelper.kt', 'AazPlaybackService.kt', 'MainActivity.kt']) {
   const src = path.join(nativeSrcDir, fileName);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, path.join(javaPkgDir, fileName));
   }
 }
-console.log('[configure-android] Installed native Kotlin sources (AazContentServer, AazMediaHelper, MainActivity).');
+console.log('[configure-android] Installed native Kotlin sources (AazContentServer, AazMediaHelper, AazPlaybackService, MainActivity).');
 
 // 2. Write crisp Adaptive Icon VectorDrawables (66dp safe-zone centered inside 108dp canvas)
 const adaptiveBgXml = `<?xml version="1.0" encoding="utf-8"?>
@@ -192,6 +192,10 @@ if (fs.existsSync(manifestPath)) {
     `<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />`,
     `<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />`,
     `<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />`,
+    `<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />`,
+    `<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />`,
+    `<uses-permission android:name="android.permission.WAKE_LOCK" />`,
+    `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`,
   ];
   for (const perm of requiredPerms) {
     const nameMatch = perm.match(/android:name="([^"]+)"/);
@@ -250,6 +254,16 @@ if (fs.existsSync(manifestPath)) {
                 <data android:mimeType="video/*" />
             </intent-filter>`;
     manifest = manifest.replace('</activity>', `${intentFilters}\n        </activity>`);
+  }
+
+  // Register Phase 3 Foreground Media Playback Service (R35-R38)
+  if (!manifest.includes('android:name=".AazPlaybackService"')) {
+    const svcXml = `
+        <service
+            android:name=".AazPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />`;
+    manifest = manifest.replace('</application>', `${svcXml}\n    </application>`);
   }
 
   // Self-check: ensure no XML opening tag contains duplicate attributes before Gradle parses it

@@ -32,6 +32,10 @@ export const DEFAULT_SHORTCUTS = Object.freeze([
   { id: 'snapshot', defaultKey: 'Shift+S', labelEn: 'Capture Video Snapshot', labelAr: 'التقاط صورة للفيديو' },
   { id: 'abLoop', defaultKey: 'L', labelEn: 'A–B Section Loop', labelAr: 'تكرار مقطع A–B' },
   { id: 'bookmark', defaultKey: 'B', labelEn: 'Add Timestamp Bookmark', labelAr: 'إضافة علامة زمنية' },
+  { id: 'speedFineUp', defaultKey: ']', labelEn: 'Speed Up Fine (+0.05x)', labelAr: 'زيادة السرعة الدقيقة (+0.05×)' },
+  { id: 'speedFineDown', defaultKey: '[', labelEn: 'Speed Down Fine (-0.05x)', labelAr: 'خفض السرعة الدقيقة (-0.05×)' },
+  { id: 'speedCoarseUp', defaultKey: '=', labelEn: 'Speed Up (+0.50x)', labelAr: 'زيادة السرعة (+0.50×)' },
+  { id: 'speedCoarseDown', defaultKey: '-', labelEn: 'Speed Down (-0.50x)', labelAr: 'خفض السرعة (-0.50×)' },
   { id: 'settings', defaultKey: 'Ctrl+,', labelEn: 'Open Playback Settings', labelAr: 'فتح إعدادات التشغيل' },
 ]);
 
@@ -72,14 +76,17 @@ export function normalizeKeyCombo(eventLike) {
   const rawKey = eventLike.key;
   if (!rawKey || MODIFIER_KEYS.has(rawKey)) return '';
 
+  const key = canonicalKeyName(rawKey, eventLike.code);
+  if (!key) return '';
+
   const mods = [];
   if (eventLike.ctrlKey) mods.push('Ctrl');
   if (eventLike.altKey) mods.push('Alt');
-  if (eventLike.shiftKey) mods.push('Shift');
+  // Pressing '+' on standard keyboards requires Shift+=; normalize '+' to '=' without Shift
+  const ignoreShiftForPlus = key === '=' && (rawKey === '+' || eventLike.code === 'Equal');
+  if (eventLike.shiftKey && !ignoreShiftForPlus) mods.push('Shift');
   if (eventLike.metaKey) mods.push('Meta');
 
-  const key = canonicalKeyName(rawKey, eventLike.code);
-  if (!key) return '';
   return [...mods, key].join('+');
 }
 
@@ -90,10 +97,15 @@ function canonicalKeyName(key, code = '') {
     return key;
   }
   if (/^F([1-9]|1[0-2])$/i.test(key)) return key.toUpperCase();
-  // Map physical Latin letter key via event.code when user keyboard layout is Arabic/non-Latin
-  if (typeof code === 'string' && /^Key([A-Z])$/.test(code)) {
-    return code.slice(3);
+  // Map physical Latin & punctuation keys via event.code when user keyboard layout is Arabic/non-Latin
+  if (typeof code === 'string') {
+    if (/^Key([A-Z])$/.test(code)) return code.slice(3);
+    if (code === 'BracketRight') return ']';
+    if (code === 'BracketLeft') return '[';
+    if (code === 'Equal' || code === 'NumpadAdd') return '=';
+    if (code === 'Minus' || code === 'NumpadSubtract') return '-';
   }
+  if (key === '+') return '=';
   if (key.length === 1) return key.toUpperCase();
   return key;
 }
