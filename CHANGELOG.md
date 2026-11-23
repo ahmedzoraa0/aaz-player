@@ -4,6 +4,27 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.8.0] - 2026-11-24
+
+### Android App (New Platform)
+- **Native Android Player**: Full Android build via Tauri 2 (`desktop/android-native/`, Kotlin): loopback content server for SAF media, foreground playback service with MediaStyle notification, audio-focus and becoming-noisy handling, sensor orientation lock, auto-PiP, system-bar theming across all 16 skins, LAN/DLNA casting, and a fail-closed signed APK self-updater.
+- **Mobile Touch-First Layout**: Dedicated phone UI with touch-slop gesture handling, double-tap seek, edge brightness/volume swipes, pinch zoom, screen lock, structured Back stack, and a bottom navigation bar (Player / Queue / Library / Saved).
+
+### Playback Fixes & Improvements
+- **Hold-to-Speed Pins at Exactly 2.0x**: Long-press (touch), mouse hold, and Space hold now pin playback at exactly 2.0x whatever the base rate was (1.0x, 1.5x, 3.0x, or even 100x turbo all go to 2.0x) instead of multiplying the base rate by two; releasing restores the exact previous speed. Holds can never get stuck on: touchcancel/pointercancel, window blur, app backgrounding, a second finger landing, swipe/slop movement, pause, track end, and track change all cancel the hold and restore the base rate, and changing speed from the menu mid-hold updates the restore target coherently.
+- **Volume up to 200%, Default 100%**: The volume slider now reaches 200% with real amplification through a Web Audio gain stage (`HTMLMediaElement.volume` is capped at 100% by the platform), using a conservative soft-limited curve whose peak ceiling is verified in automated tests with synthesized audio; the readout clearly marks levels above 100%. Above 100% the sound can distort depending on the source material and can be uncomfortably loud on headphones — this is not hearing protection. Fresh installs default to 100%; previously saved volumes are preserved on upgrade. If the gain path is unavailable on a platform, volume clamps visibly at 100% instead of pretending.
+
+### Android Media Library: File-Manager Browsing
+- **Hierarchical Folder Browsing**: The Android library now behaves like a file manager: granted folders appear as roots, tapping a folder shows its immediate children (subfolders first, then that folder's media files only), with a breadcrumb path bar and one-level-at-a-time SAF listing via `DocumentsContract.buildChildDocumentsUriUsingTree` so large folders open fast. Android Back climbs one folder level before leaving the library. Granted folders keep their persisted URI permissions across restarts. Desktop keeps its existing library UX.
+
+### Mobile UX
+- **Logo-Only Top Bar on Mobile**: On phone-width layouts (and Android generally) the header shows the AAZ logo only — the "AAZ Player" wordmark no longer crowds the mobile top bar; the full wordmark remains on desktop.
+
+### Housekeeping
+- Removed three unreferenced bundled text artifacts from `public/assets/aistudio/` that were shipping inside the Windows installer and Android APK.
+
+---
+
 ## [1.7.0] - 2026-11-22
 
 ### Native Windows Taskbar & Media Session
