@@ -3280,9 +3280,12 @@ fn extract_xml_text_content(inner: &str) -> String {
             break;
         }
         if let Some(rel_lt) = rem.find('<') {
-            out.push_str(&xml_unescape(&rem[..rel_lt]));
-            i += rel_lt;
-            if let Some(rel_gt) = inner[i..].find('>') {
+            if rel_lt > 0 {
+                out.push_str(&xml_unescape(&rem[..rel_lt]));
+                i += rel_lt;
+                continue;
+            }
+            if let Some(rel_gt) = rem.find('>') {
                 i += rel_gt + 1;
             } else {
                 break;
