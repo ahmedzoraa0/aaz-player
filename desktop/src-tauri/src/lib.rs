@@ -4402,9 +4402,10 @@ pub fn run() {
                 }
             } else if !files.is_empty() {
                 let state = app.state::<AppState>();
-                if let Ok(mut queued) = state.launch_files.lock() {
-                    queued.extend(files);
-                }
+                let Ok(mut queued) = state.launch_files.lock() else {
+                    return;
+                };
+                queued.extend(files);
             }
         }))
         .register_uri_scheme_protocol("aazmedia", |ctx, req| {
