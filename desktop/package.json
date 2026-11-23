@@ -1,7 +1,7 @@
 {
   "name": "aaz-player",
   "productName": "AAZ Player",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "AAZ Player — Lightweight Native Rust & WebView2 Local Audio & Video Player for Windows",
   "author": "AAZ",
   "license": "MIT",
