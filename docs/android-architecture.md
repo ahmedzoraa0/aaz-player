@@ -71,7 +71,8 @@ Canonical identity key rules:
 
 | Check | Scope | Status | Evidence / Notes |
 | --- | --- | --- | --- |
-| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 34 test groups green). |
+| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (38 test groups green, incl. new hold-to-2x, volume-overdrive, library-navigation groups) at v1.8.0. |
+| **v1.8.0 (hold-to-2x pin, 200% overdrive, hierarchical library, logo-only mobile bar)** | JS modules + Kotlin bridge + CSS | `PENDING` | Behavioral Node tests + headless-Chrome renders at 320/390/768/1440px executed locally; Kotlin compiles only on CI; on-device acceptance (touch hold-2x, 200% audible output, SAF browsing across restart) still requires a physical Android device. |
 | **T3 (Windows Rust)** | `cargo fmt -- --check`, `cargo clippy`, `cargo test`, Windows CI | `PASS` | Confirmed green on GitHub Actions Windows runner (Phase 1); re-run required on next push. |
 | **R4 (Android CI — Phases 1–3)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 preview APKs on GitHub Actions; user installed & verified Phases 1–3 on physical Android phone. |
 | **R42–R50 (Android CI — Phase 4)** | All 16 Dark/Light themes + system bars, `AazCastHelper` LAN/DLNA Cast, `AazUpdater` SHA-256 APK updater, `build-android` job in `release.yml` | `PENDING` | Native Kotlin, JS, CSS, manifest config, and release CI implemented; awaits GitHub Actions build + user physical device check. |
