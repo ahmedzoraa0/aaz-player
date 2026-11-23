@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 use base64::Engine as _;
 use minisign_verify::{PublicKey, Signature};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
@@ -11,17 +12,15 @@ use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "android"))]
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-#[cfg(not(target_os = "android"))]
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::http::{header, Method, Response, StatusCode};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 #[cfg(not(target_os = "android"))]
 use tauri::{
     LogicalSize, PhysicalPosition, PhysicalSize, Position, Size, WebviewUrl, WebviewWindowBuilder,
 };
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 mod media_core;
 mod taskbar;
@@ -4472,14 +4471,12 @@ pub fn run() {
         }
     }
 
-    let builder = tauri::Builder::default()
-        .manage(app_state)
-        .setup(|app| {
-            if let Some(win) = app.get_webview_window("main") {
-                taskbar::attach_taskbar_controls(&win);
-            }
-            Ok(())
-        });
+    let builder = tauri::Builder::default().manage(app_state).setup(|app| {
+        if let Some(win) = app.get_webview_window("main") {
+            taskbar::attach_taskbar_controls(&win);
+        }
+        Ok(())
+    });
 
     #[cfg(not(target_os = "android"))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {

@@ -129,9 +129,8 @@ impl MediaRef {
                     .or_else(|| s.strip_prefix("//?/UNC/"))
                 {
                     s = format!(r"\\{rest}");
-                } else if let Some(rest) = s
-                    .strip_prefix(r"\\?\")
-                    .or_else(|| s.strip_prefix("//?/"))
+                } else if let Some(rest) =
+                    s.strip_prefix(r"\\?\").or_else(|| s.strip_prefix("//?/"))
                 {
                     s = rest.to_string();
                 }

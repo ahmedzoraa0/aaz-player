@@ -136,6 +136,7 @@ jobs:
           if [ ! -d "src-tauri/gen/android" ]; then
             npx tauri android init --ci
           fi
+          npx tauri icon assets/icon.png
           node scripts/prepare-ci.cjs
 
       - name: Build Android Debug APK (aarch64)
