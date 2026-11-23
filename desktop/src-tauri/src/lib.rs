@@ -3122,10 +3122,9 @@ fn xml_unescape(raw: &str) -> String {
                     .ok()
                     .and_then(char::from_u32)
             }
-            _ if entity.starts_with('#') => entity[1..]
-                .parse::<u32>()
-                .ok()
-                .and_then(char::from_u32),
+            _ if entity.starts_with('#') => {
+                entity[1..].parse::<u32>().ok().and_then(char::from_u32)
+            }
             _ => None,
         };
         if let Some(ch) = decoded {
@@ -3363,10 +3362,7 @@ fn resolve_upnp_url(base_url: &str, raw_ref: &str) -> Option<String> {
     let combined_path = if ref_path.starts_with('/') {
         normalize_url_path_segments(ref_path)
     } else {
-        let base_path = base_path_with_q
-            .split(['?', '#'])
-            .next()
-            .unwrap_or("/");
+        let base_path = base_path_with_q.split(['?', '#']).next().unwrap_or("/");
         let base_dir = match base_path.rfind('/') {
             Some(pos) => &base_path[..=pos],
             None => "/",
@@ -4926,7 +4922,10 @@ mod tests {
 
         let ctrl = extract_avtransport_control_url(xml, "http://192.168.1.50:8080/desc.xml")
             .expect("controlURL with URLBase");
-        assert_eq!(ctrl, "http://192.168.1.50:8080/dlna/root/upnp/control/AVTransport");
+        assert_eq!(
+            ctrl,
+            "http://192.168.1.50:8080/dlna/root/upnp/control/AVTransport"
+        );
 
         // Without URLBase, relative controlURL resolves against description URL directory (F15)
         let xml_rel = r#"<root><device><serviceList><service>
@@ -4944,7 +4943,8 @@ mod tests {
             <controlURL>http://8.8.8.8/evil</controlURL>
         </service></serviceList></device></root>"#;
         assert!(
-            extract_avtransport_control_url(xml_ssrf, "http://192.168.1.50:8080/desc.xml").is_none()
+            extract_avtransport_control_url(xml_ssrf, "http://192.168.1.50:8080/desc.xml")
+                .is_none()
         );
     }
 
