@@ -368,7 +368,7 @@ async function main() {
       persist: () => {},
     });
     const updated = setMgr.update({ defaultVolume: 99, defaultPlaybackRate: 1.5, defaultSubtitleLang: 'ar' });
-    assert.equal(updated.defaultVolume, 1);
+    assert.equal(updated.defaultVolume, 2, 'volume domain is 0..2 (200% overdrive)');
     assert.equal(updated.defaultPlaybackRate, 1.5);
     assert.equal(updated.defaultSubtitleLang, 'ar');
 
@@ -1463,6 +1463,265 @@ async function main() {
       'checkUpdates',
       'downloadUpdate',
     ]);
+  });
+
+  // 35. Hold-to-Speed pins at exactly 2.0x (behavioral, all triggers + cancellation rules)
+  await runTest('Hold-to-2x: exact 2.0x pin from any base, per-source restore & all cancellation rules', async () => {
+    const { createSpeedBoostController, SPEED_BOOST_PIN_RATE } = await import('../js/modules/speed-boost.js');
+    assert.equal(SPEED_BOOST_PIN_RATE, 2, 'pin rate must be exactly 2.0x');
+
+    const makeRig = (initialBase) => {
+      let base = initialBase;
+      const applied = [];
+      const events = [];
+      const ctrl = createSpeedBoostController({
+        getBaseRate: () => base,
+        applyRate: (r) => applied.push(r),
+        onChange: (snap) => events.push(snap),
+      });
+      return { ctrl, applied, events, setBase: (v) => { base = v; }, getBase: () => base };
+    };
+
+    // Pin from every base: 1.0, 1.5, 2.0, 3.0 and 100x turbo all go to EXACTLY 2.0x
+    for (const baseRate of [1, 1.5, 2, 3, 100]) {
+      for (const source of ['touch', 'mouse', 'space']) {
+        const rig = makeRig(baseRate);
+        assert.equal(rig.ctrl.start(source), true, `start must succeed from base ${baseRate}`);
+        assert.equal(rig.ctrl.state.boostedRate, 2, `boosted must be exactly 2.0x from base ${baseRate}`);
+        assert.deepEqual(rig.applied, [2], `must apply exactly 2.0x from base ${baseRate} via ${source}`);
+        assert.equal(rig.ctrl.stop(source), true);
+        assert.deepEqual(rig.applied, [2, baseRate], `release must restore exact base ${baseRate}`);
+        assert.equal(rig.ctrl.state.active, false);
+      }
+    }
+
+    // Same-source re-press is a no-op; cross-source cannot corrupt the stored base rate
+    {
+      const rig = makeRig(1.5);
+      rig.ctrl.start('touch');
+      assert.equal(rig.ctrl.start('touch'), true, 'same-source re-press is a no-op');
+      assert.equal(rig.ctrl.state.baseRate, 1.5);
+      assert.equal(rig.ctrl.start('mouse'), false, 'cross-source press is refused while active');
+      assert.equal(rig.ctrl.state.baseRate, 1.5, 'stored base rate must survive the cross-source press');
+      assert.equal(rig.ctrl.state.source, 'touch');
+      assert.equal(rig.ctrl.stop('mouse'), false, 'wrong source cannot stop the boost');
+      assert.equal(rig.ctrl.state.active, true);
+      rig.ctrl.stop('touch');
+      assert.deepEqual(rig.applied, [2, 1.5]);
+    }
+
+    // Cancellation paths (blur/background/touchcancel/multitouch/pause/track change)
+    // all share cancel(): restore base rate, never leave a stuck boost
+    for (const baseRate of [1, 1.5, 3, 100]) {
+      const rig = makeRig(baseRate);
+      rig.ctrl.start('touch');
+      assert.equal(rig.ctrl.cancel(), true);
+      assert.equal(rig.ctrl.state.active, false, 'cancel must end the boost');
+      assert.deepEqual(rig.applied, [2, baseRate], `cancel must restore base ${baseRate}`);
+    }
+    {
+      const rig = makeRig(1);
+      assert.equal(rig.ctrl.cancel(), false, 'cancel with no active boost is a no-op');
+    }
+
+    // Menu speed change during a hold updates the restore target coherently
+    {
+      const rig = makeRig(1);
+      rig.ctrl.start('space');
+      rig.setBase(0.75); // user picked 0.75x from the menu mid-hold
+      rig.ctrl.setBaseRate(0.75);
+      rig.ctrl.stop('space');
+      assert.deepEqual(rig.applied, [2, 0.75], 'release must restore the menu-chosen rate');
+    }
+    {
+      // Choosing 2.0x from the menu during a hold stays coherent (no rate jump on release)
+      const rig = makeRig(1.5);
+      rig.ctrl.start('touch');
+      rig.setBase(2);
+      rig.ctrl.setBaseRate(2);
+      rig.ctrl.stop('touch');
+      assert.deepEqual(rig.applied, [2, 2]);
+    }
+    {
+      // Turbo base restored exactly after hold
+      const rig = makeRig(100);
+      rig.ctrl.start('mouse');
+      rig.ctrl.stop('mouse');
+      assert.deepEqual(rig.applied, [2, 100], 'turbo 100x must be restored exactly');
+    }
+
+    // player-app wiring: all three triggers route through the controller and
+    // blur/visibility cancellation listeners are registered
+    const appJs = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appJs.includes('createSpeedBoostController'), 'player-app must use the shared controller');
+    assert.ok(!/base \* 2/.test(appJs), 'no base*2 multiplication may remain');
+    assert.ok(appJs.includes("window.addEventListener('blur', () => boostController.cancel())"), 'blur must cancel an active hold');
+    assert.ok(appJs.includes('visibilitychange'), 'backgrounding must cancel an active hold');
+    assert.ok(appJs.includes('boostController.setBaseRate(chosen)'), 'menu speed change must update the restore target');
+  });
+
+  // 36. Volume 200% overdrive (behavioral: staging math, persistence, headroom)
+  await runTest('Volume overdrive: real 0..200% staging, 100% default, persistence & tested peak ceiling', async () => {
+    const od = await import('../js/modules/volume-overdrive.js');
+    assert.equal(od.MAX_VOLUME, 2);
+
+    // Staging math: <=100% element-only, >100% element at 1.0 + real gain
+    assert.deepEqual(od.resolveVolumeStages(0.5), { clamped: 0.5, elementVolume: 0.5, gain: 1, overdrive: false });
+    assert.deepEqual(od.resolveVolumeStages(1), { clamped: 1, elementVolume: 1, gain: 1, overdrive: false });
+    assert.deepEqual(od.resolveVolumeStages(1.5), { clamped: 1.5, elementVolume: 1, gain: 1.5, overdrive: true });
+    assert.deepEqual(od.resolveVolumeStages(2), { clamped: 2, elementVolume: 1, gain: 2, overdrive: true });
+    assert.deepEqual(od.resolveVolumeStages(3.7).clamped, 2, 'values above 200% clamp to 2');
+    assert.equal(od.clampVolume(-4), 0);
+    assert.equal(od.clampVolume(NaN), 0);
+
+    // Peak headroom: synthesized representative material through the exact
+    // shaper curve at 200% must never exceed the defined ceiling
+    const sampleRate = 8000;
+    const seconds = 0.25;
+    const n = Math.floor(sampleRate * seconds);
+    const materials = {
+      fullScaleSine: (i) => Math.sin((2 * Math.PI * 440 * i) / sampleRate),
+      hotNoise: (i) => 0.95 * (Math.sin(i * 12.9898) * 43758.5453 % 1),
+      quietSine: (i) => 0.1 * Math.sin((2 * Math.PI * 220 * i) / sampleRate),
+    };
+    for (const gain of [1.25, 1.5, 2]) {
+      const curve = od.makeOverdriveCurve(gain);
+      assert.ok(curve instanceof Float32Array);
+      // Curve endpoints stay within the ceiling (WaveShaper clamps input to them)
+      assert.ok(Math.abs(curve[0]) <= od.OVERDRIVE_CEILING + 1e-6);
+      assert.ok(Math.abs(curve[curve.length - 1]) <= od.OVERDRIVE_CEILING + 1e-6);
+      for (const [name, gen] of Object.entries(materials)) {
+        let peak = 0;
+        for (let i = 0; i < n; i++) {
+          const x = gen(i);
+          // emulate WaveShaper: gain then curve lookup with input clamp
+          const pre = Math.max(-1, Math.min(1, x));
+          const y = od.applyOverdriveCurve(pre, gain);
+          peak = Math.max(peak, Math.abs(y));
+        }
+        assert.ok(peak <= od.OVERDRIVE_CEILING + 1e-6, `${name} at ${gain * 100}% must never exceed the ceiling (peak ${peak})`);
+      }
+    }
+    // Real amplification: quiet material at 200% gets ~2x louder (small-signal gain)
+    {
+      let inPeak = 0;
+      let outPeak = 0;
+      for (let i = 0; i < n; i++) {
+        const x = materials.quietSine(i);
+        inPeak = Math.max(inPeak, Math.abs(x));
+        outPeak = Math.max(outPeak, Math.abs(od.applyOverdriveCurve(x, 2)));
+      }
+      const ratio = outPeak / inPeak;
+      assert.ok(ratio > 1.9 && ratio <= 2.01, `quiet material at 200% must really be amplified ~2x (got ${ratio.toFixed(3)}x)`);
+    }
+
+    // Storage: fresh default is 100%, persisted 150%/200% round-trip, legacy clamp healed to 0..2
+    const fresh = storageMod.createEmptyState();
+    assert.equal(fresh.volume, 1, 'fresh installs must default to 100%');
+    const roundTrip = storageMod.sanitizeState({ volume: 1.5 });
+    assert.equal(roundTrip.volume, 1.5, '150% must survive the storage round-trip');
+    const roundTrip2 = storageMod.sanitizeState({ volume: 2 });
+    assert.equal(roundTrip2.volume, 2, '200% must survive the storage round-trip');
+    const legacyClamped = storageMod.sanitizeState({ volume: 9 });
+    assert.equal(legacyClamped.volume, 2, 'stored volume clamps to the 0..2 domain');
+
+    // Wiring: slider max=2 default 1, setVolume uses the staging module, UI marks overdrive
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('id="volumeSlider" class="range-input volume-slider" min="0" max="2"'), 'slider must reach 200%');
+    const appJs = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appJs.includes('resolveVolumeStages'), 'setVolume must use the shared staging math');
+    assert.ok(appJs.includes('is-overdrive'), 'UI must mark volume above 100%');
+    assert.ok(appJs.includes('setOverdrive'), 'Web Audio overdrive stage must be wired');
+    const css = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    assert.ok(css.includes('.volume-readout.is-overdrive'), 'CSS must style the >100% indicator');
+  });
+
+  // 37. Android hierarchical library navigation (behavioral state machine + native wiring)
+  await runTest('Android library: file-manager hierarchy, breadcrumbs, Back & lazy one-level SAF listing', async () => {
+    const { createLibraryNavigator } = await import('../js/modules/library-navigation.js');
+    const nav = createLibraryNavigator();
+
+    // Root listing shows granted folders, not their contents
+    nav.setRoots([
+      { treeUri: 'content://tree/a', name: 'Music' },
+      { treeUri: 'content://tree/b', name: 'Movies' },
+    ]);
+    assert.equal(nav.isBrowsing(), false);
+    assert.equal(nav.getRoots().length, 2);
+    assert.equal(nav.getCurrentDocId(), null, 'no docId in roots view');
+    assert.equal(nav.canGoUp(), false, 'Back at roots view is not consumed');
+
+    // Enter a root, descend two levels
+    assert.equal(nav.enterRoot('content://tree/a'), true);
+    assert.equal(nav.getCurrentDocId(), '', 'tree root lists with blank docId');
+    assert.equal(nav.openFolder({ docId: 'a:Rock', name: 'Rock' }), true);
+    assert.equal(nav.openFolder({ docId: 'a:Rock/Live', name: 'Live' }), true);
+    assert.equal(nav.getCurrentDocId(), 'a:Rock/Live');
+    assert.deepEqual(
+      nav.getBreadcrumbs().map((b) => b.name),
+      ['Music', 'Rock', 'Live'],
+      'breadcrumb path must track the descent'
+    );
+
+    // Back climbs one level at a time, then returns to roots
+    assert.equal(nav.goUp(), true);
+    assert.equal(nav.getCurrentDocId(), 'a:Rock');
+    assert.equal(nav.goUp(), true);
+    assert.equal(nav.isBrowsing(), true, 'one level up from a subfolder stays inside the tree root');
+    assert.equal(nav.goUp(), true);
+    assert.equal(nav.isBrowsing(), false, 'Back from the tree root returns to the roots view');
+    assert.equal(nav.goUp(), false, 'Back at roots view is left to the app back stack');
+
+    // Breadcrumb jump
+    nav.enterRoot('content://tree/b');
+    nav.openFolder({ docId: 'b:Action', name: 'Action' });
+    nav.openFolder({ docId: 'b:Action/2026', name: '2026' });
+    assert.equal(nav.jumpToDepth(0), true);
+    assert.equal(nav.getCurrentDocId(), '', 'jumping to the first crumb lands on the tree root');
+
+    // Removing the active root resets browsing
+    nav.openFolder({ docId: 'b:Action', name: 'Action' });
+    nav.setRoots([{ treeUri: 'content://tree/a', name: 'Music' }]);
+    assert.equal(nav.isBrowsing(), false, 'revoked root resets to the roots view');
+
+    // Level ordering: subfolders first, then files, each alphabetical
+    const sorted = nav.sortLevel(
+      [{ name: 'Zeta' }, { name: 'alpha' }],
+      [{ name: 'b.mp3' }, { name: 'A.mp4' }]
+    );
+    assert.deepEqual(sorted.folders.map((f) => f.name), ['alpha', 'Zeta']);
+    assert.deepEqual(sorted.files.map((f) => f.name), ['A.mp4', 'b.mp3']);
+
+    // Kotlin: lazy one-level SAF listing exists and uses buildChildDocumentsUriUsingTree
+    const helperKt = fs.readFileSync(path.join(ROOT, 'desktop/android-native/AazMediaHelper.kt'), 'utf8');
+    assert.ok(helperKt.includes('fun listSafChildren('), 'AazMediaHelper must expose one-level SAF listing');
+    assert.ok(helperKt.includes('fun describeSafTree('), 'AazMediaHelper must expose shallow grant describe');
+    const listFn = helperKt.slice(helperKt.indexOf('fun listSafChildren('));
+    assert.ok(listFn.includes('buildChildDocumentsUriUsingTree'), 'one-level listing must use DocumentsContract children URI');
+    assert.ok(!listFn.slice(0, listFn.indexOf('fun scanSafTree')).includes('scanTreeNode'), 'one-level listing must not recurse');
+    const mainKt = fs.readFileSync(path.join(ROOT, 'desktop/android-native/MainActivity.kt'), 'utf8');
+    assert.ok(mainKt.includes('fun listSafChildren(callbackId: String'), 'MainActivity must bridge listSafChildren to JS');
+    assert.ok(mainKt.includes('fun selectFolderShallow(callbackId: String'), 'MainActivity must support shallow grants');
+    assert.ok(mainKt.includes('takePersistableUriPermission'), 'grants must persist across restarts');
+
+    // Bridge + UI wiring
+    const bridgeJs = fs.readFileSync(path.join(ROOT, 'js/core/desktop-bridge.js'), 'utf8');
+    assert.ok(bridgeJs.includes('listSafChildren'), 'desktop-bridge must expose listSafChildren');
+    assert.ok(bridgeJs.includes('selectFolderShallow'), 'desktop-bridge must expose selectFolderShallow');
+    const p3 = fs.readFileSync(path.join(ROOT, 'js/ui/phase3-controller.js'), 'utf8');
+    assert.ok(p3.includes('createLibraryNavigator'), 'phase3 must use the navigator');
+    assert.ok(p3.includes('libraryHandleBack'), 'phase3 must expose libraryHandleBack');
+    const appJs = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appJs.includes('phase3.libraryHandleBack()'), 'Android Back must consult the library navigator first');
+  });
+
+  // 38. Mobile top bar: logo-only on Android/narrow layouts, wordmark kept on desktop
+  await runTest('Mobile top bar: logo-only branding on Android & narrow widths, desktop wordmark preserved', () => {
+    const css = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    assert.ok(css.includes('html.is-android .tabstrip-brand > span'), 'Android must hide the header wordmark');
+    assert.ok(css.includes('@media (max-width: 768px)'), 'narrow layouts must hide the header wordmark');
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('tabstrip-brand'), 'brand block must remain (logo SVG)');
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
