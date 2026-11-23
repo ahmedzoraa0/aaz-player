@@ -1,7 +1,32 @@
 /**
- * Native Rust / Tauri v2 Desktop Bridge Adapter (window.aazDesktop).
- * Safely attaches desktop IPC commands when running inside Tauri v2 WebView2.
+ * Native Rust / Tauri v2 Platform Bridge Adapter (window.aazDesktop).
+ * Safely attaches IPC commands on both Windows desktop (WebView2) and Android (WebView + Kotlin plugins),
+ * exposing platform feature detection (R6, R13, R17) so frontend code never assumes desktop-only APIs.
  */
+
+export function detectAndroidEnvironment(win = typeof window !== 'undefined' ? window : null) {
+  if (!win) return false;
+  try {
+    const ua = String(win.navigator?.userAgent || '');
+    if (/\bAndroid\b/i.test(ua)) return true;
+  } catch {
+    // Ignore navigator access errors
+  }
+  return false;
+}
+
+export function buildPlatformCapabilities(isAndroid) {
+  return {
+    windowing: !isAndroid,
+    taskbar: !isAndroid,
+    setSinkId: !isAndroid,
+    directoryPicker: !isAndroid,
+    safPicker: isAndroid,
+    touchGestures: isAndroid,
+    windowsCast: !isAndroid,
+    nativeMedia3: isAndroid,
+  };
+}
 
 export function attachDesktopBridge(win = typeof window !== 'undefined' ? window : null) {
   if (!win) return null;
@@ -26,6 +51,7 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
 
   if (!tauriApi) return null;
 
+  const isAndroid = detectAndroidEnvironment(win);
   const invoke = (cmd, args = {}) => tauriApi.core.invoke(cmd, args);
   const listen = (eventName, cb) => {
     if (tauriApi.event && typeof tauriApi.event.listen === 'function') {
@@ -36,6 +62,9 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     return Promise.resolve(() => {});
   };
   const listenWindow = (eventName, cb) => {
+    if (isAndroid) {
+      return listen(eventName, cb);
+    }
     try {
       const currentWin = tauriApi.webviewWindow?.getCurrentWebviewWindow?.();
       if (currentWin && typeof currentWin.listen === 'function') {
@@ -52,6 +81,11 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
   const bridge = {
     isElectron: true, // Legacy compatibility flag used across existing modules
     isTauri: true,
+    isAndroid,
+    isDesktop: !isAndroid,
+    platform: isAndroid ? 'android' : 'desktop',
+    capabilities: buildPlatformCapabilities(isAndroid),
+    getPlatformInfo: () => invoke('aaz_get_platform_info'),
     openNewWindow: () => invoke('aaz_new_window'),
     getAppVersion: () => invoke('aaz_get_app_version'),
     getLaunchFiles: () => invoke('aaz_get_launch_files'),
@@ -116,7 +150,44 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
     onOpenExternal: (callback) => listenWindow('aaz:open-external', callback),
     onFileDrop: (callback) => listenWindow('tauri://drag-drop', callback),
+
+    // Android Phase 1 / Phase 3 Native Media3 & System Control Bridge Contract (R13, R20, R35)
+    playerLoad: (mediaRef, positionMs = 0) =>
+      invoke('plugin:aaz-media|load', { mediaRef, positionMs: Math.max(0, Math.round(Number(positionMs) || 0)) }),
+    playerPlay: () => invoke('plugin:aaz-media|play'),
+    playerPause: () => invoke('plugin:aaz-media|pause'),
+    playerSeekTo: (positionMs) =>
+      invoke('plugin:aaz-media|seekTo', { positionMs: Math.max(0, Math.round(Number(positionMs) || 0)) }),
+    playerSetSpeed: (speed) => invoke('plugin:aaz-media|setSpeed', { speed: Number(speed) || 1 }),
+    playerSetVolume: (volume, useSystemStream = false) =>
+      invoke('plugin:aaz-media|setVolume', {
+        volume: Math.min(1, Math.max(0, Number(volume) || 0)),
+        useSystemStream: Boolean(useSystemStream),
+      }),
+    playerGetState: () => invoke('plugin:aaz-media|getState'),
+    onPlayerState: (callback) => listen('aaz:player-state', callback),
+    onMediaAction: (callback) => listen('aaz:media-action', callback),
+    setScreenBrightness: (level) =>
+      invoke('plugin:aaz-media|setBrightness', { level: Math.min(1, Math.max(0.05, Number(level) || 0.5)) }),
+    setOrientation: (mode) => invoke('plugin:aaz-media|setOrientation', { mode }),
+    setImmersiveFullscreen: (enabled) =>
+      invoke('plugin:aaz-media|setImmersiveFullscreen', { enabled: Boolean(enabled) }),
   };
+
+  // Refine capabilities asynchronously from Rust aaz_get_platform_info without blocking boot
+  invoke('aaz_get_platform_info')
+    .then((info) => {
+      if (!info || typeof info !== 'object') return;
+      if (typeof info.isAndroid === 'boolean') {
+        bridge.isAndroid = info.isAndroid;
+        bridge.isDesktop = !info.isAndroid;
+        bridge.platform = info.isAndroid ? 'android' : info.os || 'desktop';
+      }
+      if (info.capabilities && typeof info.capabilities === 'object') {
+        Object.assign(bridge.capabilities, info.capabilities);
+      }
+    })
+    .catch(() => {});
 
   win.aazDesktop = bridge;
   return bridge;

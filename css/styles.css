@@ -4472,4 +4472,154 @@
       }
     }
 
+    /* ========================================================================
+       Android Mobile & Tablet Responsive Layout (Phase 1: R19, R21, R23, R24)
+       ======================================================================== */
+    html.is-android {
+      font-size: 14px;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
+    }
 
+    html.is-android body {
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    /* R23: Hide frameless desktop titlebar, multi-tab strip & window controls on Android */
+    html.is-android #workspaceShell,
+    html.is-android .win-controls,
+    html.is-android .tab-strip-drag,
+    html.is-android [data-cmd="new-window"],
+    html.is-android [data-cmd="always-on-top"] {
+      display: none !important;
+    }
+
+    /* R21: Touch-friendly minimum 44x44px hit targets with 8px spacing on Android / coarse pointers */
+    html.is-android .icon-btn,
+    html.is-android .ctrl-btn,
+    html.is-android .sidebar-tab,
+    html.is-android .saved-pl-icon-btn,
+    html.is-android .mini-link-btn {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    @media (pointer: coarse) {
+      .icon-btn,
+      .ctrl-btn {
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
+
+    html.is-android .controls-row,
+    html.is-android .saved-pl-actions {
+      gap: 8px;
+    }
+
+    /* R21: Always-visible affordances instead of hover-only controls on touch screens */
+    html.is-android .track-actions,
+    html.is-android .saved-pl-icon-btn {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* R19: Phone portrait layout — stage on top, controls below, Library/Queue/Saved bottom area */
+    @media (max-width: 768px) {
+      html.is-android .workspace,
+      html.is-android .app-body {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
+
+      html.is-android .stage-pane,
+      html.is-android .player-pane {
+        flex: 0 0 auto;
+        width: 100%;
+        max-height: 44vh;
+      }
+
+      html.is-android .sidebar,
+      html.is-android .playlist-pane {
+        flex: 1 1 auto;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-height: 0;
+        border-inline-start: none;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      html.is-android .sidebar-tabs {
+        position: sticky;
+        bottom: 0;
+        z-index: 12;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        background: var(--bg-elevated, var(--bg-surface));
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      /* R24: Phone-appropriate subtitle size scale */
+      html.is-android .subtitle-cue,
+      html.is-android .subtitle-overlay {
+        font-size: clamp(14px, 4.4vw, 22px);
+        max-width: 94%;
+      }
+    }
+
+    /* R19: Phone landscape immersive video-first mode */
+    @media (max-height: 500px) and (orientation: landscape) {
+      html.is-android .stage-pane,
+      html.is-android .player-pane {
+        flex: 1 1 auto;
+        max-height: 100vh;
+      }
+
+      html.is-android .sidebar,
+      html.is-android .playlist-pane {
+        display: none;
+      }
+    }
+
+    /* R19: Tablet & foldable two-pane layout with full RTL logical borders */
+    @media (min-width: 769px) {
+      html.is-android .workspace,
+      html.is-android .app-body {
+        display: flex;
+        flex-direction: row;
+      }
+
+      html.is-android .sidebar,
+      html.is-android .playlist-pane {
+        width: clamp(280px, 34vw, 380px);
+        border-inline-start: 1px solid var(--border-hairline);
+      }
+    }
+
+    /* R20: Touch gesture HUD & Screen Lock badge */
+    .mobile-gesture-hud {
+      position: absolute;
+      inset-inline-start: 50%;
+      top: 18%;
+      transform: translateX(-50%);
+      padding: 8px 16px;
+      border-radius: 10px;
+      background: rgba(6, 12, 9, 0.84);
+      border: 1px solid var(--accent-border, rgba(61, 196, 121, 0.45));
+      color: var(--text-primary, #edf5ef);
+      font-size: 14px;
+      font-weight: 700;
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    html[dir="rtl"] .mobile-gesture-hud {
+      transform: translateX(50%);
+    }

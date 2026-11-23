@@ -9,29 +9,36 @@ use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "android"))]
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+#[cfg(not(target_os = "android"))]
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::http::{header, Method, Response, StatusCode};
+#[cfg(not(target_os = "android"))]
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Position, Size,
-    State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    LogicalSize, PhysicalPosition, PhysicalSize, Position, Size, WebviewUrl, WebviewWindowBuilder,
 };
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
+mod media_core;
 mod taskbar;
+
+use media_core::{
+    parse_http_range, HttpRangeError, HTTP_HEADER_TIMEOUT_SECS, MAX_HTTP_HEADERS,
+    MAX_HTTP_HEADER_BYTES, MAX_HTTP_REQUEST_LINE_BYTES,
+};
 
 const REPO_CONFIG_JSON: &str = include_str!("repo_config.json");
 
+#[cfg(not(target_os = "android"))]
 static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 const MAX_UPDATE_DOWNLOAD_BYTES: u64 = 150 * 1024 * 1024; // 150 MB hard cap
 const MAX_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024; // 16 MB max subtitle/playlist text file
 const MAX_DLNA_XML_BYTES: u64 = 256 * 1024; // 256 KB max UPnP XML description
-const MAX_HTTP_REQUEST_LINE_BYTES: usize = 2048;
-const MAX_HTTP_HEADERS: usize = 32;
-const MAX_HTTP_HEADER_BYTES: usize = 8192;
-const HTTP_HEADER_TIMEOUT_SECS: u64 = 5;
 const MAX_CAST_CONCURRENT_CONNECTIONS: usize = 8;
 const MAX_SSDP_LOCATIONS: usize = 32;
 const MAX_SSDP_PACKETS: usize = 256;
@@ -259,12 +266,6 @@ struct WindowGeometry {
     monitors: Vec<MonitorRect>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum HttpRangeError {
-    Malformed,
-    Unsatisfiable,
-}
-
 fn is_ext_in(ext: &str, list: &[&str]) -> bool {
     list.iter().any(|&item| item.eq_ignore_ascii_case(ext))
 }
@@ -360,65 +361,6 @@ fn validate_authorized_media_path(
     }
 
     Ok(canon)
-}
-
-fn parse_http_range(
-    range_val: &str,
-    file_len: u64,
-    max_chunk: Option<u64>,
-) -> Result<(u64, u64), HttpRangeError> {
-    if file_len == 0 {
-        return Err(HttpRangeError::Unsatisfiable);
-    }
-    let trimmed = range_val.trim();
-    let spec = trimmed
-        .strip_prefix("bytes=")
-        .or_else(|| trimmed.strip_prefix("BYTES="))
-        .ok_or(HttpRangeError::Malformed)?;
-    let first_range = spec.split(',').next().unwrap_or("").trim();
-    let (start_s, end_s) = first_range
-        .split_once('-')
-        .ok_or(HttpRangeError::Malformed)?;
-    let start_s = start_s.trim();
-    let end_s = end_s.trim();
-
-    if start_s.is_empty() && end_s.is_empty() {
-        return Err(HttpRangeError::Malformed);
-    }
-
-    if start_s.is_empty() {
-        let suffix: u64 = end_s.parse().map_err(|_| HttpRangeError::Malformed)?;
-        if suffix == 0 {
-            return Err(HttpRangeError::Unsatisfiable);
-        }
-        let start = file_len.saturating_sub(suffix);
-        let mut end = file_len - 1;
-        if let Some(cap) = max_chunk {
-            end = end.min(start.saturating_add(cap.saturating_sub(1)));
-        }
-        return Ok((start, end));
-    }
-
-    let start: u64 = start_s.parse().map_err(|_| HttpRangeError::Malformed)?;
-    if start >= file_len {
-        return Err(HttpRangeError::Unsatisfiable);
-    }
-
-    let mut end = if end_s.is_empty() {
-        file_len - 1
-    } else {
-        let parsed_end: u64 = end_s.parse().map_err(|_| HttpRangeError::Malformed)?;
-        if parsed_end < start {
-            return Err(HttpRangeError::Unsatisfiable);
-        }
-        parsed_end.min(file_len - 1)
-    };
-
-    if let Some(cap) = max_chunk {
-        end = end.min(start.saturating_add(cap.saturating_sub(1)));
-    }
-
-    Ok((start, end))
 }
 
 fn generate_session_token() -> Result<String, String> {
@@ -1733,6 +1675,28 @@ fn aaz_get_launch_files(state: State<'_, AppState>) -> Vec<String> {
 }
 
 #[tauri::command]
+fn aaz_get_platform_info() -> serde_json::Value {
+    let is_android = cfg!(target_os = "android");
+    let is_windows = cfg!(target_os = "windows");
+    serde_json::json!({
+        "os": std::env::consts::OS,
+        "isAndroid": is_android,
+        "isWindows": is_windows,
+        "isDesktop": !is_android,
+        "capabilities": {
+            "windowing": !is_android,
+            "taskbar": is_windows,
+            "setSinkId": !is_android,
+            "directoryPicker": !is_android,
+            "safPicker": is_android,
+            "touchGestures": is_android,
+            "windowsCast": is_windows,
+        }
+    })
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
     let id = WINDOW_COUNTER.fetch_add(1, Ordering::SeqCst);
     let label = format!("win_{id}");
@@ -1754,6 +1718,13 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_new_window() -> Result<bool, String> {
+    Err("PLATFORM_UNSUPPORTED: Multiple windows are not supported on Android.".to_string())
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderResult>, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
         let folder = rfd::FileDialog::new()
@@ -1786,6 +1757,13 @@ async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderRe
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+async fn aaz_select_folder() -> Result<Option<FolderResult>, String> {
+    Err("ANDROID_SAF_REQUIRED: Use the Android SAF folder picker.".to_string())
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 async fn aaz_select_files(state: State<'_, AppState>) -> Result<Option<InspectResult>, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
         let mut all_exts: Vec<&str> = Vec::new();
@@ -1821,6 +1799,12 @@ async fn aaz_select_files(state: State<'_, AppState>) -> Result<Option<InspectRe
         }
     }
     Ok(result)
+}
+
+#[tauri::command]
+#[cfg(target_os = "android")]
+async fn aaz_select_files() -> Result<Option<InspectResult>, String> {
+    Err("ANDROID_SAF_REQUIRED: Use the Android SAF document picker.".to_string())
 }
 
 #[tauri::command]
@@ -2084,28 +2068,57 @@ async fn aaz_inspect_paths(
 }
 
 #[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_set_always_on_top(window: WebviewWindow, enabled: bool) -> bool {
     let _ = window.set_always_on_top(enabled);
     window.is_always_on_top().unwrap_or(enabled)
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_set_always_on_top(_enabled: bool) -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_set_fullscreen(window: WebviewWindow, enabled: bool) -> bool {
     let _ = window.set_fullscreen(enabled);
     window.is_fullscreen().unwrap_or(enabled)
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_set_fullscreen(_enabled: bool) -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_is_fullscreen(window: WebviewWindow) -> bool {
     window.is_fullscreen().unwrap_or(false)
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_is_fullscreen() -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_win_minimize(window: WebviewWindow) -> bool {
     window.minimize().is_ok()
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_win_minimize() -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_win_toggle_maximize(window: WebviewWindow) -> bool {
     let currently_max = window.is_maximized().unwrap_or(false);
     if currently_max {
@@ -2117,20 +2130,48 @@ fn aaz_win_toggle_maximize(window: WebviewWindow) -> bool {
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_win_toggle_maximize() -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_win_is_maximized(window: WebviewWindow) -> bool {
     window.is_maximized().unwrap_or(false)
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_win_is_maximized() -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_win_close(window: WebviewWindow) -> bool {
     window.close().is_ok()
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_win_close() -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_win_start_drag(window: WebviewWindow) -> bool {
     window.start_dragging().is_ok()
 }
 
+#[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_win_start_drag() -> bool {
+    false
+}
+
+#[cfg(not(target_os = "android"))]
 fn collect_monitor_work_areas(window: &WebviewWindow) -> Vec<MonitorRect> {
     window
         .available_monitors()
@@ -2149,6 +2190,7 @@ fn collect_monitor_work_areas(window: &WebviewWindow) -> Vec<MonitorRect> {
 }
 
 #[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_get_window_geometry(window: WebviewWindow) -> Option<WindowGeometry> {
     let pos = window.outer_position().ok()?;
     let size = window.inner_size().ok()?;
@@ -2168,6 +2210,13 @@ fn aaz_get_window_geometry(window: WebviewWindow) -> Option<WindowGeometry> {
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_get_window_geometry() -> Option<WindowGeometry> {
+    None
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn aaz_apply_window_geometry(
     window: WebviewWindow,
     x: i32,
@@ -2194,6 +2243,19 @@ fn aaz_apply_window_geometry(
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+fn aaz_apply_window_geometry(
+    _x: i32,
+    _y: i32,
+    _width: u32,
+    _height: u32,
+    _maximized: bool,
+) -> bool {
+    false
+}
+
+#[tauri::command]
+#[cfg(not(target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 fn aaz_set_mini_mode(
     window: WebviewWindow,
@@ -2266,6 +2328,21 @@ fn aaz_set_mini_mode(
 }
 
 #[tauri::command]
+#[cfg(target_os = "android")]
+#[allow(clippy::too_many_arguments)]
+fn aaz_set_mini_mode(
+    _enabled: bool,
+    _x: Option<i32>,
+    _y: Option<i32>,
+    _width: Option<u32>,
+    _height: Option<u32>,
+    _always_on_top: Option<bool>,
+    _maximized: Option<bool>,
+) -> bool {
+    false
+}
+
+#[tauri::command]
 fn aaz_taskbar_update_state(
     window: WebviewWindow,
     has_media: bool,
@@ -2284,10 +2361,11 @@ fn aaz_taskbar_update_state(
             is_arabic: lang.eq_ignore_ascii_case("ar"),
         },
     );
-    true
+    cfg!(target_os = "windows")
 }
 
 #[tauri::command]
+#[cfg(not(target_os = "android"))]
 async fn aaz_save_snapshot(data_base64: String, suggested_name: String) -> SaveSnapshotResult {
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = match base64::engine::general_purpose::STANDARD.decode(data_base64.trim()) {
@@ -2331,6 +2409,15 @@ async fn aaz_save_snapshot(data_base64: String, suggested_name: String) -> SaveS
         saved: false,
         path: None,
     })
+}
+
+#[tauri::command]
+#[cfg(target_os = "android")]
+async fn aaz_save_snapshot(_data_base64: String, _suggested_name: String) -> SaveSnapshotResult {
+    SaveSnapshotResult {
+        saved: false,
+        path: None,
+    }
 }
 
 #[tauri::command]
@@ -2390,7 +2477,14 @@ async fn aaz_list_system_fonts(state: State<'_, AppState>) -> Result<Vec<String>
             }
         }
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "android")]
+        {
+            for bundled in ["Cairo", "Plus Jakarta Sans", "JetBrains Mono", "System Default"] {
+                set.insert(bundled.to_string());
+            }
+        }
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "android")))]
         {
             if let Ok(output) = Command::new("fc-list").args([":", "family"]).output() {
                 let text = String::from_utf8_lossy(&output.stdout);
@@ -3041,13 +3135,23 @@ fn aaz_install_update(app: AppHandle, state: State<'_, AppState>) -> bool {
         return false;
     }
 
-    if Command::new(&path).spawn().is_ok() {
-        stop_cast_server_for_app(&app);
-        app.exit(0);
-        true
-    } else {
-        emit_err("Failed to launch the update installer.");
+    #[cfg(target_os = "android")]
+    {
+        let _ = path;
+        emit_err("Android APK install requires PackageInstaller (Phase 4).");
         false
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        if Command::new(&path).spawn().is_ok() {
+            stop_cast_server_for_app(&app);
+            app.exit(0);
+            true
+        } else {
+            emit_err("Failed to launch the update installer.");
+            false
+        }
     }
 }
 
@@ -4368,54 +4472,59 @@ pub fn run() {
         }
     }
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(app_state)
         .setup(|app| {
             if let Some(win) = app.get_webview_window("main") {
                 taskbar::attach_taskbar_controls(&win);
             }
             Ok(())
-        })
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let files = extract_supported_paths_from_argv(&argv);
-            if !files.is_empty() {
-                let state = app.state::<AppState>();
-                for raw in &files {
-                    let p = Path::new(raw);
-                    if p.is_dir() {
-                        authorize_dir_path(&state, p);
-                    } else {
-                        authorize_file_path(&state, p);
-                    }
-                }
-            }
-            let target_win = app
-                .webview_windows()
-                .values()
-                .find(|w| w.is_focused().unwrap_or(false))
-                .cloned()
-                .or_else(|| app.get_webview_window("main"))
-                .or_else(|| app.webview_windows().values().next().cloned());
+        });
 
-            if let Some(win) = target_win {
-                let _ = win.unminimize();
-                let _ = win.set_focus();
-                if !files.is_empty() {
-                    let _ = app.emit_to(win.label(), "aaz:open-external", files);
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+        let files = extract_supported_paths_from_argv(&argv);
+        if !files.is_empty() {
+            let state = app.state::<AppState>();
+            for raw in &files {
+                let p = Path::new(raw);
+                if p.is_dir() {
+                    authorize_dir_path(&state, p);
+                } else {
+                    authorize_file_path(&state, p);
                 }
-            } else if !files.is_empty() {
-                let state = app.state::<AppState>();
-                let Ok(mut queued) = state.launch_files.lock() else {
-                    return;
-                };
-                queued.extend(files);
             }
-        }))
+        }
+        let target_win = app
+            .webview_windows()
+            .values()
+            .find(|w| w.is_focused().unwrap_or(false))
+            .cloned()
+            .or_else(|| app.get_webview_window("main"))
+            .or_else(|| app.webview_windows().values().next().cloned());
+
+        if let Some(win) = target_win {
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+            if !files.is_empty() {
+                let _ = app.emit_to(win.label(), "aaz:open-external", files);
+            }
+        } else if !files.is_empty() {
+            let state = app.state::<AppState>();
+            let Ok(mut queued) = state.launch_files.lock() else {
+                return;
+            };
+            queued.extend(files);
+        }
+    }));
+
+    let app = builder
         .register_uri_scheme_protocol("aazmedia", |ctx, req| {
             handle_aazmedia_protocol(ctx.app_handle(), req)
         })
         .invoke_handler(tauri::generate_handler![
             aaz_get_app_version,
+            aaz_get_platform_info,
             aaz_get_launch_files,
             aaz_new_window,
             aaz_select_folder,

@@ -71,6 +71,9 @@ async function main() {
   const subtitleStyleMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/subtitle-style.js')).href);
   const trackIdMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/track-identity.js')).href);
   const subMatcherMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/subtitle-matcher.js')).href);
+  const mediaRefMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/media-ref.js')).href);
+  const desktopBridgeMod = await import(pathToFileURL(path.join(ROOT, 'js/core/desktop-bridge.js')).href);
+  const mobileGesturesMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/mobile-gestures.js')).href);
 
   // 1. JS Syntax Validation
   await runTest('All ES module files in js/ pass Node syntax check', () => {
@@ -1044,6 +1047,147 @@ async function main() {
       'mute',
       'Arabic keyboard layout KeyM must trigger mute'
     );
+  });
+
+  // 28. Android Phase 1: Architecture Record, Rust/Tauri Portability, CI Job & Gitignore Invariants
+  await runTest('Android Phase 1 (R2, R4-R8, R28): arch record, Cargo cfg gating, minSdk 24, media_core.rs & Android CI job', () => {
+    assert.ok(fs.existsSync(path.join(ROOT, 'docs/android-architecture.md')), 'docs/android-architecture.md must exist');
+    assert.ok(fs.existsSync(path.join(ROOT, 'desktop/src-tauri/src/media_core.rs')), 'media_core.rs must exist');
+
+    const cargoToml = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/Cargo.toml'), 'utf8');
+    assert.ok(
+      cargoToml.includes('[target.\'cfg(not(target_os = "android"))\'.dependencies]'),
+      'Cargo.toml must gate desktop-only crates behind cfg(not(target_os = "android"))'
+    );
+    const androidGateIdx = cargoToml.indexOf('[target.\'cfg(not(target_os = "android"))\'.dependencies]');
+    assert.ok(cargoToml.indexOf('rfd =') > androidGateIdx, 'rfd must be gated out on Android');
+    assert.ok(
+      cargoToml.indexOf('tauri-plugin-single-instance =') > androidGateIdx,
+      'tauri-plugin-single-instance must be gated out on Android'
+    );
+
+    const tauriConf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8'));
+    assert.equal(tauriConf.identifier, 'com.aaz.player');
+    assert.equal(tauriConf.bundle?.android?.minSdkVersion, 24);
+
+    const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+    assert.ok(gitignore.includes('keystore.properties'), '.gitignore must exclude keystore.properties');
+    assert.ok(gitignore.includes('local.properties'), '.gitignore must exclude local.properties');
+
+    const ciYml = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+    assert.ok(ciYml.includes('android-debug-build:'), 'ci.yml must include android-debug-build job');
+    assert.ok(ciYml.includes('tauri android build --apk --debug'), 'ci.yml must build Android debug APK');
+
+    const libRs = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/src/lib.rs'), 'utf8');
+    assert.ok(libRs.includes('mod media_core;'), 'lib.rs must wire platform-neutral media_core');
+    assert.ok(libRs.includes('aaz_get_platform_info'), 'lib.rs must expose aaz_get_platform_info');
+  });
+
+  // 29. Android Phase 1 (R10): MediaRef & Collision-Free SAF/MediaStore Track Identity
+  await runTest('Android Phase 1 (R10): MediaRef & track-identity preserve contentUri/mediaStoreUri without path mangling', () => {
+    const uriA = 'content://com.android.externalstorage.documents/document/primary%3AFolderA%2Fmovie.mp4';
+    const uriB = 'content://com.android.externalstorage.documents/document/primary%3AFolderB%2Fmovie.mp4';
+    const msUri = 'content://media/external/video/media/42';
+
+    const refA = mediaRefMod.createMediaRef({ value: uriA, displayName: 'movie.mp4', size: 2048 });
+    const refB = mediaRefMod.createMediaRef({ value: uriB, displayName: 'movie.mp4', size: 2048 });
+    const refMs = mediaRefMod.createMediaRef({ value: msUri, displayName: 'clip.mp4' });
+
+    assert.equal(refA.kind, 'contentUri');
+    assert.equal(refMs.kind, 'mediaStoreUri');
+
+    const keyA = trackIdMod.buildCanonicalTrackKey({ mediaRef: refA });
+    const keyB = trackIdMod.buildCanonicalTrackKey({ mediaRef: refB });
+    const keyMs = trackIdMod.buildCanonicalTrackKey({ mediaRef: refMs });
+
+    assert.equal(keyA, `uri:${uriA}`);
+    assert.notEqual(keyA, keyB, 'Distinct SAF content URIs with identical filename must have distinct keys');
+    assert.equal(keyMs, `ms:${msUri}`);
+
+    const tracks = [
+      { key: keyA, name: 'movie.mp4', mediaRef: refA, fullPath: uriA },
+      { key: keyB, name: 'movie.mp4', mediaRef: refB, fullPath: uriB },
+    ];
+    assert.equal(trackIdMod.findTrackSafely(tracks, { mediaRef: refB })?.key, keyB);
+    assert.equal(trackIdMod.deduplicateTracksSafely(tracks).kept.length, 2);
+  });
+
+  // 30. Android Phase 1 (R6, R17): Desktop Bridge Platform Detection & Capability Gating
+  await runTest('Android Phase 1 (R6, R17): desktop-bridge detects Android UA and gates desktop-only capabilities', () => {
+    const androidWin = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36' },
+      __TAURI__: {
+        core: { invoke: async () => ({}) },
+        event: { listen: async () => () => {} },
+      },
+    };
+    const bridge = desktopBridgeMod.attachDesktopBridge(androidWin);
+    assert.equal(bridge.isAndroid, true);
+    assert.equal(bridge.isDesktop, false);
+    assert.equal(bridge.capabilities.windowing, false);
+    assert.equal(bridge.capabilities.taskbar, false);
+    assert.equal(bridge.capabilities.setSinkId, false);
+    assert.equal(bridge.capabilities.directoryPicker, false);
+    assert.equal(bridge.capabilities.safPicker, true);
+    assert.equal(bridge.capabilities.touchGestures, true);
+    assert.equal(bridge.capabilities.nativeMedia3, true);
+    assert.equal(typeof bridge.playerLoad, 'function');
+
+    const winCaps = desktopBridgeMod.buildPlatformCapabilities(false);
+    assert.equal(winCaps.windowing, true);
+    assert.equal(winCaps.setSinkId, true);
+  });
+
+  // 31. Android Phase 1 (R20-R22): Mobile Gestures, Touch-Slop, Screen Lock & Back Stack
+  await runTest('Android Phase 1 (R20-R22): touch-slop, double-tap seek, edge brightness/volume, lock & back stack', () => {
+    assert.equal(mobileGesturesMod.decideGestureAxis(5, 6), 'none');
+    assert.equal(mobileGesturesMod.decideGestureAxis(4, 30), 'vertical');
+    assert.equal(mobileGesturesMod.decideGestureAxis(32, 5), 'horizontal');
+
+    const events = [];
+    const ctrl = mobileGesturesMod.createMobileGestureController({
+      onSeekDelta: (d) => events.push(['seek', d]),
+      onTogglePlay: () => events.push(['play']),
+      onBrightnessChange: (b) => events.push(['brightness', b]),
+      onVolumeChange: (v, sys) => events.push(['volume', v, sys]),
+      onCloseTopModal: () => events.push(['close-modal']),
+      onExitFullscreenOrPip: () => events.push(['exit-fs']),
+      onNavigateBack: () => events.push(['nav-back']),
+      onConfirmExit: () => events.push(['confirm-exit']),
+    });
+
+    // Double-tap left (-10s), right (+10s), center (play/pause)
+    assert.equal(ctrl.handleTap(0.15, 100).action, 'single-tap');
+    assert.equal(ctrl.handleTap(0.15, 250).deltaSeconds, -10);
+    ctrl.handleTap(0.85, 500);
+    assert.equal(ctrl.handleTap(0.85, 620).deltaSeconds, 10);
+    ctrl.handleTap(0.5, 900);
+    assert.equal(ctrl.handleTap(0.5, 1050).action, 'toggle-play');
+
+    // Edge vertical swipes: left = brightness, right = player volume / system stream
+    const bRes = ctrl.handleVerticalSwipe({ relativeXRatio: 0.1, deltaY: -60, stageHeight: 400 });
+    assert.equal(bRes.action, 'brightness');
+    assert.ok(bRes.value > 0.7);
+    ctrl.setVolumeMode('system');
+    const vRes = ctrl.handleVerticalSwipe({ relativeXRatio: 0.9, deltaY: 60, stageHeight: 400, currentVolume: 0.8 });
+    assert.equal(vRes.action, 'volume');
+    assert.equal(vRes.mode, 'system');
+    assert.ok(vRes.value < 0.8);
+
+    // Screen lock blocks taps & swipes until unlocked
+    ctrl.toggleLock();
+    assert.equal(ctrl.isLocked(), true);
+    assert.equal(ctrl.handleTap(0.5, 1500).action, 'blocked-locked');
+    assert.equal(ctrl.handleVerticalSwipe({ relativeXRatio: 0.1, deltaY: -40 }).action, 'blocked-locked');
+    ctrl.toggleLock();
+    assert.equal(ctrl.isLocked(), false);
+
+    // Back-button priority stack (R22)
+    assert.equal(ctrl.handleBackAction({ hasOpenModal: true, isFullscreen: true, isPlaying: true }), 'closed-modal');
+    assert.equal(ctrl.handleBackAction({ isFullscreen: true, isPlaying: true }), 'exited-fullscreen');
+    assert.equal(ctrl.handleBackAction({ hasInternalBackView: true, isPlaying: true }), 'navigated-back');
+    assert.equal(ctrl.handleBackAction({ isPlaying: true }), 'confirm-exit');
+    assert.equal(ctrl.handleBackAction({ isPlaying: false }), 'allow-exit');
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);

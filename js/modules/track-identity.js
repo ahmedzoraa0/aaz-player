@@ -5,9 +5,16 @@
  * never collapse to the same key, while keeping displayName cleanly separated from identity.
  */
 
+import {
+  isContentUriValue,
+  detectMediaRefKind,
+  mediaRefToCanonicalKey,
+} from './media-ref.js';
+
 export function normalizeWindowsPath(rawPath) {
   let s = String(rawPath || '').trim();
   if (!s) return '';
+  if (isContentUriValue(s)) return s;
   // Strip Windows extended-length prefixes (\\?\C:\... or \\?\UNC\server\share\...)
   if (s.startsWith('\\\\?\\UNC\\') || s.startsWith('//?/UNC/')) {
     s = '\\\\' + s.slice(8);
@@ -21,12 +28,13 @@ export function normalizeWindowsPath(rawPath) {
 }
 
 export function extractParentFolderLabel(rawPath) {
-  const norm = normalizeWindowsPath(rawPath);
+  const s = String(rawPath || '').trim();
+  if (!s || isContentUriValue(s)) return '';
+  const norm = normalizeWindowsPath(s);
   if (!norm) return '';
   const idx = norm.lastIndexOf('/');
   if (idx <= 0) return '';
-  const dirPart = String(rawPath || '')
-    .trim()
+  const dirPart = s
     .replace(/^\\\\\?\\UNC\\/i, '\\\\')
     .replace(/^\\\\\?\\/, '')
     .replace(/\\/g, '/');
@@ -39,11 +47,13 @@ export function extractParentFolderLabel(rawPath) {
 
 /**
  * Computes a stable, collision-resistant canonical track key.
+ * - Android MediaRef / content:// URIs: `uri:<exact-uri>` or `ms:<exact-uri>`
  * - Desktop paths: `fs:<normalized-full-path>`
  * - Browser folder scans / relative paths: `rel:<root>/<relative-path>` (or `<relative-path>` when root empty)
  * - Standalone browser File objects without path: disambiguated with size/mtime/occurrence index
  */
 export function buildCanonicalTrackKey({
+  mediaRef = null,
   fullPath = '',
   relPath = '',
   rootId = '',
@@ -53,20 +63,27 @@ export function buildCanonicalTrackKey({
   usedKeys = null,
 } = {}) {
   let candidate = '';
-  const normFull = normalizeWindowsPath(fullPath);
-  if (normFull) {
-    candidate = `fs:${normFull}`;
-  } else if (relPath) {
-    const cleanRel = String(relPath).replace(/\\/g, '/').replace(/^\/+/, '');
-    const cleanRoot = String(rootId || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-    candidate = cleanRoot ? `rel:${cleanRoot}/${cleanRel}` : cleanRel;
+  if (mediaRef && typeof mediaRef === 'object' && mediaRef.value) {
+    candidate = mediaRefToCanonicalKey(mediaRef, normalizeWindowsPath);
+  } else if (isContentUriValue(fullPath)) {
+    const kind = detectMediaRefKind(fullPath);
+    candidate = mediaRefToCanonicalKey({ kind, value: fullPath }, normalizeWindowsPath);
   } else {
-    const cleanName = String(name || 'track').trim();
-    const hasMeta =
-      (Number.isFinite(size) && size > 0) || (Number.isFinite(lastModified) && lastModified > 0);
-    candidate = hasMeta
-      ? `file:${cleanName}#${Number(size) || 0}:${Number(lastModified) || 0}`
-      : cleanName;
+    const normFull = normalizeWindowsPath(fullPath);
+    if (normFull) {
+      candidate = `fs:${normFull}`;
+    } else if (relPath) {
+      const cleanRel = String(relPath).replace(/\\/g, '/').replace(/^\/+/, '');
+      const cleanRoot = String(rootId || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      candidate = cleanRoot ? `rel:${cleanRoot}/${cleanRel}` : cleanRel;
+    } else {
+      const cleanName = String(name || 'track').trim();
+      const hasMeta =
+        (Number.isFinite(size) && size > 0) || (Number.isFinite(lastModified) && lastModified > 0);
+      candidate = hasMeta
+        ? `file:${cleanName}#${Number(size) || 0}:${Number(lastModified) || 0}`
+        : cleanName;
+    }
   }
 
   if (usedKeys instanceof Set) {
@@ -87,20 +104,25 @@ export function buildCanonicalTrackKey({
 }
 
 /**
- * Safely finds a track in a queue by fullPath or exact key.
+ * Safely finds a track in a queue by fullPath/contentUri or exact key.
  * Never falls back to bare basename when multiple tracks share the same name
  * or when the caller explicitly supplied a different fullPath.
  */
 export function findTrackSafely(tracks, query = {}) {
   if (!Array.isArray(tracks) || tracks.length === 0) return null;
-  const qPath = query.fullPath ? normalizeWindowsPath(query.fullPath) : '';
+  const rawQueryPath = query.mediaRef?.value || query.fullPath || '';
+  const qPath = rawQueryPath ? normalizeWindowsPath(rawQueryPath) : '';
   const qKey = typeof query.key === 'string' ? query.key : '';
   const qName = typeof query.name === 'string' ? query.name : '';
 
   if (qPath) {
-    const byPath = tracks.find((tr) => tr && tr.fullPath && normalizeWindowsPath(tr.fullPath) === qPath);
+    const byPath = tracks.find((tr) => {
+      if (!tr) return false;
+      const trVal = tr.mediaRef?.value || tr.fullPath || '';
+      return trVal && normalizeWindowsPath(trVal) === qPath;
+    });
     if (byPath) return byPath;
-    // Caller specified a concrete disk path that does not match any track in queue —
+    // Caller specified a concrete path or content URI that does not match any track in queue —
     // do NOT fall back to a different file that happens to share the same filename.
     return null;
   }
@@ -120,8 +142,8 @@ export function findTrackSafely(tracks, query = {}) {
 
 /**
  * Deduplicates a list of tracks conservatively:
- * - Desktop tracks with fullPath: deduplicate strictly by normalized fullPath.
- * - Tracks without fullPath: deduplicate strictly by exact canonical key (never by bare name+size alone).
+ * - Tracks with fullPath or MediaRef value: deduplicate strictly by normalized path or exact URI.
+ * - Tracks without path/URI: deduplicate strictly by exact canonical key (never by bare name+size alone).
  */
 export function deduplicateTracksSafely(tracks) {
   const kept = [];
@@ -131,7 +153,8 @@ export function deduplicateTracksSafely(tracks) {
 
   for (const tr of Array.isArray(tracks) ? tracks : []) {
     if (!tr) continue;
-    const normPath = tr.fullPath ? normalizeWindowsPath(tr.fullPath) : '';
+    const rawVal = tr.mediaRef?.value || tr.fullPath || '';
+    const normPath = rawVal ? normalizeWindowsPath(rawVal) : '';
     if (normPath) {
       if (seenPaths.has(normPath)) {
         removed.push(tr);

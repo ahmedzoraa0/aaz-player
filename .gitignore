@@ -9,4 +9,9 @@ coverage/
 desktop/src-tauri/target/
 desktop/app/
 release-out/
-
+keystore.properties
+local.properties
+desktop/src-tauri/gen/android/keystore.properties
+desktop/src-tauri/gen/android/local.properties
+*.jks
+*.keystore

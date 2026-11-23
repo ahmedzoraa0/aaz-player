@@ -37,7 +37,30 @@ const cargoPath = path.join(tauriDir, 'Cargo.toml');
 const cargoRaw = fs.readFileSync(cargoPath, 'utf8');
 const cargoUpdated = cargoRaw.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
 fs.writeFileSync(cargoPath, cargoUpdated, 'utf8');
-console.log(`[prepare-ci] Synced Rust + Tauri version -> v${version}`);
+
+function computeAndroidVersionCode(semver) {
+  const m = String(semver || '').match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return 1;
+  return Number(m[1]) * 10000 + Number(m[2]) * 100 + Number(m[3]);
+}
+
+const androidVersionCode = computeAndroidVersionCode(version);
+const androidPropsPath = path.join(tauriDir, 'gen', 'android', 'app', 'tauri.properties');
+if (fs.existsSync(path.dirname(androidPropsPath))) {
+  let props = fs.existsSync(androidPropsPath) ? fs.readFileSync(androidPropsPath, 'utf8') : '';
+  const setProp = (src, key, val) => {
+    const re = new RegExp(`^${key}=.*$`, 'm');
+    if (re.test(src)) return src.replace(re, `${key}=${val}`);
+    const prefix = src.length > 0 && !src.endsWith('\n') ? '\n' : '';
+    return `${src}${prefix}${key}=${val}\n`;
+  };
+  props = setProp(props, 'tauri.android.versionName', version);
+  props = setProp(props, 'tauri.android.versionCode', String(androidVersionCode));
+  fs.writeFileSync(androidPropsPath, props, 'utf8');
+}
+console.log(
+  `[prepare-ci] Synced Rust + Tauri version -> v${version} (Android versionCode: ${androidVersionCode})`
+);
 
 // 3. Ensure base icons exist in src-tauri/icons/
 fs.mkdirSync(tauriIconsDir, { recursive: true });
