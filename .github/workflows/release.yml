@@ -1,4 +1,4 @@
-name: Build & Release AAZ Player (Windows — Rust / Tauri)
+name: Build & Release AAZ Player (Windows & Android — Rust / Tauri)
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_unsigned_preview:
-        description: 'Allow publishing an unsigned prerelease preview when Minisign secrets are not configured'
+        description: 'Allow publishing an unsigned/preview prerelease when signing secrets are not configured'
         required: false
         type: boolean
         default: false
@@ -24,6 +24,11 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    outputs:
+      should_release: ${{ steps.version_check.outputs.should_release }}
+      version: ${{ steps.version_check.outputs.version }}
+      tag: ${{ steps.version_check.outputs.tag }}
+      prerelease: ${{ steps.signing_gate.outputs.prerelease }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -276,3 +281,146 @@ jobs:
             & gh @createArgs
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  build-android:
+    needs: build-windows
+    if: needs.build-windows.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Android signing configuration (fail closed)
+        id: android_signing_gate
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ALLOW_UNSIGNED_PREVIEW: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_unsigned_preview }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$ALLOW_UNSIGNED_PREVIEW" = "true" ]; then
+            echo "::warning::Android release keystore secrets not configured; signing with ephemeral preview key because allow_unsigned_preview=true."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Release blocked (fail-closed): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD must be configured in GitHub Secrets for stable Android releases. Use workflow_dispatch with allow_unsigned_preview=true for a preview build."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Rust stable with Android ARM64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Rust Android dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "desktop/src-tauri -> target"
+          key: android-release
+
+      - name: Configure Android SDK & NDK
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Prepare frontend, version & GitHub repo config
+        run: node desktop/scripts/prepare-ci.cjs
+
+      - name: Install Tauri CLI
+        working-directory: desktop
+        run: npm install
+
+      - name: Initialize Tauri Android project, adaptive icons & Phase 4 native Kotlin bridge
+        working-directory: desktop
+        run: |
+          npx @tauri-apps/cli icon assets/icon.png -o src-tauri/icons
+          npx @tauri-apps/cli android init --skip-targets-install
+          node scripts/configure-android.cjs
+
+      - name: Build lightweight ARM64 Release APK
+        working-directory: desktop
+        run: npx @tauri-apps/cli android build --apk --target aarch64
+
+      - name: Align, sign, verify APK & publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REL_VERSION: ${{ needs.build-windows.outputs.version }}
+          REL_TAG: ${{ needs.build-windows.outputs.tag }}
+          ANDROID_SIGNED: ${{ steps.android_signing_gate.outputs.signed }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-android
+          RAW_APK=$(find desktop/src-tauri/gen/android/app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          if [ -z "$RAW_APK" ]; then
+            echo "No built Android APK found!"
+            exit 1
+          fi
+
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+
+          ALIGNED_APK="$RUNNER_TEMP/aaz-aligned.apk"
+          FINAL_NAME="AAZ-Player-Android-arm64-${REL_VERSION}.apk"
+          FINAL_APK="release-android/${FINAL_NAME}"
+          KEYSTORE_FILE="$RUNNER_TEMP/aaz-release.keystore"
+
+          "$ZIPALIGN" -f -p 4 "$RAW_APK" "$ALIGNED_APK"
+
+          if [ "$ANDROID_SIGNED" = "true" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE_FILE" \
+              --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+              --key-pass "env:ANDROID_KEY_PASSWORD" \
+              --out "$FINAL_APK" \
+              "$ALIGNED_APK"
+          else
+            keytool -genkeypair -v -keystore "$KEYSTORE_FILE" -storepass android -keypass android \
+              -alias aazpreview -keyalg RSA -keysize 2048 -validity 365 \
+              -dname "CN=AAZ Player Preview,O=AAZ,C=US"
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE_FILE" \
+              --ks-key-alias aazpreview \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out "$FINAL_APK" \
+              "$ALIGNED_APK"
+          fi
+
+          "$APKSIGNER" verify --verbose "$FINAL_APK"
+
+          (cd release-android && sha256sum "${FINAL_NAME}" > "${FINAL_NAME}.sha256")
+          ls -lh "release-android/${FINAL_NAME}"
+          cat "release-android/${FINAL_NAME}.sha256"
+
+          gh release upload "$REL_TAG" \
+            "release-android/${FINAL_NAME}" \
+            "release-android/${FINAL_NAME}.sha256" \
+            --clobber
+
+      - name: Clean temporary Android signing keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/aaz-release.keystore" "$RUNNER_TEMP/aaz-aligned.apk"

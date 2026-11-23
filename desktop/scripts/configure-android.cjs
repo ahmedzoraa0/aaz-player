@@ -32,13 +32,20 @@ function writeFileEnsureDir(targetPath, content) {
 
 // 1. Copy native Kotlin sources into app/src/main/java/com/aaz/player/
 fs.mkdirSync(javaPkgDir, { recursive: true });
-for (const fileName of ['AazContentServer.kt', 'AazMediaHelper.kt', 'AazPlaybackService.kt', 'MainActivity.kt']) {
+for (const fileName of [
+  'AazContentServer.kt',
+  'AazMediaHelper.kt',
+  'AazPlaybackService.kt',
+  'AazCastHelper.kt',
+  'AazUpdater.kt',
+  'MainActivity.kt',
+]) {
   const src = path.join(nativeSrcDir, fileName);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, path.join(javaPkgDir, fileName));
   }
 }
-console.log('[configure-android] Installed native Kotlin sources (AazContentServer, AazMediaHelper, AazPlaybackService, MainActivity).');
+console.log('[configure-android] Installed native Kotlin sources (AazContentServer, AazMediaHelper, AazPlaybackService, AazCastHelper, AazUpdater, MainActivity).');
 
 // 2. Write crisp Adaptive Icon VectorDrawables (66dp safe-zone centered inside 108dp canvas)
 const adaptiveBgXml = `<?xml version="1.0" encoding="utf-8"?>
@@ -169,6 +176,37 @@ const netSecXml = `<?xml version="1.0" encoding="utf-8"?>
 `;
 writeFileEnsureDir(path.join(resDir, 'xml', 'network_security_config.xml'), netSecXml);
 
+// 3B. Write FileProvider path config for Phase 4 direct signed APK self-updater (R48-R50)
+const filePathsXml = `<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>
+`;
+writeFileEnsureDir(path.join(resDir, 'xml', 'file_paths.xml'), filePathsXml);
+
+// 3C. Write res/values/aaz_config.xml binding GitHub Releases repo slug for AazUpdater.kt
+let githubRepoSlug = String(process.env.GITHUB_REPOSITORY || '').trim();
+const repoCfgPath = path.join(desktopDir, 'src-tauri', 'src', 'repo_config.json');
+if (!githubRepoSlug && fs.existsSync(repoCfgPath)) {
+  try {
+    const parsedRepo = JSON.parse(fs.readFileSync(repoCfgPath, 'utf8'));
+    if (parsedRepo && typeof parsedRepo.githubRepo === 'string') {
+      githubRepoSlug = parsedRepo.githubRepo.trim();
+    }
+  } catch {
+    // Ignore malformed repo_config.json
+  }
+}
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(githubRepoSlug)) {
+  githubRepoSlug = '';
+}
+const aazConfigXml = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="aaz_github_repo" translatable="false">${githubRepoSlug}</string>
+</resources>
+`;
+writeFileEnsureDir(path.join(resDir, 'values', 'aaz_config.xml'), aazConfigXml);
+
 // 4. Patch res/values/themes.xml dark background so startup has zero white flash
 const themesXmlPath = path.join(resDir, 'values', 'themes.xml');
 if (fs.existsSync(themesXmlPath)) {
@@ -188,6 +226,10 @@ if (fs.existsSync(manifestPath)) {
   let manifest = fs.readFileSync(manifestPath, 'utf8');
 
   const requiredPerms = [
+    `<uses-permission android:name="android.permission.INTERNET" />`,
+    `<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />`,
+    `<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />`,
+    `<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />`,
     `<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />`,
     `<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />`,
     `<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />`,
@@ -196,6 +238,7 @@ if (fs.existsSync(manifestPath)) {
     `<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />`,
     `<uses-permission android:name="android.permission.WAKE_LOCK" />`,
     `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`,
+    `<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />`,
   ];
   for (const perm of requiredPerms) {
     const nameMatch = perm.match(/android:name="([^"]+)"/);
@@ -264,6 +307,21 @@ if (fs.existsSync(manifestPath)) {
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />`;
     manifest = manifest.replace('</application>', `${svcXml}\n    </application>`);
+  }
+
+  // Register Phase 4 FileProvider for verified APK self-updates (R48-R50)
+  if (!manifest.includes('androidx.core.content.FileProvider')) {
+    const providerXml = `
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="\${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>`;
+    manifest = manifest.replace('</application>', `${providerXml}\n    </application>`);
   }
 
   // Self-check: ensure no XML opening tag contains duplicate attributes before Gradle parses it

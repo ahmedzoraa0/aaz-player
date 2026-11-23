@@ -341,6 +341,16 @@
       <div class="topbar-right">
         <button type="button" class="lang-toggle-btn" id="langToggleBtn" title="Switch language">عربي</button>
 
+        <button type="button" class="btn-icon mobile-only-btn" id="openThemesQuickBtn" title="Theme Styles (16)" aria-label="Theme Styles">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+          </svg>
+        </button>
+
         <button type="button" class="btn-icon" id="themeToggleBtn" title="Switch Light / Dark Mode" aria-label="Switch theme">
           <svg id="themeSunIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="4"/>
@@ -1364,6 +1374,18 @@
         </div>
 
         <div class="settings-group">
+          <div class="settings-row">
+            <div class="settings-label-col">
+              <span class="settings-label" data-i18n="cmdCheckUpdates">Check for Updates...</span>
+              <span class="settings-sub" id="setAppVersionLabel">AAZ Player v1.7.0</span>
+            </div>
+            <div class="settings-control">
+              <button type="button" class="btn btn-primary" id="setCheckUpdatesBtn" style="height:30px;font-size:12px" data-i18n="cmdCheckUpdates">Check for Updates...</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-label" data-p3-i18n="setBackupHeading">Backup &amp; Restore Data</div>
           <div class="settings-sub" data-p3-i18n="setBackupDesc">Export or restore your saved playlists, watch history, media library, shortcuts, and settings as JSON.</div>
           <div class="settings-backup-actions">
@@ -1632,7 +1654,7 @@
           <span data-i18n="castWirelessHeading">Wireless Display &amp; Browser Cast</span>
         </div>
         <div class="cast-quick-grid">
-          <button type="button" class="btn" id="castWindowsBtn" style="height:34px" data-i18n="castWinMiracast">Windows Cast (Miracast)</button>
+          <button type="button" class="btn" id="castWindowsBtn" data-desktop-only="true" style="height:34px" data-i18n="castWinMiracast">Windows Cast (Miracast)</button>
           <button type="button" class="btn" id="castBrowserBtn" style="height:34px" data-i18n="castBrowserRemote">Browser / Chromecast</button>
         </div>
       </div>

@@ -30,7 +30,10 @@ import java.util.concurrent.Executors
 class MainActivity : TauriActivity() {
     private lateinit var contentServer: AazContentServer
     private lateinit var mediaHelper: AazMediaHelper
+    private lateinit var castHelper: AazCastHelper
+    private lateinit var updater: AazUpdater
     private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val netExecutor = Executors.newCachedThreadPool()
 
     @Volatile
     private var activeWebView: WebView? = null
@@ -69,6 +72,10 @@ class MainActivity : TauriActivity() {
         contentServer = AazContentServer(applicationContext)
         contentServer.start()
         mediaHelper = AazMediaHelper(applicationContext, contentServer)
+        castHelper = AazCastHelper(applicationContext)
+        updater = AazUpdater(this) { payload ->
+            emitJsEvent("update-status", payload)
+        }
 
         openFilesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val cbId = pendingFilesCallbackId
@@ -239,8 +246,10 @@ class MainActivity : TauriActivity() {
             stopService(Intent(this, AazPlaybackService::class.java))
         } catch (_: Exception) {
         }
+        castHelper.shutdown()
         contentServer.stop()
         ioExecutor.shutdownNow()
+        netExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -316,19 +325,51 @@ class MainActivity : TauriActivity() {
     }
 
     private fun applyDarkSystemBars() {
-        try {
-            @Suppress("DEPRECATION")
-            window.statusBarColor = Color.parseColor("#060b08")
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = Color.parseColor("#060b08")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.insetsController?.setSystemBarsAppearance(
-                    0,
-                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                        WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-                )
-            }
+        applySystemBarStyle("#060b08", false)
+    }
+
+    private fun applySystemBarStyle(bgHex: String, isLight: Boolean) {
+        val parsedColor = try {
+            Color.parseColor(bgHex.trim())
         } catch (_: Exception) {
+            Color.parseColor(if (isLight) "#f2f7f3" else "#060b08")
+        }
+        runOnUiThread {
+            try {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = parsedColor
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = parsedColor
+                activeWebView?.setBackgroundColor(parsedColor)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val lightMask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                        WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                    window.insetsController?.setSystemBarsAppearance(
+                        if (isLight) lightMask else 0,
+                        lightMask
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    var flags = window.decorView.systemUiVisibility
+                    @Suppress("DEPRECATION")
+                    flags = if (isLight) {
+                        flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    } else {
+                        flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        @Suppress("DEPRECATION")
+                        flags = if (isLight) {
+                            flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+                        } else {
+                            flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv()
+                        }
+                    }
+                    @Suppress("DEPRECATION")
+                    window.decorView.systemUiVisibility = flags
+                }
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -726,6 +767,96 @@ class MainActivity : TauriActivity() {
                     startService(svcIntent)
                 }
             } catch (_: Exception) {
+            }
+        }
+
+        // Phase 4: Dynamic System Bar Styling for All 16 Dark/Light Themes (R42)
+        @JavascriptInterface
+        fun setSystemBarStyle(bgHex: String, isLight: Boolean) {
+            applySystemBarStyle(bgHex, isLight)
+        }
+
+        // Phase 4: Native Android LAN / DLNA Cast & Wi-Fi Receiver (R43-R46)
+        @JavascriptInterface
+        fun castStartServer(callbackId: String, mediaPath: String, title: String, subtitleVtt: String) {
+            netExecutor.execute {
+                val res = try {
+                    castHelper.startServer(mediaPath, title, subtitleVtt.ifBlank { null })
+                } catch (e: Exception) {
+                    JSONObject().put("__aazError", e.message ?: "Failed to start LAN cast server.")
+                }
+                resolveJsCallback(callbackId, res.toString())
+            }
+        }
+
+        @JavascriptInterface
+        fun castStopServer() {
+            netExecutor.execute {
+                castHelper.stopServer()
+            }
+        }
+
+        @JavascriptInterface
+        fun castDiscoverDevices(callbackId: String) {
+            netExecutor.execute {
+                val res = try {
+                    castHelper.discoverDevices().toString()
+                } catch (e: Exception) {
+                    JSONObject().put("__aazError", e.message ?: "Failed to scan Wi-Fi for DLNA devices.").toString()
+                }
+                resolveJsCallback(callbackId, res)
+            }
+        }
+
+        @JavascriptInterface
+        fun castToDlna(callbackId: String, controlUrl: String, mediaUrl: String, title: String, mimeType: String) {
+            netExecutor.execute {
+                val res = try {
+                    castHelper.castToDlna(controlUrl, mediaUrl, title, mimeType)
+                } catch (e: Exception) {
+                    JSONObject().put("__aazError", e.message ?: "Failed to cast to DLNA TV.")
+                }
+                resolveJsCallback(callbackId, res.toString())
+            }
+        }
+
+        @JavascriptInterface
+        fun castDlnaControl(callbackId: String, controlUrl: String, action: String) {
+            netExecutor.execute {
+                val res = try {
+                    castHelper.dlnaControl(controlUrl, action)
+                } catch (e: Exception) {
+                    JSONObject().put("__aazError", e.message ?: "DLNA control failed.")
+                }
+                resolveJsCallback(callbackId, res.toString())
+            }
+        }
+
+        // Phase 4: Direct Signed APK Self-Updater via GitHub Releases (R48-R50)
+        @JavascriptInterface
+        fun getAppVersion(): String = updater.getAppVersion()
+
+        @JavascriptInterface
+        fun checkForUpdates(callbackId: String) {
+            netExecutor.execute {
+                val res = updater.checkForUpdates()
+                resolveJsCallback(callbackId, res.toString())
+            }
+        }
+
+        @JavascriptInterface
+        fun downloadUpdate(callbackId: String) {
+            netExecutor.execute {
+                val res = updater.downloadUpdate()
+                resolveJsCallback(callbackId, res.toString())
+            }
+        }
+
+        @JavascriptInterface
+        fun installUpdate(callbackId: String) {
+            netExecutor.execute {
+                val res = updater.installUpdate()
+                resolveJsCallback(callbackId, res.toString())
             }
         }
     }

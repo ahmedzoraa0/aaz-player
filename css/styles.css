@@ -4988,12 +4988,81 @@
     }
 
     /* Hide desktop-only controls, shortcut hints & unsupported settings on Android */
+    .mobile-only-btn {
+      display: none;
+    }
+
+    html.is-android .mobile-only-btn {
+      display: inline-flex;
+    }
+
     html.is-android [data-desktop-only="true"],
     html.is-android .menu-shortcut,
     html.is-android #fsPrevFrameBtn,
-    html.is-android #fsNextFrameBtn,
-    html.is-android #videoCastBtn {
+    html.is-android #fsNextFrameBtn {
       display: none !important;
+    }
+
+    /* Phase 4 Final Mobile-First Polish: Bottom-Sheet Grab Handle, Touch Seekbar & 16-Theme Harmony */
+    html.is-android .modal-card::before {
+      content: '';
+      display: block;
+      width: 38px;
+      height: 4px;
+      border-radius: 999px;
+      background-color: var(--border-strong);
+      margin: 0 auto 10px;
+      opacity: 0.75;
+      flex-shrink: 0;
+    }
+
+    html.is-android #seekBar::-webkit-slider-thumb,
+    html.is-android #fsSeekBar::-webkit-slider-thumb {
+      width: 20px;
+      height: 20px;
+      margin-top: -7px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+
+    html.is-android #seekBar,
+    html.is-android #fsSeekBar {
+      min-height: 30px;
+    }
+
+    html.is-android .cast-quick-grid {
+      grid-template-columns: 1fr;
+    }
+
+    html.is-android .settings-modal-card .btn,
+    html.is-android .cast-modal-card .btn {
+      min-height: 40px;
+      padding: 0 14px;
+      font-size: 13px;
+    }
+
+    html.is-android .settings-modal-card .p3-select {
+      min-height: 40px;
+      font-size: 13.5px;
+    }
+
+    html.is-android .update-banner {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 10px 12px;
+    }
+
+    html.is-android .update-banner-actions {
+      justify-content: flex-end;
+    }
+
+    html[data-theme="light"] .speed-boost-badge,
+    html[data-theme="light"] .mobile-gesture-hud,
+    html[data-theme="light"] .stage-buffering {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border-color: var(--accent-border);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
     }
 
     /* Mobile quick-launch CTAs on idle Audio Stage */

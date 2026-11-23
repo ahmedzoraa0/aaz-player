@@ -2,7 +2,7 @@
 
 **Baseline commit:** `ed785b4` (AAZ Player `v1.7.0`)
 **Last updated:** 2026-11-23
-**Status:** Phase 3 implemented (Android Foreground Media Playback Service `AazPlaybackService` with MediaStyle lock-screen/shade notification, AudioFocus, WakeLock, & headphone-unplug auto-pause; auto-PiP + full-bleed PiP UI; VLC-style physical orientation sensor forced auto-rotation with Rotation Lock HUD; Hold-to-2x speed boost across desktop mouse/Spacebar and Android touch; keyboard speed shortcuts up to 100x with turbo playback engine; and cleaner mobile-first Android UI). Phase 3 Android CI APK build and physical-device acceptance checks remain **PENDING** until executed on GitHub Actions and Android hardware.
+**Status:** Phases 1–4 implemented (final Phase 4 adds all 16 Dark/Light themes with dynamic Android status/navigation bar syncing, native LAN/DLNA Cast + Wi-Fi HTML5 receiver with `WifiManager.MulticastLock` & RFC1918 SSRF guard, fail-closed SHA-256 direct APK self-updater via `FileProvider`, scoped Phase 4 permissions audit with zero `MANAGE_EXTERNAL_STORAGE`, final mobile-first UI polish, and signed ARM64 APK release pipeline in `.github/workflows/release.yml`). Phase 4 GitHub Actions release build and physical-device acceptance checks remain **PENDING** until executed on GitHub Actions and Android hardware.
 
 ---
 
@@ -71,12 +71,11 @@ Canonical identity key rules:
 
 | Check | Scope | Status | Evidence / Notes |
 | --- | --- | --- | --- |
-| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 33 test groups green). |
+| **T3 (JS/Web)** | `npm run lint`, `npm run build`, `prepare-ci.cjs`, `node tests/run-tests.cjs` | `PASS` | Executed locally in Node v22 container (all 34 test groups green). |
 | **T3 (Windows Rust)** | `cargo fmt -- --check`, `cargo clippy`, `cargo test`, Windows CI | `PASS` | Confirmed green on GitHub Actions Windows runner (Phase 1); re-run required on next push. |
-| **R4 (Android CI — Phase 1 & 2)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 preview APK on GitHub Actions; user installed & verified launch on physical Android phone. |
-| **R4 (Android CI — Phase 3)** | `AazPlaybackService` FGS + sensor-forced rotation & Rotation Lock + auto-PiP + Hold-to-2x + 100x speed + mobile UI polish | `PENDING` | Ready in `.github/workflows/ci.yml`; awaits GitHub Actions build + user physical device check. |
-| **R35–R41 / V1 / V2** | Background FGS notification, AudioFocus, noisy headphone pause, auto-PiP, VLC sensor rotation lock, SAF JSON backup | `PENDING` | Native Kotlin + JS integration complete; awaits on-device verification after Phase 3 APK install. |
-| **T1–T2, T4–T12** | Full Android acceptance suite | `PENDING` | Tracked per phase gate. |
+| **R4 (Android CI — Phases 1–3)** | `.github/workflows/ci.yml` `android-debug-build` job (`ubuntu-latest`) | `PASS` | Built ARM64 preview APKs on GitHub Actions; user installed & verified Phases 1–3 on physical Android phone. |
+| **R42–R50 (Android CI — Phase 4)** | All 16 Dark/Light themes + system bars, `AazCastHelper` LAN/DLNA Cast, `AazUpdater` SHA-256 APK updater, `build-android` job in `release.yml` | `PENDING` | Native Kotlin, JS, CSS, manifest config, and release CI implemented; awaits GitHub Actions build + user physical device check. |
+| **T1–T2, T4–T12** | Full Android acceptance suite | `PENDING` | Tracked per phase gate; awaits on-device Phase 4 verification (DLNA Smart TV cast, Wi-Fi receiver, 16 Dark/Light themes, signed APK self-update). |
 
 ---
 

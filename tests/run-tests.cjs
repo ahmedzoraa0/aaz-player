@@ -1335,6 +1335,136 @@ async function main() {
     assert.deepEqual(bridgeCalls, ['videoMode:true', 'toggleLock', 'rotateNow']);
   });
 
+  // 34. Phase 4: All 16 Themes System Bar Sync, LAN/DLNA Cast, Direct Signed APK Updater, & Release CI
+  await runTest('Phase 4: 16-theme system bar sync, Android LAN/DLNA Cast, fail-closed APK self-updater & release CI', async () => {
+    const nativeDir = path.join(ROOT, 'desktop/android-native');
+    const castKtPath = path.join(nativeDir, 'AazCastHelper.kt');
+    const updaterKtPath = path.join(nativeDir, 'AazUpdater.kt');
+    assert.ok(fs.existsSync(castKtPath), 'Missing desktop/android-native/AazCastHelper.kt');
+    assert.ok(fs.existsSync(updaterKtPath), 'Missing desktop/android-native/AazUpdater.kt');
+
+    const castKt = fs.readFileSync(castKtPath, 'utf8');
+    assert.ok(castKt.includes('createMulticastLock'), 'AazCastHelper must acquire WifiManager.MulticastLock');
+    assert.ok(castKt.includes('multicastLock.release()'), 'AazCastHelper must release MulticastLock in finally');
+    assert.ok(castKt.includes('isPrivateLanIp'), 'AazCastHelper must enforce RFC1918/link-local SSRF guard');
+    assert.ok(castKt.includes('206 Partial Content'), 'AazCastHelper must stream LAN media with HTTP Range 206');
+    assert.ok(castKt.includes('/receiver'), 'AazCastHelper must host Wi-Fi HTML5 /receiver page');
+    assert.ok(castKt.includes('SetAVTransportURI'), 'AazCastHelper must send UPnP AVTransport SetAVTransportURI SOAP');
+
+    const updaterKt = fs.readFileSync(updaterKtPath, 'utf8');
+    assert.ok(updaterKt.includes('HttpsURLConnection'), 'AazUpdater must enforce HTTPS-only connections');
+    assert.ok(updaterKt.includes('api.github.com'), 'AazUpdater must target GitHub Releases API allowlist');
+    assert.ok(updaterKt.includes('SHA-256'), 'AazUpdater must verify APK SHA-256 checksum fail-closed');
+    assert.ok(updaterKt.includes('FileProvider.getUriForFile'), 'AazUpdater must install APK via FileProvider');
+    assert.ok(updaterKt.includes('canRequestPackageInstalls'), 'AazUpdater must handle API 26+ unknown-apps permission gate');
+
+    const mainKt = fs.readFileSync(path.join(nativeDir, 'MainActivity.kt'), 'utf8');
+    assert.ok(mainKt.includes('fun setSystemBarStyle('), 'MainActivity must expose setSystemBarStyle() for all 16 themes');
+    assert.ok(mainKt.includes('fun castDiscoverDevices('), 'MainActivity must expose castDiscoverDevices()');
+    assert.ok(mainKt.includes('fun castStartServer('), 'MainActivity must expose castStartServer()');
+    assert.ok(mainKt.includes('fun checkForUpdates('), 'MainActivity must expose checkForUpdates()');
+    assert.ok(mainKt.includes('fun downloadUpdate('), 'MainActivity must expose downloadUpdate()');
+    assert.ok(mainKt.includes('fun installUpdate('), 'MainActivity must expose installUpdate()');
+
+    const cfgScript = fs.readFileSync(path.join(ROOT, 'desktop/scripts/configure-android.cjs'), 'utf8');
+    assert.ok(cfgScript.includes('AazCastHelper.kt'), 'configure-android.cjs must copy AazCastHelper.kt');
+    assert.ok(cfgScript.includes('AazUpdater.kt'), 'configure-android.cjs must copy AazUpdater.kt');
+    assert.ok(cfgScript.includes('file_paths.xml'), 'configure-android.cjs must write FileProvider file_paths.xml');
+    assert.ok(cfgScript.includes('androidx.core.content.FileProvider'), 'configure-android.cjs must register FileProvider');
+    assert.ok(cfgScript.includes('aaz_config.xml'), 'configure-android.cjs must write aaz_github_repo config');
+    assert.ok(cfgScript.includes('CHANGE_WIFI_MULTICAST_STATE'), 'configure-android.cjs must declare CHANGE_WIFI_MULTICAST_STATE');
+    assert.ok(cfgScript.includes('REQUEST_INSTALL_PACKAGES'), 'configure-android.cjs must declare REQUEST_INSTALL_PACKAGES');
+    assert.ok(!cfgScript.includes('MANAGE_EXTERNAL_STORAGE'), 'configure-android.cjs must NEVER request MANAGE_EXTERNAL_STORAGE (R47)');
+
+    const stylesCss = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    assert.ok(!stylesCss.includes('html.is-android #videoCastBtn'), 'Cast button must be re-enabled on Android in Phase 4');
+    assert.ok(stylesCss.includes('html.is-android .modal-card::before'), 'Mobile modals must include native bottom-sheet drag handle');
+
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('id="openThemesQuickBtn"'), 'index.html must include mobile Theme Studio quick button');
+    assert.ok(indexHtml.includes('id="setCheckUpdatesBtn"'), 'index.html must include Settings Check-for-Updates button');
+    assert.ok(indexHtml.includes('id="castWindowsBtn" data-desktop-only="true"'), 'Windows Miracast button must be hidden on Android');
+
+    const appJs = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    assert.ok(appJs.includes('function syncAndroidSystemBars()'), 'player-app.js must sync Android status/nav bars on theme/skin change');
+
+    const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    assert.ok(releaseYml.includes('build-android:'), 'release.yml must include build-android release job');
+    assert.ok(releaseYml.includes('ANDROID_KEYSTORE_BASE64'), 'release.yml must support signed release keystore');
+    assert.ok(releaseYml.includes('AAZ-Player-Android-arm64-'), 'release.yml must publish named ARM64 APK & .sha256');
+
+    // Verify desktop-bridge Phase 4 Android routing (system bars, cast, updater + error propagation)
+    const p4Calls = [];
+    let updateEvt = null;
+    const fakeWin4 = {
+      navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36' },
+      AAZAndroid: {
+        isAvailable: () => true,
+        getAppVersion: () => '1.7.0',
+        setSystemBarStyle(hex, isLight) { p4Calls.push(`bars:${hex}:${isLight}`); },
+        castDiscoverDevices(cbId) {
+          p4Calls.push('discover');
+          fakeWin4.__aazResolveAndroidCallback(cbId, [{ id: 'tv1', name: 'Living Room TV', controlUrl: 'http://192.168.1.50:8080/ctrl' }]);
+        },
+        castStartServer(cbId, mediaPath) {
+          p4Calls.push(`start:${mediaPath}`);
+          fakeWin4.__aazResolveAndroidCallback(cbId, {
+            mediaUrl: 'http://192.168.1.10:45000/media?token=abc',
+            receiverUrl: 'http://192.168.1.10:45000/receiver?token=abc',
+          });
+        },
+        castStopServer() { p4Calls.push('stop'); },
+        castToDlna(cbId) {
+          p4Calls.push('dlna');
+          fakeWin4.__aazResolveAndroidCallback(cbId, { ok: true });
+        },
+        castDlnaControl(cbId, _url, action) {
+          p4Calls.push(`ctrl:${action}`);
+          fakeWin4.__aazResolveAndroidCallback(cbId, { ok: true });
+        },
+        checkForUpdates(cbId) {
+          p4Calls.push('checkUpdates');
+          fakeWin4.__aazResolveAndroidCallback(cbId, { status: 'available', version: '1.8.0' });
+        },
+        downloadUpdate(cbId) {
+          p4Calls.push('downloadUpdate');
+          fakeWin4.__aazResolveAndroidCallback(cbId, { __aazError: 'SHA-256 mismatch' });
+        },
+      },
+      __TAURI__: { core: { invoke: async () => ({}) }, event: { listen: async () => () => {} } },
+    };
+    const b4 = desktopBridgeMod.attachDesktopBridge(fakeWin4);
+    assert.equal(b4.capabilities.lanCast, true);
+    assert.equal(b4.capabilities.directApkUpdater, true);
+    assert.equal(b4.capabilities.dynamicSystemBars, true);
+    assert.equal(b4.capabilities.allThemes16, true);
+    assert.equal(await b4.getAppVersion(), '1.7.0');
+    await b4.setSystemBarStyle('#f2f7f3', true);
+    const devs = await b4.castDiscoverDevices();
+    assert.equal(devs.length, 1);
+    const srv = await b4.castStartServer('content://media/1', 'Movie', '');
+    assert.ok(srv.receiverUrl.includes('/receiver?token='));
+    await b4.castToDlna(devs[0].controlUrl, srv.mediaUrl, 'Movie', 'video/mp4');
+    await b4.castDlnaControl(devs[0].controlUrl, 'pause');
+    await b4.castStopServer();
+    await b4.onUpdateStatus((p) => { updateEvt = p; });
+    fakeWin4.__aazOnAndroidEvent('update-status', { status: 'downloading', percent: 55 });
+    assert.deepEqual(updateEvt, { status: 'downloading', percent: 55 });
+    const chk = await b4.checkForUpdates();
+    assert.equal(chk.version, '1.8.0');
+    await assert.rejects(() => b4.downloadUpdate(), /SHA-256 mismatch/);
+    assert.deepEqual(p4Calls, [
+      'bars:#f2f7f3:true',
+      'discover',
+      'start:content://media/1',
+      'dlna',
+      'ctrl:pause',
+      'stop',
+      'checkUpdates',
+      'downloadUpdate',
+    ]);
+  });
+
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exit(1);
 }

@@ -1199,6 +1199,37 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (el.themeGalleryModal) el.themeGalleryModal.hidden = true;
       }
 
+      function resolveCssColorToHex(rawColor, fallbackHex) {
+        const val = String(rawColor || '').trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(val)) return val;
+        if (/^#[0-9a-fA-F]{3}$/.test(val)) {
+          return `#${val[1]}${val[1]}${val[2]}${val[2]}${val[3]}${val[3]}`;
+        }
+        const m = val.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if (m) {
+          const toHex = (n) => Math.max(0, Math.min(255, Number(n) || 0)).toString(16).padStart(2, '0');
+          return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
+        }
+        return fallbackHex;
+      }
+
+      function syncAndroidSystemBars() {
+        if (!desktopBridge || !desktopBridge.isAndroid || !desktopBridge.setSystemBarStyle) return;
+        const isLight = state.theme === 'light';
+        const fallback = isLight ? '#f2f7f3' : '#060b08';
+        window.requestAnimationFrame(() => {
+          try {
+            const raw = getComputedStyle(document.documentElement).getPropertyValue('--bg-canvas');
+            const hex = resolveCssColorToHex(raw, fallback);
+            desktopBridge
+              .setSystemBarStyle(hex, isLight)
+              .catch((err) => errorHandler.log('android.systemBars', err));
+          } catch (err) {
+            errorHandler.log('android.systemBars', err);
+          }
+        });
+      }
+
       function applySkin(skinId, persist = true, broadcast = true) {
         state.skin = sanitizeSkin(skinId);
         if (state.skin !== DEFAULT_SKIN) {
@@ -1217,6 +1248,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           postToShell('aaz-sync-prefs', { skin: state.skin });
         }
         syncActiveSkinReadout();
+        syncAndroidSystemBars();
         if (el.themeGalleryModal && !el.themeGalleryModal.hidden) {
           el.themeGalleryGrid.querySelectorAll('.theme-card').forEach((card) => {
             const active = card.dataset.skinId === state.skin;
@@ -1239,6 +1271,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.themeSunIcon.style.display = state.theme === 'light' ? 'none' : 'block';
         el.themeMoonIcon.style.display = state.theme === 'light' ? 'block' : 'none';
         syncThemeGalleryModeButtons();
+        syncAndroidSystemBars();
         if (persist) {
           try {
             localStorage.setItem('aaz_theme', state.theme);
@@ -7346,14 +7379,25 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.updateActionBtn.disabled = true;
           try {
             const launched = await desktopBridge.installUpdate();
-            if (!launched) {
+            if (launched && typeof launched === 'object' && launched.status === 'permission-required') {
               el.updateActionBtn.disabled = false;
               showNotice(
                 state.lang === 'ar'
-                  ? 'تعذر تشغيل المثبت المحمّل. جرّب إعادة التحميل.'
-                  : 'Could not launch the downloaded installer. Please try downloading again.',
+                  ? 'فعّل إذن "تثبيت التطبيقات غير المعروفة" لـ AAZ Player ثم اضغط تثبيت مجدداً.'
+                  : (launched.message || "Allow 'Install unknown apps' for AAZ Player, then tap Install again."),
                 true
               );
+            } else if (!launched || (typeof launched === 'object' && launched.status === 'error')) {
+              el.updateActionBtn.disabled = false;
+              showNotice(
+                (typeof launched === 'object' && launched?.message) ||
+                  (state.lang === 'ar'
+                    ? 'تعذر تشغيل المثبت المحمّل. جرّب إعادة التحميل.'
+                    : 'Could not launch the downloaded installer. Please try downloading again.'),
+                true
+              );
+            } else {
+              el.updateActionBtn.disabled = false;
             }
           } catch (err) {
             el.updateActionBtn.disabled = false;
@@ -7364,6 +7408,18 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       el.dismissUpdateBtn.addEventListener('click', () => {
         el.updateBanner.hidden = true;
       });
+      const openThemesQuickBtn = document.getElementById('openThemesQuickBtn');
+      if (openThemesQuickBtn) {
+        openThemesQuickBtn.addEventListener('click', () => openThemeGalleryModal());
+      }
+      const setCheckUpdatesBtn = document.getElementById('setCheckUpdatesBtn');
+      if (setCheckUpdatesBtn) {
+        setCheckUpdatesBtn.addEventListener('click', () => {
+          const settingsModal = document.getElementById('settingsModal');
+          if (settingsModal) settingsModal.hidden = true;
+          triggerUpdateCheck();
+        });
+      }
 
       // Audio Output Channel Picker Events
       el.audioOutputBtn.addEventListener('click', (e) => {
@@ -8175,6 +8231,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               if (ver) {
                 state.appVersion = ver;
                 el.menuVersionLabel.textContent = `AAZ Player v${ver}`;
+                const setVerLabel = document.getElementById('setAppVersionLabel');
+                if (setVerLabel) setVerLabel.textContent = `AAZ Player v${ver}`;
               }
             } catch (err) {
               errorHandler.log('desktop.getAppVersion', err);

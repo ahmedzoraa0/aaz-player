@@ -28,9 +28,13 @@ export function buildPlatformCapabilities(isAndroid) {
     mediaStoreScan: isAndroid,
     touchGestures: isAndroid,
     windowsCast: !isAndroid,
+    lanCast: true,
     nativeMedia3: isAndroid,
     foregroundPlayback: isAndroid,
     sensorRotation: isAndroid,
+    directApkUpdater: isAndroid,
+    dynamicSystemBars: isAndroid,
+    allThemes16: true,
   };
 }
 
@@ -97,7 +101,7 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
   }
 
   const callAndroidAsync = (invokeNative) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const native = getAndroidNative();
       if (!native) {
         resolve(null);
@@ -112,14 +116,18 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
       }, 120000);
       androidCallbacks.set(cbId, (val) => {
         clearTimeout(timer);
+        if (val && typeof val === 'object' && typeof val.__aazError === 'string') {
+          reject(new Error(val.__aazError));
+          return;
+        }
         resolve(val);
       });
       try {
         invokeNative(native, cbId);
-      } catch {
+      } catch (err) {
         clearTimeout(timer);
         androidCallbacks.delete(cbId);
-        resolve(null);
+        reject(err);
       }
     });
 
@@ -167,7 +175,13 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     capabilities: buildPlatformCapabilities(isAndroid),
     getPlatformInfo: () => invoke('aaz_get_platform_info'),
     openNewWindow: () => invoke('aaz_new_window'),
-    getAppVersion: () => invoke('aaz_get_app_version'),
+    getAppVersion: () => {
+      const native = getAndroidNative();
+      if (isAndroid && native && typeof native.getAppVersion === 'function') {
+        return Promise.resolve(String(native.getAppVersion() || '1.7.0'));
+      }
+      return invoke('aaz_get_app_version');
+    },
     getLaunchFiles: async () => {
       const native = getAndroidNative();
       if (isAndroid && native && typeof native.getLaunchFilesJson === 'function') {
@@ -180,10 +194,30 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
       }
       return invoke('aaz_get_launch_files');
     },
-    checkForUpdates: () => invoke('aaz_check_updates'),
-    downloadUpdate: () => invoke('aaz_download_update'),
-    installUpdate: () => invoke('aaz_install_update'),
-    onUpdateStatus: (callback) => listen('aaz:update-status', callback),
+    checkForUpdates: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.checkForUpdates(cbId));
+      }
+      return invoke('aaz_check_updates');
+    },
+    downloadUpdate: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.downloadUpdate(cbId));
+      }
+      return invoke('aaz_download_update');
+    },
+    installUpdate: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.installUpdate(cbId));
+      }
+      return invoke('aaz_install_update');
+    },
+    onUpdateStatus: (callback) => {
+      if (isAndroid) {
+        return listenAndroidEvent('update-status', callback);
+      }
+      return listen('aaz:update-status', callback);
+    },
     selectFolder: () => {
       if (isAndroid && getAndroidNative()) {
         return callAndroidAsync((native, cbId) => native.selectFolder(cbId));
@@ -282,15 +316,59 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
       return invoke('aaz_save_snapshot', { dataBase64, suggestedName });
     },
     listSystemFonts: () => invoke('aaz_list_system_fonts'),
-    castStartServer: (mediaPath, title, subtitleVtt = null) =>
-      invoke('aaz_cast_start_server', { mediaPath, title, subtitleVtt }),
-    castStopServer: () => invoke('aaz_cast_stop_server'),
-    castDiscoverDevices: () => invoke('aaz_cast_discover_devices'),
-    castToDlna: (controlUrl, mediaUrl, title, mimeType) =>
-      invoke('aaz_cast_to_dlna', { controlUrl, mediaUrl, title, mimeType }),
-    castDlnaControl: (controlUrl, action, seekTarget = null) =>
-      invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget }),
+    castStartServer: (mediaPath, title, subtitleVtt = null) => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) =>
+          native.castStartServer(cbId, String(mediaPath || ''), String(title || ''), String(subtitleVtt || ''))
+        );
+      }
+      return invoke('aaz_cast_start_server', { mediaPath, title, subtitleVtt });
+    },
+    castStopServer: () => {
+      const native = getAndroidNative();
+      if (isAndroid && native && typeof native.castStopServer === 'function') {
+        native.castStopServer();
+        return Promise.resolve(true);
+      }
+      return invoke('aaz_cast_stop_server');
+    },
+    castDiscoverDevices: () => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.castDiscoverDevices(cbId));
+      }
+      return invoke('aaz_cast_discover_devices');
+    },
+    castToDlna: (controlUrl, mediaUrl, title, mimeType) => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) =>
+          native.castToDlna(
+            cbId,
+            String(controlUrl || ''),
+            String(mediaUrl || ''),
+            String(title || ''),
+            String(mimeType || 'video/mp4')
+          )
+        );
+      }
+      return invoke('aaz_cast_to_dlna', { controlUrl, mediaUrl, title, mimeType });
+    },
+    castDlnaControl: (controlUrl, action, seekTarget = null) => {
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) =>
+          native.castDlnaControl(cbId, String(controlUrl || ''), String(action || ''))
+        );
+      }
+      return invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget });
+    },
     castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
+    setSystemBarStyle: (bgHex, isLight) => {
+      const native = getAndroidNative();
+      if (native && typeof native.setSystemBarStyle === 'function') {
+        native.setSystemBarStyle(String(bgHex || '#060b08'), Boolean(isLight));
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    },
     onOpenExternal: (callback) => {
       if (isAndroid) {
         listenAndroidEvent('open-external', callback);
