@@ -36,6 +36,10 @@ export const DEFAULT_SHORTCUTS = Object.freeze([
 ]);
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
+const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'];
+export const RESERVED_COMBOS = Object.freeze(
+  new Set(['Ctrl+T', 'Ctrl+W', 'Ctrl+Tab', 'Ctrl+Shift+Tab', 'Alt+F4', 'Ctrl+Q', 'Ctrl+N'])
+);
 
 export function normalizeKeyCombo(eventLike) {
   if (!eventLike) return '';
@@ -44,23 +48,24 @@ export function normalizeKeyCombo(eventLike) {
       .split('+')
       .map((p) => p.trim())
       .filter(Boolean);
-    const mods = [];
+    const modSet = new Set();
     let key = '';
     for (const p of parts) {
       const low = p.toLowerCase();
       if (low === 'ctrl' || low === 'control') {
-        if (!mods.includes('Ctrl')) mods.push('Ctrl');
+        modSet.add('Ctrl');
       } else if (low === 'alt') {
-        if (!mods.includes('Alt')) mods.push('Alt');
+        modSet.add('Alt');
       } else if (low === 'shift') {
-        if (!mods.includes('Shift')) mods.push('Shift');
+        modSet.add('Shift');
       } else if (low === 'meta' || low === 'cmd') {
-        if (!mods.includes('Meta')) mods.push('Meta');
+        modSet.add('Meta');
       } else {
         key = canonicalKeyName(p);
       }
     }
     if (!key) return '';
+    const mods = MODIFIER_ORDER.filter((m) => modSet.has(m));
     return [...mods, key].join('+');
   }
 
@@ -85,6 +90,10 @@ function canonicalKeyName(key, code = '') {
     return key;
   }
   if (/^F([1-9]|1[0-2])$/i.test(key)) return key.toUpperCase();
+  // Map physical Latin letter key via event.code when user keyboard layout is Arabic/non-Latin
+  if (typeof code === 'string' && /^Key([A-Z])$/.test(code)) {
+    return code.slice(3);
+  }
   if (key.length === 1) return key.toUpperCase();
   return key;
 }
@@ -161,10 +170,13 @@ export function createShortcutsManager({ getStore, persist }) {
 
     const norm = normalizeKeyCombo(combo);
     if (!norm) return { ok: false, reason: 'invalid_key' };
+    if (RESERVED_COMBOS.has(norm)) {
+      return { ok: false, reason: 'reserved', key: norm };
+    }
 
     const conflict = findConflict(actionId, norm);
     if (conflict && !allowOverride) {
-      return { ok: false, reason: 'conflict', conflict };
+      return { ok: false, reason: 'conflict', conflict, key: norm };
     }
 
     const custom = getCustomMap();
@@ -178,15 +190,72 @@ export function createShortcutsManager({ getStore, persist }) {
     } else {
       custom[actionId] = norm;
     }
-    persist();
+    const saved = persist();
+    if (saved === false) return { ok: false, reason: 'persist_failed' };
     return { ok: true, key: norm };
   }
 
-  function resetBinding(actionId) {
+  function resetBinding(actionId, { allowOverride = false } = {}) {
+    const def = DEFAULT_SHORTCUTS.find((s) => s.id === actionId);
+    if (!def) return { ok: false, reason: 'unknown_action' };
+    const defaultCombo = normalizeKeyCombo(def.defaultKey);
+
+    const conflict = findConflict(actionId, defaultCombo);
+    if (conflict && !allowOverride) {
+      return { ok: false, reason: 'conflict', conflict, key: defaultCombo };
+    }
+
     const custom = getCustomMap();
+    if (conflict && allowOverride) {
+      custom[conflict.id] = UNBOUND_SENTINEL;
+    }
     delete custom[actionId];
-    persist();
-    return getBinding(actionId);
+    const saved = persist();
+    if (saved === false) return { ok: false, reason: 'persist_failed' };
+    return { ok: true, key: getBinding(actionId) };
+  }
+
+  /**
+   * Resolves any duplicate combos that may exist from legacy or imported backups
+   * by giving explicit custom bindings priority and marking conflicting defaults unbound.
+   */
+  function normalizeStoredConflicts() {
+    const custom = getCustomMap();
+    const claimed = new Map();
+    let changed = false;
+
+    // Pass 1: explicit non-default custom bindings win
+    for (const def of DEFAULT_SHORTCUTS) {
+      const raw = custom[def.id];
+      if (typeof raw === 'string' && raw && raw !== UNBOUND_SENTINEL) {
+        const norm = normalizeKeyCombo(raw);
+        if (!norm || RESERVED_COMBOS.has(norm) || claimed.has(norm)) {
+          custom[def.id] = UNBOUND_SENTINEL;
+          changed = true;
+        } else {
+          if (norm !== raw) {
+            custom[def.id] = norm;
+            changed = true;
+          }
+          claimed.set(norm, def.id);
+        }
+      }
+    }
+
+    // Pass 2: default bindings that collide with an already claimed custom combo become unbound
+    for (const def of DEFAULT_SHORTCUTS) {
+      if (custom[def.id] !== undefined) continue;
+      const defNorm = normalizeKeyCombo(def.defaultKey);
+      if (claimed.has(defNorm)) {
+        custom[def.id] = UNBOUND_SENTINEL;
+        changed = true;
+      } else {
+        claimed.set(defNorm, def.id);
+      }
+    }
+
+    if (changed) persist();
+    return changed;
   }
 
   function resetAll() {
@@ -217,6 +286,7 @@ export function createShortcutsManager({ getStore, persist }) {
     setBinding,
     resetBinding,
     resetAll,
+    normalizeStoredConflicts,
     matchAction,
   };
 }

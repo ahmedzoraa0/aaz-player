@@ -26,6 +26,18 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
   }
 
   function persistLayout(updater) {
+    if (typeof storageManager.update === 'function') {
+      return storageManager.update((state) => {
+        if (!state.windowLayout) {
+          state.windowLayout = {
+            main: null,
+            mini: { ...DEFAULT_WINDOW_LAYOUT.mini },
+          };
+        }
+        updater(state.windowLayout);
+        return state;
+      }).ok;
+    }
     const state = storageManager.load();
     if (!state.windowLayout) {
       state.windowLayout = {
@@ -34,7 +46,7 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
       };
     }
     updater(state.windowLayout);
-    storageManager.save(state);
+    return storageManager.save(state);
   }
 
   async function restoreMainWindowOnStartup() {
@@ -42,8 +54,8 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
     const layout = loadLayout();
     if (!layout.main) return false;
     try {
-      await desktopBridge.applyWindowGeometry(layout.main);
-      return true;
+      const res = await desktopBridge.applyWindowGeometry(layout.main);
+      return res !== false;
     } catch {
       return false;
     }
@@ -63,7 +75,7 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
             x: geo.x,
             y: geo.y,
             width: Math.max(300, geo.width),
-            height: Math.max(190, geo.height),
+            height: Math.max(150, geo.height),
           };
         });
       } else {
@@ -134,10 +146,9 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
         } catch {}
       }
 
-      isMiniActive = true;
       if (desktopBridge && typeof desktopBridge.setMiniMode === 'function') {
         try {
-          await desktopBridge.setMiniMode({
+          const applied = await desktopBridge.setMiniMode({
             enabled: true,
             x: miniPrefs.x,
             y: miniPrefs.y,
@@ -145,17 +156,22 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
             height: miniPrefs.height,
             alwaysOnTop: miniPrefs.alwaysOnTop,
           });
-        } catch {}
+          if (applied === false) {
+            return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: false };
+          }
+        } catch {
+          return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: false };
+        }
       }
+      isMiniActive = true;
     } else if (!next && isMiniActive) {
       // Save mini window bounds before expanding back
       await captureAndSaveCurrentGeometry();
-      isMiniActive = false;
 
       const restoreTarget = preMiniMainRect || loadLayout().main;
       if (desktopBridge && typeof desktopBridge.setMiniMode === 'function') {
         try {
-          await desktopBridge.setMiniMode({
+          const applied = await desktopBridge.setMiniMode({
             enabled: false,
             x: restoreTarget ? restoreTarget.x : null,
             y: restoreTarget ? restoreTarget.y : null,
@@ -164,17 +180,25 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
             alwaysOnTop: false,
             maximized: Boolean(restoreTarget && restoreTarget.maximized),
           });
-        } catch {}
+          if (applied === false) {
+            return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: false };
+          }
+        } catch {
+          return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: false };
+        }
       }
+      isMiniActive = false;
     } else if (next && isMiniActive && typeof alwaysOnTopOverride === 'boolean') {
       if (desktopBridge && typeof desktopBridge.setAlwaysOnTop === 'function') {
         try {
           await desktopBridge.setAlwaysOnTop(alwaysOnTopOverride);
-        } catch {}
+        } catch {
+          return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: false };
+        }
       }
     }
 
-    return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop };
+    return { enabled: isMiniActive, alwaysOnTop: miniPrefs.alwaysOnTop, ok: true };
   }
 
   async function resizeMiniPreset(width, height) {
@@ -193,7 +217,7 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
     });
     if (desktopBridge && typeof desktopBridge.setMiniMode === 'function') {
       try {
-        await desktopBridge.setMiniMode({
+        const applied = await desktopBridge.setMiniMode({
           enabled: true,
           x: miniPrefs.x,
           y: miniPrefs.y,
@@ -201,7 +225,7 @@ export function createWindowLayoutManager({ storageManager, desktopBridge }) {
           height: miniPrefs.height,
           alwaysOnTop: miniPrefs.alwaysOnTop,
         });
-        return true;
+        return applied !== false;
       } catch {
         return false;
       }

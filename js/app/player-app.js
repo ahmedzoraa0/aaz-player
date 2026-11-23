@@ -3,7 +3,31 @@
  * Refactored from monolithic inline script into clean ES module architecture.
  */
 import { sendSafeMessage, receiveShellMessage } from '../core/messaging.js';
-import { createStorageManager, STORAGE_KEY, LEGACY_KEYS } from '../modules/storage-manager.js';
+import {
+  createStorageManager,
+  STORAGE_KEY,
+  LEGACY_KEYS,
+  sanitizeBookmarkList,
+} from '../modules/storage-manager.js';
+import { SUBTITLE_STYLE_DEFAULTS, sanitizeSubtitleStyle } from '../modules/subtitle-style.js';
+import {
+  normalizeWindowsPath,
+  extractParentFolderLabel,
+  buildCanonicalTrackKey,
+  findTrackSafely,
+  deduplicateTracksSafely,
+  lookupLegacyKeyFallback,
+} from '../modules/track-identity.js';
+import {
+  buildPlaylistExport,
+  parsePlaylistText,
+  filterTracksBySavedPlaylist,
+} from '../modules/playlist-io.js';
+import { selectBestSubtitleCandidate } from '../modules/subtitle-matcher.js';
+import {
+  srtToWebVtt as convertSrtToWebVtt,
+  shiftWebVtt,
+} from '../utils/time-utils.js';
 import { appendQueryParam } from '../utils/file-utils.js';
 import { createErrorHandler, ErrorCategory } from '../utils/error-handler.js';
 import { createPhase3Controller } from '../ui/phase3-controller.js';
@@ -21,6 +45,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
   const IS_TAB_FRAME = Boolean(isTabFrame);
   const storageManager = createStorageManager();
   let phase3 = null;
+  let trackLoadGen = 0;
+  let subtitleOpGen = 0;
 
       /* =======================================================================
          1. Configuration, Extensions & Storage Keys (Tab Player Mode)
@@ -48,23 +74,6 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (!IS_TAB_FRAME) return;
         sendSafeMessage(window.parent, { type, tabId: CURRENT_TAB_ID, ...extra });
       }
-
-      const SUBTITLE_STYLE_DEFAULTS = {
-        fontFamily: 'Cairo',
-        fontSize: 28,
-        fontWeight: '700',
-        italic: false,
-        textColor: '#ffffff',
-        bgColor: '#040a06',
-        bgOpacity: 62,
-        borderColor: '#3dc479',
-        borderWidth: 0,
-        borderRadius: 8,
-        outlineColor: '#000000',
-        outlineWidth: 2,
-        shadowBlur: 6,
-        bottomOffset: 8
-      };
 
       const FALLBACK_FONTS = [
         'Cairo', 'Plus Jakarta Sans', 'Segoe UI', 'Tahoma', 'Arial',
@@ -1908,8 +1917,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         save(payload) {
           try {
-            const existing = storageManager.load();
-            return storageManager.save({ ...existing, ...payload });
+            const res = storageManager.update((latest) => ({ ...latest, ...payload }));
+            if (!res.ok) {
+              errorHandler.log('storage.save', new Error(res.error || 'Storage write failed'));
+              showNotice(
+                state.lang === 'ar'
+                  ? 'تعذّر حفظ البيانات — مساحة التخزين المحلية ممتلئة أو غير متاحة.'
+                  : 'Could not save state — local storage is full or unavailable.',
+                true
+              );
+            }
+            return res.ok;
           } catch (err) {
             errorHandler.log('storage.save', err);
             return false;
@@ -1917,17 +1935,23 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         },
 
         clearSessionOnly() {
-          const current = this.load();
-          if (!current) return;
-          delete current.trackKey;
-          delete current.trackName;
-          delete current.trackFullPath;
-          delete current.folderName;
-          delete current.nativeFolderPath;
-          delete current.nativeTrackPaths;
-          delete current.currentTime;
-          delete current.activeSavedPlaylistId;
-          storageManager.save(current);
+          try {
+            const res = storageManager.update((current) => {
+              delete current.trackKey;
+              delete current.trackName;
+              delete current.trackFullPath;
+              delete current.folderName;
+              delete current.nativeFolderPath;
+              delete current.nativeTrackPaths;
+              delete current.currentTime;
+              delete current.activeSavedPlaylistId;
+              return current;
+            });
+            return res.ok;
+          } catch (err) {
+            errorHandler.log('storage.clearSessionOnly', err);
+            return false;
+          }
         },
 
         loadSavedPlaylists() {
@@ -1936,10 +1960,26 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         },
 
         saveSavedPlaylists(list) {
-          const current = this.load() || {};
-          current.savedPlaylists = Array.isArray(list) ? list : [];
-          current.updatedAt = Date.now();
-          return storageManager.save(current);
+          try {
+            const nextList = Array.isArray(list) ? list : [];
+            const res = storageManager.update((current) => {
+              current.savedPlaylists = nextList;
+              return current;
+            });
+            if (!res.ok) {
+              errorHandler.log('storage.saveSavedPlaylists', new Error(res.error || 'Storage write failed'));
+              showNotice(
+                state.lang === 'ar'
+                  ? 'تعذّر حفظ القائمة — مساحة التخزين المحلية ممتلئة أو غير متاحة.'
+                  : 'Could not save playlist — local storage is full or unavailable.',
+                true
+              );
+            }
+            return res.ok;
+          } catch (err) {
+            errorHandler.log('storage.saveSavedPlaylists', err);
+            return false;
+          }
         }
       };
 
@@ -1984,13 +2024,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function srtToWebVtt(rawText) {
-        const cleaned = rawText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        if (/^WEBVTT/i.test(cleaned.trim())) return cleaned;
-        const vttBody = cleaned.replace(
-          /(\d{2}:\d{2}:\d{2}),(\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}),(\d{3})/g,
-          '$1.$2 --> $3.$4'
-        );
-        return `WEBVTT\n\n${vttBody}`;
+        return convertSrtToWebVtt(rawText, 0);
       }
 
       function formatTime(seconds) {
@@ -2052,155 +2086,119 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
         const title = (titleOverride || state.folderName || 'A-Z Playlist').trim();
         const safeFileName = title.replace(/[\\/:*?"<>|]+/g, '_');
-
-        if (format === 'xspf') {
-          const itemsXml = tracks
-            .map((t) => {
-              const loc = t.fileUrl || t.fullPath || t.key || t.name;
-              const durMs = Number.isFinite(t.duration) && t.duration > 0 ? Math.round(t.duration * 1000) : null;
-              return [
-                '    <track>',
-                `      <location>${escapeXml(loc)}</location>`,
-                `      <title>${escapeXml(t.displayName || stripExtension(t.name))}</title>`,
-                durMs ? `      <duration>${durMs}</duration>` : null,
-                '    </track>'
-              ].filter(Boolean).join('\n');
-            })
-            .join('\n');
-
-          const xspf = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<playlist version="1" xmlns="http://xspf.org/ns/0/">',
-            `  <title>${escapeXml(title)}</title>`,
-            '  <trackList>',
-            itemsXml,
-            '  </trackList>',
-            '</playlist>'
-          ].join('\n');
-
-          downloadTextFile(`${safeFileName}.xspf`, xspf, 'application/xspf+xml;charset=utf-8');
-          showNotice(`Exported "${safeFileName}.xspf" (${tracks.length} tracks — compatible with VLC & A-Z).`);
+        const exported = buildPlaylistExport(tracks, format, title);
+        if (!exported || exported.exportedCount === 0) {
+          showNotice(
+            state.lang === 'ar'
+              ? 'لا توجد مسارات ملفات صالحة للتصدير.'
+              : 'No exportable file paths were found for these tracks.',
+            true
+          );
           return;
         }
-
-        if (format === 'm3u8') {
-          const lines = ['#EXTM3U', `#PLAYLIST:${title}`];
-          for (const t of tracks) {
-            const dur = Number.isFinite(t.duration) && t.duration > 0 ? Math.round(t.duration) : -1;
-            lines.push(`#EXTINF:${dur},${t.displayName || stripExtension(t.name)}`);
-            lines.push(t.fullPath || t.fileUrl || t.key || t.name);
-          }
-          downloadTextFile(`${safeFileName}.m3u8`, lines.join('\n'), 'audio/x-mpegurl;charset=utf-8');
-          showNotice(`Exported "${safeFileName}.m3u8" (${tracks.length} tracks).`);
-          return;
-        }
-
-        if (format === 'pls') {
-          const lines = ['[playlist]'];
-          tracks.forEach((t, i) => {
-            const n = i + 1;
-            const dur = Number.isFinite(t.duration) && t.duration > 0 ? Math.round(t.duration) : -1;
-            lines.push(`File${n}=${t.fullPath || t.fileUrl || t.key || t.name}`);
-            lines.push(`Title${n}=${t.displayName || stripExtension(t.name)}`);
-            lines.push(`Length${n}=${dur}`);
-          });
-          lines.push(`NumberOfEntries=${tracks.length}`);
-          lines.push('Version=2');
-          downloadTextFile(`${safeFileName}.pls`, lines.join('\n'), 'audio/x-scpls;charset=utf-8');
-          showNotice(`Exported "${safeFileName}.pls" (${tracks.length} tracks).`);
-        }
+        downloadTextFile(`${safeFileName}.${exported.ext}`, exported.content, exported.mime);
+        const skippedSuffix = exported.skippedCount > 0 ? ` (${exported.skippedCount} skipped)` : '';
+        showNotice(`Exported "${safeFileName}.${exported.ext}" (${exported.exportedCount} tracks${skippedSuffix}).`);
       }
 
-      function parseImportedPlaylistText(filename, rawText) {
-        const ext = getExtension(filename);
-        const text = rawText.replace(/^\uFEFF/, '');
-        const locations = [];
-
-        if (ext === 'xspf') {
-          try {
-            const doc = new DOMParser().parseFromString(text, 'application/xml');
-            const nodes = doc.querySelectorAll('track > location, location');
-            nodes.forEach((n) => {
-              const val = (n.textContent || '').trim();
-              if (val) locations.push(val);
-            });
-          } catch (err) {
-            errorHandler.log('playlist.xspfDomParse', err);
-            // Fallback regex if XML has minor syntax quirks
-            const matches = text.matchAll(/<location>([\s\S]*?)<\/location>/gi);
-            for (const m of matches) {
-              if (m[1].trim()) locations.push(m[1].trim());
-            }
-          }
-        } else if (ext === 'pls') {
-          for (const line of text.split(/\r?\n/)) {
-            const match = line.match(/^File\d+=(.+)$/i);
-            if (match && match[1].trim()) locations.push(match[1].trim());
-          }
-        } else {
-          // .m3u / .m3u8
-          for (const line of text.split(/\r?\n/)) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            locations.push(trimmed);
-          }
-        }
-        return locations;
-      }
-
-      async function handleImportedPlaylistContent(filename, rawText) {
-        const locations = parseImportedPlaylistText(filename, rawText);
+      async function handleImportedPlaylistContent(filename, rawText, baseFilePath = '') {
+        const parsed = parsePlaylistText(rawText, filename, baseFilePath);
+        const locations = parsed.map((item) => item.location).filter(Boolean);
         if (locations.length === 0) {
           showNotice(`No media entries were found in "${filename}".`, true);
           return;
         }
 
-        // In Electron .exe: resolve real Windows file paths directly from disk!
+        // In Desktop app: resolve real file paths directly from disk in exact playlist order!
         if (desktopBridge) {
           const res = await desktopBridge.inspectPaths(locations);
           if (res && res.entries && res.entries.length > 0) {
-            const { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
-            await applyLoadedTracks(tracks, subMap, stripExtension(filename), 'electron', {
-              restoreSavedPosition: false,
-              autoPlay: true
+            const { tracks: rawTracks, subMap } = buildTracksFromElectronEntries(res.entries, {
+              preserveOrder: true,
             });
-            showNotice(`Imported "${filename}" (${tracks.length} tracks loaded).`);
-            return;
+            const byNormPath = new Map();
+            for (const tr of rawTracks) {
+              if (tr.fullPath) byNormPath.set(normalizeWindowsPath(tr.fullPath), tr);
+            }
+            const orderedTracks = [];
+            const seenNorms = new Set();
+            let missingCount = 0;
+            for (const loc of locations) {
+              const norm = normalizeWindowsPath(loc);
+              const found = byNormPath.get(norm);
+              if (found) {
+                if (!seenNorms.has(norm)) {
+                  seenNorms.add(norm);
+                  orderedTracks.push(found);
+                }
+              } else {
+                missingCount += 1;
+              }
+            }
+            if (orderedTracks.length > 0) {
+              state.sortMode = 'custom';
+              updateSortButtonUI();
+              await applyLoadedTracks(orderedTracks, subMap, stripExtension(filename), 'electron', {
+                restoreSavedPosition: false,
+                autoPlay: true,
+              });
+              const missingNote = missingCount > 0 ? ` (${missingCount} missing)` : '';
+              showNotice(`Imported "${filename}" (${orderedTracks.length} tracks loaded${missingNote}).`);
+              return;
+            }
           }
+          showNotice(
+            state.lang === 'ar'
+              ? `تعذّر العثور على ملفات القائمة "${filename}" على القرص.`
+              : `None of the files referenced in "${filename}" were found on disk.`,
+            true
+          );
+          return;
         }
 
-        // In Browser: match imported entries against currently loaded folder tracks
+        // In Browser: match imported entries against currently loaded folder tracks safely (no ambiguous basename swaps)
         if (state.allTracks.length > 0) {
           const ordered = [];
-          const byName = new Map(state.allTracks.map((t) => [t.name.toLowerCase(), t]));
-          const byKey = new Map(state.allTracks.map((t) => [t.key.toLowerCase(), t]));
+          const addedKeys = new Set();
+          let missingCount = 0;
 
           for (const loc of locations) {
-            let decoded = loc;
-            try {
-              decoded = decodeURIComponent(loc);
-            } catch (err) {
-              errorHandler.log('playlist.decodeUri', err);
+            const normLoc = String(loc).replace(/\\/g, '/');
+            const base = normLoc.split('/').pop() || '';
+            const hasDir = normLoc.includes('/');
+            const found = findTrackSafely(state.allTracks, {
+              key: normLoc,
+              name: hasDir ? '' : base,
+            }) || (hasDir
+              ? state.allTracks.find((t) => {
+                  const tKey = String(t.key || '').replace(/^(?:fs|rel):/i, '').replace(/\\/g, '/').toLowerCase();
+                  return tKey === normLoc.toLowerCase() || tKey.endsWith(`/${normLoc.toLowerCase()}`);
+                })
+              : null);
+            if (found && !addedKeys.has(found.key)) {
+              addedKeys.add(found.key);
+              ordered.push(found);
+            } else if (!found) {
+              missingCount += 1;
             }
-            const norm = decoded.replace(/\\/g, '/');
-            const base = norm.split('/').pop().toLowerCase();
-            const found = byKey.get(norm.toLowerCase()) || byName.get(base);
-            if (found && !ordered.includes(found)) ordered.push(found);
           }
 
           if (ordered.length > 0) {
+            state.sortMode = 'custom';
+            updateSortButtonUI();
             state.allTracks = ordered;
             state.folderName = stripExtension(filename);
             updateModeCounts();
             updatePlaylistHeader();
             renderPlaylist();
             await loadTrackByKey(ordered[0].key, { autoPlay: true, startTime: 0 });
-            showNotice(`Applied "${filename}" (${ordered.length} matching tracks).`);
+            const missingNote = missingCount > 0 ? ` (${missingCount} missing)` : '';
+            showNotice(`Applied "${filename}" (${ordered.length} matching tracks${missingNote}).`);
             return;
           }
         }
 
-        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run A-Z on Windows .exe to open file paths directly).`);
+        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run AAZ Player on Windows to open file paths directly).`);
       }
 
       /* =======================================================================
@@ -2295,9 +2293,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         };
 
         const latestList = StateStore.loadSavedPlaylists();
-        state.savedPlaylists = [entry, ...latestList];
+        const nextSavedPlaylists = [entry, ...latestList];
+        if (!StateStore.saveSavedPlaylists(nextSavedPlaylists)) {
+          return;
+        }
+        state.savedPlaylists = nextSavedPlaylists;
         state.activeSavedPlaylistId = id;
-        StateStore.saveSavedPlaylists(state.savedPlaylists);
         persistPlaybackState();
         renderSavedPlaylists();
         updateSidebarCounts();
@@ -2308,26 +2309,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function applySavedPlaylistOrder(tracks, savedKeys, strictFilter = false) {
-        if (!Array.isArray(savedKeys) || savedKeys.length === 0) return tracks;
-        const byKey = new Map(tracks.map((tr) => [tr.key, tr]));
-        const ordered = [];
-        for (const k of savedKeys) {
-          const found = byKey.get(k);
-          if (found) {
-            ordered.push(found);
-            byKey.delete(k);
-          }
-        }
-        if (strictFilter && ordered.length > 0) return ordered;
-        for (const rem of byKey.values()) ordered.push(rem);
-        return ordered;
+        return filterTracksBySavedPlaylist(tracks, savedKeys, strictFilter);
       }
 
       let savedPlaylistOpenSeq = 0;
 
       async function openSavedPlaylist(playlistId) {
         const latestList = StateStore.loadSavedPlaylists();
-        if (latestList.length > 0) state.savedPlaylists = latestList;
+        state.savedPlaylists = latestList;
         const pl = state.savedPlaylists.find((p) => p.id === playlistId);
         if (!pl) return;
         hideNotice();
@@ -2407,14 +2396,18 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
-        // 2. PRIORITY 2 (Desktop): Fallback to saved nativeFolderPath ONLY if no exact file paths existed
-        if (desktopBridge && pl.nativeFolderPath) {
+        // 2. PRIORITY 2 (Desktop): Fallback to saved nativeFolderPath ONLY when no exact file paths existed (F11)
+        if (desktopBridge && exactFilePaths.length === 0 && pl.nativeFolderPath) {
           const res = await desktopBridge.readFolder(pl.nativeFolderPath);
           if (seq !== savedPlaylistOpenSeq) return;
           if (res && res.entries?.length) {
             let { tracks, subMap } = buildTracksFromElectronEntries(res.entries);
             if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
               tracks = applySavedPlaylistOrder(tracks, pl.trackKeys, true);
+              if (tracks.length === 0) {
+                showNotice(t('savedFilesMissing', { name: pl.name }), true);
+                return;
+              }
               state.sortMode = 'custom';
               updateSortButtonUI();
             }
@@ -2428,7 +2421,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               nativeFolderPath: res.folderPath
             });
             if (seq !== savedPlaylistOpenSeq) return;
-            const match = tracks.find((tr) => tr.key === targetTrackKey || tr.name === targetTrackName) || tracks[0];
+            const match = findTrackSafely(tracks, { key: targetTrackKey, name: targetTrackName }) || tracks[0];
             if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
             switchSidebarTab('queue');
             renderSavedPlaylists();
@@ -2452,12 +2445,16 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'read' });
               if (perm === 'granted') {
                 const subMap = new Map();
-                let tracks = await scanDirectoryHandle(handle, '', subMap);
+                let tracks = await scanDirectoryHandle(handle, '', subMap, handle.name || '');
                 if (seq !== savedPlaylistOpenSeq) return;
                 tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
                 if (tracks.length > 0) {
                   if (Array.isArray(pl.trackKeys) && pl.trackKeys.length > 0) {
                     tracks = applySavedPlaylistOrder(tracks, pl.trackKeys, true);
+                    if (tracks.length === 0) {
+                      showNotice(t('savedFilesMissing', { name: pl.name }), true);
+                      return;
+                    }
                     state.sortMode = 'custom';
                     updateSortButtonUI();
                   }
@@ -2472,7 +2469,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                     nativeFolderPath: ''
                   });
                   if (seq !== savedPlaylistOpenSeq) return;
-                  const match = tracks.find((tr) => tr.key === targetTrackKey || tr.name === targetTrackName) || tracks[0];
+                  const match = findTrackSafely(tracks, { key: targetTrackKey, name: targetTrackName }) || tracks[0];
                   if (match) await loadTrackByKey(match.key, { autoPlay: true, startTime: targetTime });
                   switchSidebarTab('queue');
                   renderSavedPlaylists();
@@ -3134,32 +3131,6 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               : 0;
         const cleanTime = Math.floor(currentTime * 10) / 10;
 
-        // Merge latest savedPlaylists from storage so multi-tab edits never overwrite each other!
-        const storedPlaylists = StateStore.loadSavedPlaylists();
-        if (Array.isArray(storedPlaylists) && storedPlaylists.length > 0) {
-          state.savedPlaylists = storedPlaylists;
-        }
-
-        // Update ONLY the active Saved Playlist's own per-playlist resume state & manual order
-        if (state.activeSavedPlaylistId && state.allTracks.length > 0) {
-          const pl = state.savedPlaylists.find((p) => p.id === state.activeSavedPlaylistId);
-          if (pl) {
-            if (track) {
-              pl.lastTrackKey = track.key;
-              pl.lastTrackName = track.name;
-              pl.lastTime = cleanTime;
-            }
-            pl.playlistMode = state.playlistMode;
-            if (state.sortMode === 'custom') {
-              applyTracksSnapshotToSavedEntry(pl, state.allTracks);
-            }
-            pl.updatedAt = Date.now();
-            if (state.sidebarTab === 'saved') renderSavedPlaylists();
-          } else {
-            state.activeSavedPlaylistId = null;
-          }
-        }
-
         const hasActiveTracks = state.allTracks.length > 0;
         let persistedNativeTrackPaths = [];
         if (hasActiveTracks) {
@@ -3178,7 +3149,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           persistedNativeTrackPaths = state.savedSession.nativeTrackPaths;
         }
 
-        const payload = {
+        const sessionPatch = {
           trackKey: track ? track.key : (state.savedSession?.trackKey || ''),
           trackName: track ? track.name : (state.savedSession?.trackName || ''),
           trackFullPath: track?.fullPath || (!hasActiveTracks ? (state.savedSession?.trackFullPath || '') : ''),
@@ -3203,12 +3174,45 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           watchedKeys: Array.from(state.watchedKeys),
           progressByKey: state.progressByKey,
           bookmarksByKey: state.bookmarksByKey,
-          savedPlaylists: state.savedPlaylists,
           updatedAt: Date.now()
         };
 
-        if (StateStore.save(payload)) {
-          state.savedSession = payload;
+        // Atomic read-latest-modify-write: never resurrects playlists deleted in another tab or wipes Phase 3 domains (F01)
+        const res = storageManager.update((latest) => {
+          const latestPlaylists = Array.isArray(latest.savedPlaylists) ? latest.savedPlaylists : [];
+          state.savedPlaylists = latestPlaylists;
+
+          if (state.activeSavedPlaylistId && state.allTracks.length > 0) {
+            const pl = latestPlaylists.find((p) => p.id === state.activeSavedPlaylistId);
+            if (pl) {
+              if (track) {
+                pl.lastTrackKey = track.key;
+                pl.lastTrackName = track.name;
+                pl.lastTime = cleanTime;
+              }
+              pl.playlistMode = state.playlistMode;
+              if (state.sortMode === 'custom') {
+                applyTracksSnapshotToSavedEntry(pl, state.allTracks);
+              }
+              pl.updatedAt = Date.now();
+            } else {
+              state.activeSavedPlaylistId = null;
+              sessionPatch.activeSavedPlaylistId = null;
+            }
+          }
+
+          return {
+            ...latest,
+            ...sessionPatch,
+            savedPlaylists: latestPlaylists,
+          };
+        });
+
+        if (res.ok) {
+          state.savedSession = { ...sessionPatch, savedPlaylists: res.state.savedPlaylists };
+          if (state.sidebarTab === 'saved') renderSavedPlaylists();
+        } else {
+          errorHandler.log('storage.persistPlaybackState', new Error(res.error || 'Storage write failed'));
         }
       }
 
@@ -3238,9 +3242,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (entry.kind === 'file') {
             const info = classifyFile(name);
             if (!info) continue;
-            const key = relativePrefix + name;
+            const relPath = relativePrefix + name;
+            const key = buildCanonicalTrackKey({ relPath, name });
             if (info.kind === 'subtitle') {
-              subMap.set(stripExtension(key).toLowerCase(), { name, fileHandle: entry, file: null, fullPath: null });
+              subMap.set(stripExtension(relPath).toLowerCase(), { name, fileHandle: entry, file: null, fullPath: null });
             } else {
               collected.push({
                 key, name,
@@ -3267,11 +3272,18 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         let inferredFolder = '';
         const tracks = [];
         const subMap = new Map();
+        const usedKeys = new Set();
         for (const file of Array.from(fileList || [])) {
           const info = classifyFile(file.name, file.type);
           if (!info) continue;
           const rel = file.webkitRelativePath || '';
-          const key = rel || file.name;
+          const key = buildCanonicalTrackKey({
+            relPath: rel,
+            name: file.name,
+            size: file.size,
+            lastModified: file.lastModified,
+            usedKeys,
+          });
           let folderPath = '';
           if (rel) {
             const parts = rel.split('/');
@@ -3279,7 +3291,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (parts.length > 2) folderPath = parts.slice(1, -1).join('/');
           }
           if (info.kind === 'subtitle') {
-            subMap.set(stripExtension(key).toLowerCase(), { name: file.name, fileHandle: null, file, fullPath: null });
+            subMap.set(stripExtension(rel || file.name).toLowerCase(), { name: file.name, fileHandle: null, file, fullPath: null });
             continue;
           }
           tracks.push({
@@ -3294,19 +3306,31 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return { tracks, subMap, folderName: inferredFolder || 'Selected Media' };
       }
 
-      function buildTracksFromElectronEntries(entries) {
+      function buildTracksFromElectronEntries(entries, { preserveOrder = false } = {}) {
         const tracks = [];
         const subMap = new Map();
+        const usedKeys = new Set();
         for (const item of entries || []) {
           if (item.kind === 'subtitle') {
-            subMap.set(stripExtension(item.key).toLowerCase(), {
+            const subBase = item.fullPath
+              ? stripExtension(normalizeWindowsPath(item.fullPath))
+              : stripExtension(item.key || item.name || '').toLowerCase();
+            subMap.set(subBase, {
               name: item.name, fileHandle: null, file: null, fullPath: item.fullPath
             });
           } else {
+            const key = buildCanonicalTrackKey({
+              fullPath: item.fullPath || '',
+              relPath: item.key || '',
+              name: item.name,
+              size: item.size,
+              usedKeys,
+            });
             tracks.push({
-              key: item.key, name: item.name,
+              key,
+              name: item.name,
               displayName: stripExtension(item.name),
-              folderPath: item.folderPath || '',
+              folderPath: item.folderPath || extractParentFolderLabel(item.fullPath),
               kind: item.kind, ext: item.ext,
               fileHandle: null, file: null,
               fileUrl: item.fileUrl, fullPath: item.fullPath || '',
@@ -3314,7 +3338,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
           }
         }
-        tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
+        if (!preserveOrder) {
+          tracks.sort((a, b) => naturalCollator.compare(a.key, b.key));
+        }
         return { tracks, subMap };
       }
 
@@ -3378,7 +3404,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           const res = await desktopBridge.selectFiles();
           if (!res) return;
           if (res.playlists && res.playlists.length > 0) {
-            await handleImportedPlaylistContent(res.playlists[0].name, res.playlists[0].content);
+            await handleImportedPlaylistContent(
+              res.playlists[0].name,
+              res.playlists[0].content,
+              res.playlists[0].fullPath || ''
+            );
             return;
           }
           if (!res.entries?.length) return;
@@ -3428,7 +3458,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         hideNotice();
         const saved = state.savedSession;
         const latestPlaylists = StateStore.loadSavedPlaylists();
-        if (latestPlaylists.length > 0) state.savedPlaylists = latestPlaylists;
+        state.savedPlaylists = latestPlaylists;
 
         // 1. If the previous session was a Saved Playlist, reopen & auto-play it directly
         if (saved?.activeSavedPlaylistId && state.savedPlaylists.some((p) => p.id === saved.activeSavedPlaylistId)) {
@@ -3555,6 +3585,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           nativeFolderPath = '',
           startTime = 0
         } = options;
+        trackLoadGen += 1;
+        subtitleOpGen += 1;
         stopAutosaveTimer();
         el.media.pause();
         revokeMediaUrls();
@@ -3584,13 +3616,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         renderPlaylist();
 
         const saved = restoreSavedPosition ? state.savedSession : null;
-        const savedNormPath = saved?.trackFullPath ? normalizeFsPath(saved.trackFullPath) : '';
         const matched = saved
-          ? tracks.find((t) =>
-              (savedNormPath && t.fullPath && normalizeFsPath(t.fullPath) === savedNormPath) ||
-              (saved.trackKey && t.key === saved.trackKey) ||
-              (saved.trackName && t.name === saved.trackName)
-            )
+          ? findTrackSafely(tracks, {
+              fullPath: saved.trackFullPath || '',
+              key: saved.trackKey || '',
+              name: saved.trackName || '',
+            })
           : null;
 
         if (matched) {
@@ -3674,17 +3705,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.subShadowVal.textContent = `${s.shadowBlur}px`;
         el.subPositionRange.value = String(s.bottomOffset);
         el.subPositionVal.textContent = `${s.bottomOffset}%`;
-        setRangeFill(el.subFontSizeRange, ((s.fontSize - 14) / (72 - 14)) * 100);
-        setRangeFill(el.subOutlineWidthRange, (s.outlineWidth / 6) * 100);
-        setRangeFill(el.subBgOpacityRange, s.bgOpacity);
-        setRangeFill(el.subBorderWidthRange, (s.borderWidth / 5) * 100);
-        setRangeFill(el.subRadiusRange, (s.borderRadius / 22) * 100);
-        setRangeFill(el.subShadowRange, (s.shadowBlur / 16) * 100);
-        setRangeFill(el.subPositionRange, ((s.bottomOffset - 2) / (40 - 2)) * 100);
+        setRangeFill(el.subFontSizeRange, (s.fontSize - 14) / (72 - 14));
+        setRangeFill(el.subOutlineWidthRange, s.outlineWidth / 6);
+        setRangeFill(el.subBgOpacityRange, s.bgOpacity / 100);
+        setRangeFill(el.subBorderWidthRange, s.borderWidth / 5);
+        setRangeFill(el.subRadiusRange, s.borderRadius / 22);
+        setRangeFill(el.subShadowRange, s.shadowBlur / 16);
+        setRangeFill(el.subPositionRange, (s.bottomOffset - 2) / (40 - 2));
       }
 
       function updateSubtitleStyle(patch, persist = true, broadcast = true) {
-        state.subtitleStyle = { ...state.subtitleStyle, ...patch };
+        state.subtitleStyle = sanitizeSubtitleStyle({ ...state.subtitleStyle, ...patch });
         applySubtitleStyleToDOM();
         syncSubtitleControlsUI();
         if (persist) {
@@ -3888,7 +3919,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.subtitleOverlay.hidden = el.subtitleCueStack.children.length === 0;
       }
 
-      function clearActiveSubtitles() {
+      function clearActiveSubtitles({ cancelPending = true } = {}) {
+        if (cancelPending) subtitleOpGen += 1;
         if (state.activeSubtitleUrl) {
           URL.revokeObjectURL(state.activeSubtitleUrl);
           state.activeSubtitleUrl = null;
@@ -3907,11 +3939,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           URL.revokeObjectURL(state.activeObjectUrl);
           state.activeObjectUrl = null;
         }
-        clearActiveSubtitles();
+        clearActiveSubtitles({ cancelPending: false });
       }
 
       function attachSubtitleVttText(vttSourceText, label = 'Subtitles') {
-        clearActiveSubtitles();
+        clearActiveSubtitles({ cancelPending: false });
         const vtt = srtToWebVtt(vttSourceText);
         state.activeSubtitleVtt = vtt;
         const blob = new Blob([vtt], { type: 'text/vtt;charset=utf-8' });
@@ -3940,99 +3972,28 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.subtitleBtn.classList.add('is-active');
       }
 
-      const CLIENT_SUB_NOISE = new Set([
-        '1080p', '720p', '480p', '2160p', '4k', 'uhd', 'hd', 'sd', 'hdr', 'hdr10',
-        'bluray', 'bdrip', 'brrip', 'webrip', 'webdl', 'web', 'dl', 'hdtv', 'dvdrip',
-        'x264', 'x265', 'h264', 'h265', 'hevc', 'avc', '10bit', 'aac', 'ac3', 'dts',
-        'yts', 'yify', 'rarbg', 'nf', 'amzn', 'ar', 'ara', 'arabic', 'en', 'eng', 'english', 'sub', 'subs', 'sdh', 'hi', 'forced', 'cc'
-      ]);
-      const CLIENT_SUB_LANG_SUFFIX = /(?:[._\-\s\[(]+(?:ar|ara|arabic|en|eng|english|sdh|hi|forced|cc|sub|subs|default)[\])]*)+\s*$/i;
-      const CLIENT_SUB_ARABIC_RE = /(?:^|[._\-\s\[(])(ar|ara|arabic|عربي|عربية|ترجمة)(?:$|[._\-\s\])])/i;
-      const CLIENT_SUB_EP_RE = /\b(s\d{1,2}\s*e\d{1,3}|\d{1,2}x\d{1,3}|ep?\s*\d{1,3})\b/i;
-
-      function normalizeClientMediaName(name) {
-        const noExt = stripExtension(String(name || ''));
-        const stripped = noExt.replace(CLIENT_SUB_LANG_SUFFIX, '').trim();
-        return (stripped || noExt).toLowerCase().replace(/[._\-\[\](){}+]+/g, ' ').replace(/\s+/g, ' ').trim();
+      function getPreferredSubtitleLang() {
+        return phase3?.getPlaybackSettings?.().defaultSubtitleLang || 'auto';
       }
 
       function findFuzzySubtitleInLoadedMap(track) {
         if (!track || state.subtitlesByBaseKey.size === 0) return null;
-        const exact = state.subtitlesByBaseKey.get(stripExtension(track.key).toLowerCase());
-        if (exact) return exact;
-
-        const vNorm = normalizeClientMediaName(track.name);
-        const vEpM = vNorm.match(CLIENT_SUB_EP_RE);
-        const vEp = vEpM ? vEpM[1].replace(/\s+/g, '').replace(/^ep(\d)/, 'e$1') : '';
-        const vTokens = new Set(vNorm.split(' ').filter((w) => w.length > 1 && !CLIENT_SUB_NOISE.has(w)));
         const trackDir = (track.folderPath || '').toLowerCase();
-        const videosInSameDir = state.allTracks.filter((tr) => tr.kind === 'video' && (tr.folderPath || '').toLowerCase() === trackDir).length;
-
-        let bestEntry = null;
-        let bestScore = 0;
-
-        for (const [baseKey, subEntry] of state.subtitlesByBaseKey.entries()) {
-          const subName = subEntry.name || baseKey.split('/').pop() || baseKey;
-          const subDir = (baseKey.includes('/') ? baseKey.slice(0, baseKey.lastIndexOf('/')) : '').toLowerCase();
-
-          let dirPenalty = 0;
-          if (subDir === trackDir) {
-            dirPenalty = 0;
-          } else if (trackDir && subDir.startsWith(`${trackDir}/`)) {
-            dirPenalty = 20;
-          } else if (!trackDir && /^(subs?|subtitles?|arabic|ar|en|cc)(\/|$)/i.test(subDir)) {
-            dirPenalty = 20;
-          } else if (trackDir && trackDir.startsWith(`${subDir}/`)) {
-            dirPenalty = 50;
-          } else {
-            dirPenalty = 85;
-          }
-
-          const sNorm = normalizeClientMediaName(subName);
-          let score = 0;
-          if (vNorm && sNorm && vNorm === sNorm) {
-            score = 940;
-          } else if (vNorm && sNorm && (sNorm.startsWith(vNorm) || vNorm.startsWith(sNorm)) && Math.min(vNorm.length, sNorm.length) >= 4) {
-            score = 840;
-          } else if (vNorm && sNorm && (vNorm.includes(sNorm) || sNorm.includes(vNorm)) && Math.min(vNorm.length, sNorm.length) >= 5) {
-            score = 780;
-          } else {
-            const sEpM = sNorm.match(CLIENT_SUB_EP_RE);
-            const sEp = sEpM ? sEpM[1].replace(/\s+/g, '').replace(/^ep(\d)/, 'e$1') : '';
-            const sTokens = new Set(sNorm.split(' ').filter((w) => w.length > 1 && !CLIENT_SUB_NOISE.has(w)));
-            let overlap = 0;
-            for (const tok of sTokens) if (vTokens.has(tok)) overlap += 1;
-
-            if (vEp && sEp && vEp === sEp) {
-              score = overlap > 0 ? 790 + Math.min(60, overlap * 15) : 700;
-            } else if (vEp && sEp && vEp !== sEp) {
-              continue;
-            } else if (vTokens.size > 0 && sTokens.size > 0 && overlap > 0) {
-              const ratio = (2 * overlap) / (vTokens.size + sTokens.size);
-              if (ratio >= 0.48 || (overlap >= 2 && overlap / Math.min(vTokens.size, sTokens.size) >= 0.65)) {
-                score = Math.round(520 + ratio * 240);
-              }
-            }
-          }
-
-          if (score === 0 && videosInSameDir <= 1 && dirPenalty <= 25 && state.subtitlesByBaseKey.size <= 4) {
-            score = 420;
-          }
-          if (score === 0) continue;
-          if (CLIENT_SUB_ARABIC_RE.test(subName)) score += 28;
-          const finalScore = score - dirPenalty;
-          if (finalScore >= 380 && finalScore > bestScore) {
-            bestScore = finalScore;
-            bestEntry = subEntry;
-          }
-        }
-        return bestEntry;
+        const videosInSameDir = state.allTracks.filter(
+          (tr) => tr.kind === 'video' && (tr.folderPath || '').toLowerCase() === trackDir
+        ).length;
+        return selectBestSubtitleCandidate(track, state.subtitlesByBaseKey, {
+          preferredLang: getPreferredSubtitleLang(),
+          uiLang: state.lang,
+          videosInSameDir,
+        });
       }
 
-      async function autoLoadMatchingSubtitle(track) {
+      async function autoLoadMatchingSubtitle(track, opGen = subtitleOpGen) {
         if (!track || track.kind !== 'video') return;
+        const isStillCurrent = () => opGen === subtitleOpGen && state.currentKey === track.key;
 
-        // 1. Check loaded folder/queue subtitle map (exact + fuzzy + nearby subfolder match)
+        // 1. Check loaded folder/queue subtitle map (exact + fuzzy + language preference)
         const subEntry = findFuzzySubtitleInLoadedMap(track);
         if (subEntry) {
           try {
@@ -4045,6 +4006,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             } else if (subEntry.fullPath && desktopBridge) {
               text = await desktopBridge.readTextFile(subEntry.fullPath);
             }
+            if (!isStillCurrent()) return;
             if (text) {
               attachSubtitleVttText(text, subEntry.name);
               return;
@@ -4054,10 +4016,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
-        // 2. Desktop native nearby folder / fuzzy subtitle scan (works even when double-clicking a single video from Explorer!)
+        if (!isStillCurrent()) return;
+
+        // 2. Desktop native nearby folder / fuzzy subtitle scan honoring defaultSubtitleLang + uiLang (F12)
         if (track.fullPath && desktopBridge && typeof desktopBridge.findNearbySubtitle === 'function') {
           try {
-            const found = await desktopBridge.findNearbySubtitle(track.fullPath);
+            const preferredLang = getPreferredSubtitleLang();
+            const found = await desktopBridge.findNearbySubtitle(track.fullPath, preferredLang, state.lang);
+            if (!isStillCurrent()) return;
             if (found && found.text) {
               attachSubtitleVttText(found.text, found.name || 'Subtitles');
               showNotice(t('subAutoLoaded', { name: found.name || '' }));
@@ -4068,15 +4034,36 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
       }
 
+      function getTrackProgressEntry(track) {
+        if (!track) return null;
+        if (state.progressByKey[track.key]) return state.progressByKey[track.key];
+        const legacyKey = lookupLegacyKeyFallback(track, state.allTracks);
+        return legacyKey ? state.progressByKey[legacyKey] || null : null;
+      }
+
+      function getTrackBookmarksList(track) {
+        if (!track) return [];
+        const direct = state.bookmarksByKey[track.key];
+        if (Array.isArray(direct) && direct.length > 0) return direct;
+        const legacyKey = lookupLegacyKeyFallback(track, state.allTracks);
+        if (legacyKey && Array.isArray(state.bookmarksByKey[legacyKey])) {
+          return state.bookmarksByKey[legacyKey];
+        }
+        return [];
+      }
+
       async function loadTrackByKey(trackKey, options = {}) {
         const { autoPlay = true } = options;
         const track = state.allTracks.find((tr) => tr.key === trackKey);
         if (!track) return;
 
+        const gen = ++trackLoadGen;
+        const subGen = ++subtitleOpGen;
+
         let startTime = options.startTime;
         if (startTime === undefined) {
           const allowResume = phase3 ? phase3.shouldResumePosition() : true;
-          const savedProg = allowResume ? state.progressByKey[track.key] : null;
+          const savedProg = allowResume ? getTrackProgressEntry(track) : null;
           if (savedProg && Number.isFinite(savedProg.time) && savedProg.time > 2 && (!savedProg.duration || savedProg.time < savedProg.duration * 0.92)) {
             startTime = savedProg.time;
           } else {
@@ -4088,6 +4075,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         stopAutosaveTimer();
         clearABLoop();
 
+        let createdObjectUrl = null;
         try {
           revokeMediaUrls();
           let srcUrl = null;
@@ -4098,16 +4086,40 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             let file = track.file;
             if (!file && track.fileHandle) {
               file = await track.fileHandle.getFile();
+              if (gen !== trackLoadGen) return;
               track.file = file;
               track.size = file.size;
             }
             if (!file) throw new Error('File could not be read from disk.');
-            srcUrl = URL.createObjectURL(file);
+            createdObjectUrl = URL.createObjectURL(file);
+            if (gen !== trackLoadGen) {
+              URL.revokeObjectURL(createdObjectUrl);
+              return;
+            }
+            srcUrl = createdObjectUrl;
             state.activeObjectUrl = srcUrl;
           }
 
+          if (gen !== trackLoadGen) return;
+
           state.currentKey = track.key;
           state.pendingSeekTime = startTime > 0 ? startTime : null;
+
+          // Register loadedmetadata/error listener BEFORE el.media.load() so fast loads never miss it (F09)
+          let metadataPromise = null;
+          if (startTime > 0) {
+            metadataPromise = new Promise((resolve) => {
+              const done = () => {
+                el.media.removeEventListener('loadedmetadata', done);
+                el.media.removeEventListener('error', done);
+                el.media.removeEventListener('emptied', done);
+                resolve();
+              };
+              el.media.addEventListener('loadedmetadata', done, { once: true });
+              el.media.addEventListener('error', done, { once: true });
+              el.media.addEventListener('emptied', done, { once: true });
+            });
+          }
 
           el.media.src = srcUrl;
           el.media.playbackRate = state.playbackRate || 1;
@@ -4127,28 +4139,23 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           setRangeFill(el.fsSeekBar, 0);
 
           persistPlaybackState(startTime);
-          await autoLoadMatchingSubtitle(track);
+          await autoLoadMatchingSubtitle(track, subGen);
+          if (gen !== trackLoadGen) return;
 
           // If Cast LAN Server is running, automatically sync the newly selected track + subtitle to the TV!
           if (state.castServerInfo && track.fullPath && desktopBridge && desktopBridge.castStartServer) {
             syncActiveCastTrack(track).catch((err) => errorHandler.log('cast.syncActiveTrack', err));
           }
 
-          if (startTime > 0 && el.media.readyState < 1) {
-            await new Promise((resolve) => {
-              const done = () => {
-                el.media.removeEventListener('loadedmetadata', done);
-                el.media.removeEventListener('error', done);
-                resolve();
-              };
-              el.media.addEventListener('loadedmetadata', done, { once: true });
-              el.media.addEventListener('error', done, { once: true });
-            });
+          if (metadataPromise && el.media.readyState < 1) {
+            await metadataPromise;
+            if (gen !== trackLoadGen) return;
           }
 
           if (autoPlay) {
             try {
               await ensureAudioOutputBound();
+              if (gen !== trackLoadGen) return;
               if (AudioStudio.needsAudioGraph()) AudioStudio.ensureInit(false);
               await el.media.play();
             } catch (playErr) {
@@ -4156,7 +4163,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             }
           }
         } catch (err) {
-          showNotice(`Unable to load "${track.name}": ${err?.message || 'File unreadable'}`, true);
+          if (createdObjectUrl && state.activeObjectUrl !== createdObjectUrl) {
+            URL.revokeObjectURL(createdObjectUrl);
+          }
+          if (gen === trackLoadGen) {
+            showNotice(`Unable to load "${track.name}": ${err?.message || 'File unreadable'}`, true);
+          }
         }
       }
 
@@ -4553,21 +4565,20 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         const track = getCurrentTrack();
         if (!track || !Number.isFinite(el.media.currentTime)) return;
         const sec = Math.floor(el.media.currentTime);
-        const existing = Array.isArray(state.bookmarksByKey[track.key]) ? [...state.bookmarksByKey[track.key]] : [];
+        const existing = sanitizeBookmarkList(getTrackBookmarksList(track));
         if (existing.some((t) => Math.abs(t - sec) < 2)) {
           showNotice(`Bookmark already exists near ${formatTime(sec)}.`);
           return;
         }
         existing.push(sec);
-        existing.sort((a, b) => a - b);
-        state.bookmarksByKey[track.key] = existing;
+        state.bookmarksByKey[track.key] = sanitizeBookmarkList(existing);
         renderBookmarks();
         persistPlaybackState();
       }
 
       function removeBookmark(trackKey, sec) {
-        const existing = state.bookmarksByKey[trackKey];
-        if (!Array.isArray(existing)) return;
+        const existing = sanitizeBookmarkList(state.bookmarksByKey[trackKey]);
+        if (existing.length === 0) return;
         const next = existing.filter((t) => t !== sec);
         if (next.length > 0) state.bookmarksByKey[trackKey] = next;
         else delete state.bookmarksByKey[trackKey];
@@ -4583,7 +4594,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.bookmarksStrip.hidden = true;
           return;
         }
-        const list = state.bookmarksByKey[track.key] || [];
+        const list = sanitizeBookmarkList(getTrackBookmarksList(track));
         if (list.length === 0) {
           el.bookmarksStrip.hidden = true;
           return;
@@ -5254,18 +5265,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           showNotice(t('plNoDupes'));
           return;
         }
-        const seen = new Set();
-        const kept = [];
-        let removedCount = 0;
-        for (const tr of state.allTracks) {
-          const sig = `${tr.name.toLowerCase()}::${tr.size || ''}`;
-          if (seen.has(sig)) {
-            removedCount += 1;
-          } else {
-            seen.add(sig);
-            kept.push(tr);
-          }
-        }
+        const { kept, removed } = deduplicateTracksSafely(state.allTracks);
+        const removedCount = removed.length;
         if (removedCount === 0) {
           showNotice(t('plNoDupes'));
           return;
@@ -6122,29 +6123,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return map[ext] || (track?.kind === 'audio' ? 'audio/mpeg' : 'video/mp4');
       }
 
-      function formatVttTimestamp(totalSec) {
-        const clamped = Math.max(0, totalSec);
-        const hrs = Math.floor(clamped / 3600);
-        const mins = Math.floor((clamped % 3600) / 60);
-        const secs = Math.floor(clamped % 60);
-        const ms = Math.round((clamped - Math.floor(clamped)) * 1000);
-        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
-      }
-
-      function parseVttTimestamp(ts) {
-        const parts = ts.trim().split(':');
-        if (parts.length === 3) return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + parseFloat(parts[2]);
-        if (parts.length === 2) return Number(parts[0]) * 60 + parseFloat(parts[1]);
-        return 0;
-      }
-
       function getShiftedSubtitleVtt() {
         if (!state.activeSubtitleVtt || !state.subtitlesEnabled) return null;
         if (Math.abs(state.subtitleOffsetSec) < 0.001) return state.activeSubtitleVtt;
-        return state.activeSubtitleVtt.replace(
-          /(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})/g,
-          (_, s1, s2) => `${formatVttTimestamp(parseVttTimestamp(s1) + state.subtitleOffsetSec)} --> ${formatVttTimestamp(parseVttTimestamp(s2) + state.subtitleOffsetSec)}`
-        );
+        return shiftWebVtt(state.activeSubtitleVtt, state.subtitleOffsetSec);
       }
 
       function syncCastButtonState() {
@@ -7168,8 +7150,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       el.subtitleInput.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        const opGen = ++subtitleOpGen;
+        const expectedTrackKey = state.currentKey;
         try {
-          attachSubtitleVttText(await readSubtitleFileSmart(file), file.name);
+          const text = await readSubtitleFileSmart(file);
+          if (opGen !== subtitleOpGen || state.currentKey !== expectedTrackKey) return;
+          attachSubtitleVttText(text, file.name);
         } catch (err) {
           errorHandler.notify(ErrorCategory.SUBTITLE, err);
         }
@@ -7254,11 +7240,26 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
       window.addEventListener('storage', (e) => {
         if (e.key === STORAGE_KEY) {
+          const fresh = StateStore.load();
+          if (fresh) {
+            if (Array.isArray(fresh.savedPlaylists)) state.savedPlaylists = fresh.savedPlaylists;
+            if (fresh.progressByKey && typeof fresh.progressByKey === 'object') {
+              state.progressByKey = fresh.progressByKey;
+            }
+            if (fresh.bookmarksByKey && typeof fresh.bookmarksByKey === 'object') {
+              state.bookmarksByKey = fresh.bookmarksByKey;
+            }
+            if (Array.isArray(fresh.starredKeys)) state.starredKeys = new Set(fresh.starredKeys);
+            if (Array.isArray(fresh.watchedKeys)) state.watchedKeys = new Set(fresh.watchedKeys);
+          }
           syncSavedPlaylistsFromStorage();
+          renderBookmarks();
           if (phase3 && typeof phase3.invalidateStoreCache === 'function') {
             phase3.invalidateStoreCache();
             phase3.renderHistory();
             phase3.renderLibrary();
+            phase3.renderShortcutsEditor?.();
+            phase3.syncSettingsModalUI?.();
           }
         } else if (e.key === 'aaz_theme' && (e.newValue === 'dark' || e.newValue === 'light')) {
           applyTheme(e.newValue, false, false);
@@ -7694,13 +7695,20 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           const inspected = await desktopBridge.inspectPaths(paths);
           if (!inspected) return false;
           if (inspected.playlists && inspected.playlists.length > 0) {
-            await handleImportedPlaylistContent(inspected.playlists[0].name, inspected.playlists[0].content);
+            await handleImportedPlaylistContent(
+              inspected.playlists[0].name,
+              inspected.playlists[0].content,
+              inspected.playlists[0].fullPath || ''
+            );
             return true;
           }
           if (!inspected.entries?.length) return false;
           // Support dragging a single .srt / .vtt subtitle directly onto an active video!
           if (inspected.entries.length === 1 && inspected.entries[0].kind === 'subtitle' && inspected.entries[0].fullPath) {
+            const opGen = ++subtitleOpGen;
+            const expectedTrackKey = state.currentKey;
             const subText = await desktopBridge.readTextFile(inspected.entries[0].fullPath);
+            if (opGen !== subtitleOpGen || state.currentKey !== expectedTrackKey) return true;
             if (subText) {
               attachSubtitleVttText(subText, inspected.entries[0].name);
               showNotice(t('subAutoLoaded', { name: inspected.entries[0].name }));
@@ -7800,7 +7808,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           if (savedSubRaw) {
             const parsedSub = JSON.parse(savedSubRaw);
             if (parsedSub && typeof parsedSub === 'object') {
-              state.subtitleStyle = { ...SUBTITLE_STYLE_DEFAULTS, ...parsedSub };
+              state.subtitleStyle = sanitizeSubtitleStyle(parsedSub);
             }
           }
         } catch (err) {
@@ -7883,11 +7891,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           renderSavedPlaylists,
           findTrackInQueue: (histItem) => {
             if (!histItem) return null;
-            return state.allTracks.find((tr) =>
-              (histItem.fullPath && tr.fullPath && normalizeFsPath(tr.fullPath) === normalizeFsPath(histItem.fullPath)) ||
-              (histItem.relPath && tr.key && tr.key.toLowerCase() === String(histItem.relPath).toLowerCase()) ||
-              (histItem.name && tr.name === histItem.name)
-            ) || null;
+            return findTrackSafely(state.allTracks, {
+              fullPath: histItem.fullPath || '',
+              key: histItem.relPath || histItem.key || '',
+              name: histItem.name || '',
+            });
           },
           loadTrackByKey,
           openExternalPathAtTime: async (fullPath, startTime = 0) => {

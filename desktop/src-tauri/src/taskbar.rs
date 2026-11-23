@@ -128,7 +128,8 @@ mod imp {
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, TRUE, WPARAM};
     use windows::Win32::Graphics::Gdi::{CreateBitmap, DeleteObject, HGDIOBJ};
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED,
     };
     use windows::Win32::UI::Shell::{
         DefSubclassProc, ITaskbarList3, RemoveWindowSubclass, SetWindowSubclass, TaskbarList,
@@ -144,32 +145,43 @@ mod imp {
     const BTN_PLAY_PAUSE: u32 = 1002;
     const BTN_NEXT: u32 = 1003;
 
-    struct IconSet {
-        prev: HICON,
-        play: HICON,
-        pause: HICON,
-        next: HICON,
-    }
+    struct OwnedIcon(HICON);
 
-    impl Drop for IconSet {
+    impl Drop for OwnedIcon {
         fn drop(&mut self) {
             unsafe {
-                let _ = DestroyIcon(self.prev);
-                let _ = DestroyIcon(self.play);
-                let _ = DestroyIcon(self.pause);
-                let _ = DestroyIcon(self.next);
+                let _ = DestroyIcon(self.0);
             }
         }
+    }
+
+    struct IconSet {
+        prev: OwnedIcon,
+        play: OwnedIcon,
+        pause: OwnedIcon,
+        next: OwnedIcon,
     }
 
     struct SubclassContext {
         label: String,
         window: WebviewWindow,
         taskbar_created_msg: u32,
+        com_initialized: bool,
         taskbar: Option<ITaskbarList3>,
         buttons_added: bool,
         icons: IconSet,
         state: TaskbarMediaState,
+    }
+
+    impl Drop for SubclassContext {
+        fn drop(&mut self) {
+            self.taskbar = None;
+            if self.com_initialized {
+                unsafe {
+                    CoUninitialize();
+                }
+            }
+        }
     }
 
     static WINDOW_STATES: OnceLock<Mutex<HashMap<String, usize>>> = OnceLock::new();
@@ -178,7 +190,7 @@ mod imp {
         WINDOW_STATES.get_or_init(|| Mutex::new(HashMap::new()))
     }
 
-    fn create_hicon(glyph: IconGlyph) -> Option<HICON> {
+    fn create_hicon(glyph: IconGlyph) -> Option<OwnedIcon> {
         let bgra = render_glyph_bgra(glyph);
         // 1-bpp monochrome AND mask (all 0s so alpha channel from 32-bit BGRA controls transparency)
         let mask_stride = ICON_DIM.div_ceil(16) * 2;
@@ -215,7 +227,7 @@ mod imp {
                 hbmColor: hbm_color,
             };
 
-            let icon = CreateIconIndirect(&info).ok();
+            let icon = CreateIconIndirect(&info).ok().map(OwnedIcon);
             let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
             let _ = DeleteObject(HGDIOBJ(hbm_color.0));
             icon
@@ -252,9 +264,9 @@ mod imp {
         };
 
         let play_icon = if ctx.state.is_playing {
-            ctx.icons.pause
+            ctx.icons.pause.0
         } else {
-            ctx.icons.play
+            ctx.icons.play.0
         };
 
         [
@@ -262,7 +274,7 @@ mod imp {
                 dwMask: mask,
                 iId: BTN_PREV,
                 iBitmap: 0,
-                hIcon: ctx.icons.prev,
+                hIcon: ctx.icons.prev.0,
                 szTip: encode_utf16_tooltip(prev_tip),
                 dwFlags: prev_flags,
             },
@@ -278,7 +290,7 @@ mod imp {
                 dwMask: mask,
                 iId: BTN_NEXT,
                 iBitmap: 0,
-                hIcon: ctx.icons.next,
+                hIcon: ctx.icons.next.0,
                 szTip: encode_utf16_tooltip(next_tip),
                 dwFlags: next_flags,
             },
@@ -287,7 +299,12 @@ mod imp {
 
     unsafe fn ensure_taskbar_instance(ctx: &mut SubclassContext) -> bool {
         if ctx.taskbar.is_none() {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            if !ctx.com_initialized {
+                let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+                if hr.is_ok() {
+                    ctx.com_initialized = true;
+                }
+            }
             let res: windows::core::Result<ITaskbarList3> =
                 CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER);
             if let Ok(tb) = res {
@@ -358,7 +375,7 @@ mod imp {
                     _ => None,
                 };
                 if let Some(act) = action {
-                    let _ = ctx.window.emit("aaz:taskbar-action", act);
+                    let _ = ctx.window.emit_to(&ctx.label, "aaz:taskbar-action", act);
                     return LRESULT(0);
                 }
             }
@@ -389,6 +406,7 @@ mod imp {
                 label: label.clone(),
                 window: win_clone.clone(),
                 taskbar_created_msg,
+                com_initialized: false,
                 taskbar: None,
                 buttons_added: false,
                 icons,

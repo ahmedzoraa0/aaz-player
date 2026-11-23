@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::HashSet;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::net::{Ipv4Addr, TcpListener, TcpStream, UdpSocket};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -28,9 +28,13 @@ static WINDOW_COUNTER: AtomicU64 = AtomicU64::new(1);
 const MAX_UPDATE_DOWNLOAD_BYTES: u64 = 150 * 1024 * 1024; // 150 MB hard cap
 const MAX_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024; // 16 MB max subtitle/playlist text file
 const MAX_DLNA_XML_BYTES: u64 = 256 * 1024; // 256 KB max UPnP XML description
+const MAX_HTTP_REQUEST_LINE_BYTES: usize = 2048;
 const MAX_HTTP_HEADERS: usize = 32;
 const MAX_HTTP_HEADER_BYTES: usize = 8192;
+const HTTP_HEADER_TIMEOUT_SECS: u64 = 5;
 const MAX_CAST_CONCURRENT_CONNECTIONS: usize = 8;
+const MAX_SSDP_LOCATIONS: usize = 32;
+const MAX_SSDP_PACKETS: usize = 256;
 const MAX_DIR_SCAN_DEPTH: usize = 24;
 const MAX_DIR_SCAN_ENTRIES: usize = 25_000;
 
@@ -123,6 +127,7 @@ struct CastServerState {
     media_path: Arc<Mutex<Option<PathBuf>>>,
     media_title: Arc<Mutex<String>>,
     subtitle_vtt: Arc<Mutex<Option<String>>>,
+    active_streams: Arc<Mutex<Vec<(u64, TcpStream)>>>,
 }
 
 #[derive(Default)]
@@ -1011,33 +1016,72 @@ fn extract_supported_paths_from_argv(argv: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn canonical_entry_key(path: &Path) -> String {
+    let mut s = path.to_string_lossy().replace('\\', "/");
+    if let Some(rest) = s.strip_prefix("//?/UNC/") {
+        s = format!("//{rest}");
+    } else if let Some(rest) = s.strip_prefix("//?/") {
+        s = rest.to_string();
+    }
+    format!("fs:{}", s.to_lowercase())
+}
+
+fn decode_file_uri_to_path(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if !trimmed.to_ascii_lowercase().starts_with("file://") {
+        return trimmed.to_string();
+    }
+    let after = &trimmed[7..];
+    let after_host = if after.to_ascii_lowercase().starts_with("localhost/") {
+        &after["localhost".len()..]
+    } else {
+        after
+    };
+    if after_host.starts_with('/') {
+        let decoded = percent_decode_str(after_host)
+            .decode_utf8_lossy()
+            .into_owned();
+        #[cfg(target_os = "windows")]
+        {
+            let trimmed_slash = if decoded.len() >= 3
+                && decoded.as_bytes()[0] == b'/'
+                && decoded.as_bytes()[1].is_ascii_alphabetic()
+                && decoded.as_bytes()[2] == b':'
+            {
+                &decoded[1..]
+            } else {
+                decoded.as_str()
+            };
+            return trimmed_slash.replace('/', "\\");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            return decoded;
+        }
+    }
+    // UNC path: file://server/share/dir/clip.mp4
+    if let Some((host, rest)) = after_host.split_once('/') {
+        let decoded_rest = percent_decode_str(rest).decode_utf8_lossy().into_owned();
+        #[cfg(target_os = "windows")]
+        {
+            return format!("\\\\{host}\\{}", decoded_rest.replace('/', "\\"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            return format!("//{host}/{decoded_rest}");
+        }
+    }
+    percent_decode_str(after_host)
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
 fn inspect_path_list(paths: Vec<String>) -> InspectResult {
     let mut entries = Vec::new();
     let mut playlists = Vec::new();
 
     for raw in paths {
-        let mut p_str = raw.trim().to_string();
-        if p_str.starts_with("file://") {
-            let stripped = p_str
-                .trim_start_matches("file:///")
-                .trim_start_matches("file://");
-            let decoded = percent_decode_str(stripped)
-                .decode_utf8_lossy()
-                .into_owned();
-            #[cfg(target_os = "windows")]
-            {
-                p_str = decoded.replace('/', "\\");
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                p_str = if decoded.starts_with('/') {
-                    decoded
-                } else {
-                    format!("/{decoded}")
-                };
-            }
-        }
-
+        let p_str = decode_file_uri_to_path(&raw);
         let path = PathBuf::from(&p_str);
         if !path.exists() {
             continue;
@@ -1091,10 +1135,15 @@ fn inspect_path_list(paths: Vec<String>) -> InspectResult {
             };
             let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
             let mtime_ms = file_mtime_ms(&path);
+            let folder_path = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             entries.push(MediaEntry {
-                key: name.clone(),
+                key: canonical_entry_key(&path),
                 name,
-                folder_path: String::new(),
+                folder_path,
                 full_path: p_str,
                 file_url: build_media_url(&path),
                 kind: kind.to_string(),
@@ -1186,7 +1235,7 @@ fn extract_episode_tag(norm: &str) -> Option<String> {
 }
 
 fn has_arabic_hint(name: &str) -> bool {
-    let lower = name.to_lowercase();
+    let lower = strip_extension(name).to_lowercase();
     if lower.contains("عربي") || lower.contains("عربية") || lower.contains("ترجمة") {
         return true;
     }
@@ -1199,24 +1248,67 @@ fn has_arabic_hint(name: &str) -> bool {
         .any(|tok| matches!(tok, "ar" | "ara" | "arabic"))
 }
 
+fn has_english_hint(name: &str) -> bool {
+    let lower = strip_extension(name).to_lowercase();
+    let replaced: String = lower
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect();
+    replaced
+        .split_whitespace()
+        .any(|tok| matches!(tok, "en" | "eng" | "english"))
+}
+
+fn resolve_target_sub_lang(
+    preferred_lang: Option<&str>,
+    ui_lang: Option<&str>,
+) -> (&'static str, bool) {
+    match preferred_lang.map(str::trim) {
+        Some(p) if p.eq_ignore_ascii_case("ar") => ("ar", true),
+        Some(p) if p.eq_ignore_ascii_case("en") => ("en", true),
+        _ => {
+            if ui_lang
+                .map(|u| u.trim().eq_ignore_ascii_case("ar"))
+                .unwrap_or(false)
+            {
+                ("ar", false)
+            } else {
+                ("en", false)
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn score_subtitle_candidate(
     video_name: &str,
     sub_name: &str,
     distance_penalty: i32,
     is_only_video: bool,
     sub_count_in_dir: usize,
+    preferred_lang: Option<&str>,
+    ui_lang: Option<&str>,
 ) -> i32 {
     let v_raw = strip_extension(video_name).to_lowercase();
     let s_raw = strip_extension(sub_name).to_lowercase();
     let v_norm = normalize_media_name(video_name);
     let s_norm = normalize_media_name(sub_name);
 
+    // Hard episode-mismatch guard: never match a different episode regardless of language tag
+    let v_ep = extract_episode_tag(&v_norm);
+    let s_ep = extract_episode_tag(&s_norm);
+    if let (Some(ve), Some(se)) = (&v_ep, &s_ep) {
+        if ve != se {
+            return 0;
+        }
+    }
+
     let mut score: i32 = 0;
 
     if v_raw == s_raw {
         score = 1000;
     } else if !v_norm.is_empty() && v_norm == s_norm {
-        score = 940;
+        score = 960;
     } else if !v_norm.is_empty()
         && !s_norm.is_empty()
         && (s_norm.starts_with(&v_norm) || v_norm.starts_with(&s_norm))
@@ -1230,8 +1322,6 @@ fn score_subtitle_candidate(
     {
         score = 780;
     } else {
-        let v_ep = extract_episode_tag(&v_norm);
-        let s_ep = extract_episode_tag(&s_norm);
         let v_set: HashSet<String> = extract_core_tokens(&v_norm).into_iter().collect();
         let s_set: HashSet<String> = extract_core_tokens(&s_norm).into_iter().collect();
         let overlap = s_set.iter().filter(|tok| v_set.contains(*tok)).count();
@@ -1243,8 +1333,6 @@ fn score_subtitle_candidate(
                 } else {
                     700
                 };
-            } else {
-                return 0;
             }
         } else if !v_set.is_empty() && !s_set.is_empty() && overlap > 0 {
             let ratio = (2.0 * overlap as f64) / ((v_set.len() + s_set.len()) as f64);
@@ -1263,8 +1351,21 @@ fn score_subtitle_candidate(
         return 0;
     }
 
-    if has_arabic_hint(sub_name) {
-        score += 28;
+    let (target_lang, is_explicit) = resolve_target_sub_lang(preferred_lang, ui_lang);
+    let sub_lang = if has_arabic_hint(sub_name) {
+        Some("ar")
+    } else if has_english_hint(sub_name) {
+        Some("en")
+    } else {
+        None
+    };
+
+    if let Some(lang) = sub_lang {
+        if lang == target_lang {
+            score += if is_explicit { 65 } else { 45 };
+        } else {
+            score -= if is_explicit { 20 } else { 10 };
+        }
     }
 
     (score - distance_penalty).max(1)
@@ -1798,6 +1899,8 @@ async fn aaz_read_text_file(
 async fn aaz_find_nearby_subtitle(
     state: State<'_, AppState>,
     video_full_path: String,
+    preferred_lang: Option<String>,
+    ui_lang: Option<String>,
 ) -> Result<Option<NearbySubtitle>, String> {
     let canon_video = match fs::canonicalize(Path::new(video_full_path.trim())) {
         Ok(p) if p.is_file() => p,
@@ -1914,6 +2017,8 @@ async fn aaz_find_nearby_subtitle(
                     penalty,
                     video_count_in_dir <= 1,
                     count_here,
+                    preferred_lang.as_deref(),
+                    ui_lang.as_deref(),
                 );
                 if score >= 380 {
                     let replace = match &best {
@@ -2987,56 +3092,318 @@ fn xml_escape(input: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+fn strip_xml_ns(name: &str) -> &str {
+    match name.rsplit_once(':') {
+        Some((_, local)) => local,
+        None => name,
+    }
+}
+
+fn xml_unescape(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(&rest[..amp]);
+        let after = &rest[amp + 1..];
+        let Some(semi) = after.find(';') else {
+            out.push('&');
+            rest = after;
+            continue;
+        };
+        let entity = &after[..semi];
+        let decoded = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ if entity.starts_with("#x") || entity.starts_with("#X") => {
+                u32::from_str_radix(&entity[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32)
+            }
+            _ if entity.starts_with('#') => entity[1..]
+                .parse::<u32>()
+                .ok()
+                .and_then(char::from_u32),
+            _ => None,
+        };
+        if let Some(ch) = decoded {
+            out.push(ch);
+        } else {
+            out.push('&');
+            out.push_str(entity);
+            out.push(';');
+        }
+        rest = &after[semi + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Scans an XML document safely on UTF-8 byte boundaries (never indexing `xml` with
+/// offsets derived from a lowercased copy) and returns the inner slices of all elements
+/// matching `target_local_name` (ASCII case-insensitive, namespace-agnostic).
+fn find_xml_element_inners<'a>(xml: &'a str, target_local_name: &str) -> Vec<&'a str> {
+    if xml.len() > MAX_DLNA_XML_BYTES as usize || target_local_name.is_empty() {
+        return Vec::new();
+    }
+    let bytes = xml.as_bytes();
+    let len = bytes.len();
+    let mut results = Vec::new();
+    let mut i = 0usize;
+    let mut capture_start: Option<usize> = None;
+    let mut capture_depth: usize = 0;
+
+    while i < len {
+        let Some(rel_lt) = xml[i..].find('<') else {
+            break;
+        };
+        let lt = i + rel_lt;
+        let rem = &xml[lt..];
+
+        // Skip XML comments <!-- ... -->
+        if rem.starts_with("<!--") {
+            if let Some(end) = rem[4..].find("-->") {
+                i = lt + 4 + end + 3;
+                continue;
+            }
+            break;
+        }
+        // Skip CDATA sections <![CDATA[ ... ]]> without interpreting `<` inside
+        if rem.starts_with("<![CDATA[") {
+            if let Some(end) = rem[9..].find("]]>") {
+                i = lt + 9 + end + 3;
+                continue;
+            }
+            break;
+        }
+        // Skip processing instructions <? ... ?>
+        if rem.starts_with("<?") {
+            if let Some(end) = rem[2..].find("?>") {
+                i = lt + 2 + end + 2;
+                continue;
+            }
+            break;
+        }
+        // Skip DOCTYPE / declarations <! ... > (never expand external entities)
+        if rem.starts_with("<!") {
+            if let Some(end) = rem[2..].find('>') {
+                i = lt + 2 + end + 1;
+                continue;
+            }
+            break;
+        }
+
+        // Find end of tag `>` respecting quoted attribute values
+        let mut j = lt + 1;
+        let mut quote: u8 = 0;
+        while j < len {
+            let b = bytes[j];
+            if quote != 0 {
+                if b == quote {
+                    quote = 0;
+                }
+            } else if b == b'"' || b == b'\'' {
+                quote = b;
+            } else if b == b'>' {
+                break;
+            }
+            j += 1;
+        }
+        if j >= len {
+            break;
+        }
+
+        let tag_body = xml[lt + 1..j].trim();
+        let next_pos = j + 1;
+        if tag_body.is_empty() {
+            i = next_pos;
+            continue;
+        }
+
+        let is_closing = tag_body.starts_with('/');
+        let is_self_closing = !is_closing && tag_body.ends_with('/');
+        let name_part = tag_body
+            .trim_start_matches('/')
+            .split(|c: char| c.is_ascii_whitespace() || c == '/')
+            .next()
+            .unwrap_or("");
+        let local_name = strip_xml_ns(name_part);
+
+        if local_name.eq_ignore_ascii_case(target_local_name) {
+            if is_closing {
+                if capture_depth > 0 {
+                    capture_depth -= 1;
+                    if capture_depth == 0 {
+                        if let Some(start) = capture_start.take() {
+                            results.push(&xml[start..lt]);
+                            if results.len() >= 128 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else if !is_self_closing {
+                if capture_depth == 0 {
+                    capture_start = Some(next_pos);
+                }
+                if capture_depth < 64 {
+                    capture_depth += 1;
+                }
+            }
+        }
+        i = next_pos;
+    }
+
+    results
+}
+
+fn extract_xml_text_content(inner: &str) -> String {
+    let mut out = String::with_capacity(inner.len());
+    let mut i = 0usize;
+    let len = inner.len();
+    while i < len {
+        let rem = &inner[i..];
+        if rem.starts_with("<![CDATA[") {
+            if let Some(end) = rem[9..].find("]]>") {
+                out.push_str(&rem[9..9 + end]);
+                i += 9 + end + 3;
+                continue;
+            }
+            break;
+        }
+        if rem.starts_with("<!--") {
+            if let Some(end) = rem[4..].find("-->") {
+                i += 4 + end + 3;
+                continue;
+            }
+            break;
+        }
+        if let Some(rel_lt) = rem.find('<') {
+            out.push_str(&xml_unescape(&rem[..rel_lt]));
+            i += rel_lt;
+            if let Some(rel_gt) = inner[i..].find('>') {
+                i += rel_gt + 1;
+            } else {
+                break;
+            }
+        } else {
+            out.push_str(&xml_unescape(rem));
+            break;
+        }
+    }
+    out.trim().to_string()
+}
+
 fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
-    let lower = xml.to_lowercase();
-    let open = format!("<{}", tag.to_lowercase());
-    let close = format!("</{}>", tag.to_lowercase());
-    let start_idx = lower.find(&open)?;
-    let gt_offset = lower[start_idx..].find('>')?;
-    let content_start = start_idx + gt_offset + 1;
-    let end_offset = lower[content_start..].find(&close)?;
-    Some(
-        xml[content_start..content_start + end_offset]
-            .trim()
-            .to_string(),
-    )
+    let inner = find_xml_element_inners(xml, tag).into_iter().next()?;
+    let text = extract_xml_text_content(inner);
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+fn normalize_url_path_segments(raw_path: &str) -> String {
+    let trailing_slash = raw_path.ends_with('/');
+    let mut stack: Vec<&str> = Vec::new();
+    for seg in raw_path.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            stack.pop();
+        } else {
+            stack.push(seg);
+        }
+    }
+    if stack.is_empty() {
+        "/".to_string()
+    } else if trailing_slash {
+        format!("/{}/", stack.join("/"))
+    } else {
+        format!("/{}", stack.join("/"))
+    }
+}
+
+fn resolve_upnp_url(base_url: &str, raw_ref: &str) -> Option<String> {
+    let r = raw_ref.trim();
+    if r.is_empty() {
+        return None;
+    }
+    let lower_r = r.to_ascii_lowercase();
+    if lower_r.starts_with("http://") || lower_r.starts_with("https://") {
+        return Some(r.to_string());
+    }
+
+    let base = base_url.trim();
+    let scheme_end = base.find("://")?;
+    let scheme = &base[..scheme_end];
+    let after_scheme = &base[scheme_end + 3..];
+    let (authority, base_path_with_q) = match after_scheme.find('/') {
+        Some(idx) => (&after_scheme[..idx], &after_scheme[idx..]),
+        None => (after_scheme, "/"),
+    };
+    if authority.is_empty() {
+        return None;
+    }
+    let origin = format!("{scheme}://{authority}");
+
+    if r.starts_with("//") {
+        return Some(format!("{scheme}:{r}"));
+    }
+
+    let (ref_path, ref_query) = match r.split_once('?') {
+        Some((p, q)) => (p, Some(q)),
+        None => (r, None),
+    };
+
+    let combined_path = if ref_path.starts_with('/') {
+        normalize_url_path_segments(ref_path)
+    } else {
+        let base_path = base_path_with_q
+            .split(['?', '#'])
+            .next()
+            .unwrap_or("/");
+        let base_dir = match base_path.rfind('/') {
+            Some(pos) => &base_path[..=pos],
+            None => "/",
+        };
+        normalize_url_path_segments(&format!("{base_dir}{ref_path}"))
+    };
+
+    match ref_query {
+        Some(q) => Some(format!("{origin}{combined_path}?{q}")),
+        None => Some(format!("{origin}{combined_path}")),
+    }
 }
 
 fn extract_avtransport_control_url(xml: &str, location: &str) -> Option<String> {
-    let lower = xml.to_lowercase();
-    let mut cursor = 0usize;
-    while let Some(rel) = lower[cursor..].find("<service") {
-        let svc_start = cursor + rel;
-        let svc_end_rel = lower[svc_start..].find("</service>")?;
-        let svc_slice = &xml[svc_start..svc_start + svc_end_rel + 10];
-        let svc_lower = svc_slice.to_lowercase();
-        if svc_lower.contains("avtransport") {
-            if let Some(ctrl) = extract_xml_tag(svc_slice, "controlURL") {
-                let candidate = if ctrl.starts_with("http://") || ctrl.starts_with("https://") {
-                    ctrl
-                } else {
-                    let origin = if let Some(scheme_end) = location.find("://") {
-                        let after = &location[scheme_end + 3..];
-                        if let Some(slash) = after.find('/') {
-                            &location[..scheme_end + 3 + slash]
-                        } else {
-                            location
-                        }
-                    } else {
-                        location
-                    };
-                    if ctrl.starts_with('/') {
-                        format!("{origin}{ctrl}")
-                    } else {
-                        format!("{origin}/{ctrl}")
-                    }
-                };
+    let url_base = extract_xml_tag(xml, "URLBase").filter(|u| {
+        let low = u.to_ascii_lowercase();
+        low.starts_with("http://") || low.starts_with("https://")
+    });
+    let base_url = url_base.as_deref().unwrap_or(location);
+
+    for svc_inner in find_xml_element_inners(xml, "service") {
+        let is_avt = extract_xml_tag(svc_inner, "serviceType")
+            .map(|st| st.to_ascii_lowercase().contains("avtransport"))
+            .unwrap_or(false)
+            || extract_xml_tag(svc_inner, "serviceId")
+                .map(|sid| sid.to_ascii_lowercase().contains("avtransport"))
+                .unwrap_or(false);
+        if !is_avt {
+            continue;
+        }
+        if let Some(ctrl) = extract_xml_tag(svc_inner, "controlURL") {
+            if let Some(candidate) = resolve_upnp_url(base_url, &ctrl) {
                 if let Ok(validated) = validate_lan_http_url(&candidate) {
                     return Some(validated);
                 }
             }
         }
-        cursor = svc_start + svc_end_rel + 10;
     }
     None
 }
@@ -3173,35 +3540,189 @@ fn format_cors_headers(allowed_origin: Option<&str>) -> String {
     }
 }
 
+static CAST_STREAM_ID_SEQ: AtomicU64 = AtomicU64::new(1);
+
+struct ActiveStreamGuard {
+    id: u64,
+    registry: Arc<Mutex<Vec<(u64, TcpStream)>>>,
+}
+
+impl ActiveStreamGuard {
+    fn register(registry: Arc<Mutex<Vec<(u64, TcpStream)>>>, stream: &TcpStream) -> Self {
+        let id = CAST_STREAM_ID_SEQ.fetch_add(1, Ordering::Relaxed);
+        if let Ok(cloned) = stream.try_clone() {
+            if let Ok(mut list) = registry.lock() {
+                list.push((id, cloned));
+            }
+        }
+        Self { id, registry }
+    }
+}
+
+impl Drop for ActiveStreamGuard {
+    fn drop(&mut self) {
+        if let Ok(mut list) = self.registry.lock() {
+            list.retain(|(entry_id, _)| *entry_id != self.id);
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum HttpHeadError {
+    Closed,
+    Timeout,
+    RequestLineTooLong,
+    HeadersTooLarge,
+    Malformed,
+}
+
+fn find_header_terminator(buf: &[u8]) -> Option<usize> {
+    if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        return Some(pos + 4);
+    }
+    if let Some(pos) = buf.windows(2).position(|w| w == b"\n\n") {
+        return Some(pos + 2);
+    }
+    None
+}
+
+/// Strictly bounded HTTP request-head reader (F06).
+/// Never allocates beyond `MAX_HTTP_HEADER_BYTES`, rejects oversized request lines before
+/// buffering a full line, enforces an absolute header deadline, and rejects premature EOF.
+fn read_http_request_head(
+    stream: &mut TcpStream,
+    timeout: Duration,
+) -> Result<Vec<u8>, HttpHeadError> {
+    let deadline = Instant::now() + timeout;
+    let mut head = Vec::with_capacity(512);
+    let mut chunk = [0u8; 512];
+
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(HttpHeadError::Timeout);
+        }
+        let remaining = deadline.saturating_duration_since(now);
+        let _ = stream.set_read_timeout(Some(remaining.min(Duration::from_secs(2))));
+
+        let max_read = (MAX_HTTP_HEADER_BYTES + 1)
+            .saturating_sub(head.len())
+            .min(chunk.len());
+        if max_read == 0 {
+            return Err(HttpHeadError::HeadersTooLarge);
+        }
+
+        match stream.read(&mut chunk[..max_read]) {
+            Ok(0) => {
+                if head.is_empty() {
+                    return Err(HttpHeadError::Closed);
+                }
+                return Err(HttpHeadError::Malformed);
+            }
+            Ok(n) => {
+                head.extend_from_slice(&chunk[..n]);
+                if let Some(nl_pos) = head.iter().position(|&b| b == b'\n') {
+                    if nl_pos + 1 > MAX_HTTP_REQUEST_LINE_BYTES {
+                        return Err(HttpHeadError::RequestLineTooLong);
+                    }
+                } else if head.len() > MAX_HTTP_REQUEST_LINE_BYTES {
+                    return Err(HttpHeadError::RequestLineTooLong);
+                }
+
+                if let Some(end_idx) = find_header_terminator(&head) {
+                    if end_idx > MAX_HTTP_HEADER_BYTES {
+                        return Err(HttpHeadError::HeadersTooLarge);
+                    }
+                    head.truncate(end_idx);
+                    return Ok(head);
+                }
+
+                if head.len() > MAX_HTTP_HEADER_BYTES {
+                    return Err(HttpHeadError::HeadersTooLarge);
+                }
+            }
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                if Instant::now() >= deadline {
+                    return Err(HttpHeadError::Timeout);
+                }
+            }
+            Err(_) => {
+                return if head.is_empty() {
+                    Err(HttpHeadError::Closed)
+                } else {
+                    Err(HttpHeadError::Malformed)
+                };
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_cast_http_client(
     mut stream: TcpStream,
     bound_ip: String,
     bound_port: u16,
+    running: Arc<AtomicBool>,
+    active_streams: Arc<Mutex<Vec<(u64, TcpStream)>>>,
     session_token: Arc<Mutex<String>>,
     media_path: Arc<Mutex<Option<PathBuf>>>,
     media_title: Arc<Mutex<String>>,
     subtitle_vtt: Arc<Mutex<Option<String>>>,
 ) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _stream_guard = ActiveStreamGuard::register(active_streams, &stream);
     let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
 
-    let mut reader = BufReader::new(match stream.try_clone() {
-        Ok(s) => s,
-        Err(_) => return,
-    });
-
-    let mut request_line = String::new();
-    match reader.read_line(&mut request_line) {
-        Ok(0) | Err(_) => return,
-        Ok(n) if n > 2048 => {
+    let head_bytes = match read_http_request_head(
+        &mut stream,
+        Duration::from_secs(HTTP_HEADER_TIMEOUT_SECS),
+    ) {
+        Ok(b) => b,
+        Err(HttpHeadError::Closed) => return,
+        Err(HttpHeadError::Timeout) => {
+            let _ = stream.write_all(
+                b"HTTP/1.1 408 Request Timeout\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+        Err(HttpHeadError::RequestLineTooLong) => {
             let _ = stream.write_all(
                 b"HTTP/1.1 414 URI Too Long\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             );
             return;
         }
-        Ok(_) => {}
-    }
+        Err(HttpHeadError::HeadersTooLarge) => {
+            let _ = stream.write_all(
+                b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+        Err(HttpHeadError::Malformed) => {
+            let _ = stream.write_all(
+                b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+    };
+
+    let Ok(head_str) = std::str::from_utf8(&head_bytes) else {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    };
+
+    let mut lines = head_str.lines();
+    let Some(request_line) = lines.next() else {
+        let _ = stream.write_all(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        return;
+    };
 
     let mut parts = request_line.split_whitespace();
     let Some(method_raw) = parts.next() else {
@@ -3222,7 +3743,7 @@ fn handle_cast_http_client(
         );
         return;
     };
-    if !http_ver.starts_with("HTTP/1.") || !raw_target.starts_with('/') {
+    if parts.next().is_some() || !http_ver.starts_with("HTTP/1.") || !raw_target.starts_with('/') {
         let _ = stream.write_all(
             b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
         );
@@ -3243,26 +3764,19 @@ fn handle_cast_http_client(
     let mut header_token: Option<String> = None;
     let mut origin_header: Option<String> = None;
     let mut header_count: usize = 0;
-    let mut total_header_bytes: usize = request_line.len();
-    loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => {
-                total_header_bytes = total_header_bytes.saturating_add(n);
-                if total_header_bytes > MAX_HTTP_HEADER_BYTES || header_count >= MAX_HTTP_HEADERS {
-                    let _ = stream.write_all(
-                        b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                    );
-                    return;
-                }
-            }
-        }
-        let trimmed = line.trim();
+
+    for raw_line in lines {
+        let trimmed = raw_line.trim();
         if trimmed.is_empty() {
             break;
         }
         header_count += 1;
+        if header_count > MAX_HTTP_HEADERS {
+            let _ = stream.write_all(
+                b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
         if let Some((k, v)) = trimmed.split_once(':') {
             let key = k.trim();
             if key.eq_ignore_ascii_case("range") {
@@ -3290,6 +3804,13 @@ fn handle_cast_http_client(
             "HTTP/1.1 204 No Content\r\n{cors_headers}Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Range, Content-Type, X-AAZ-Token\r\nConnection: close\r\n\r\n"
         );
         let _ = stream.write_all(resp.as_bytes());
+        return;
+    }
+
+    if !running.load(Ordering::SeqCst) {
+        let _ = stream.write_all(
+            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
         return;
     }
 
@@ -3424,10 +3945,18 @@ fn handle_cast_http_client(
         let mut remaining = content_len;
         let mut buf = [0u8; 65536];
         while remaining > 0 {
+            if !running.load(Ordering::SeqCst) {
+                let _ = stream.shutdown(Shutdown::Both);
+                break;
+            }
             let to_read = (remaining as usize).min(buf.len());
             match file.read(&mut buf[..to_read]) {
                 Ok(0) => break,
                 Ok(n) => {
+                    if !running.load(Ordering::SeqCst) {
+                        let _ = stream.shutdown(Shutdown::Both);
+                        break;
+                    }
                     if stream.write_all(&buf[..n]).is_err() {
                         break;
                     }
@@ -3443,6 +3972,14 @@ fn handle_cast_http_client(
         .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 }
 
+fn shutdown_active_cast_streams(active_streams: &Arc<Mutex<Vec<(u64, TcpStream)>>>) {
+    if let Ok(mut list) = active_streams.lock() {
+        for (_, stream) in list.drain(..) {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+    }
+}
+
 fn stop_cast_server_inner(state: &AppState) -> bool {
     if let Ok(mut guard) = state.cast_server.lock() {
         if let Some(srv) = guard.take() {
@@ -3456,6 +3993,7 @@ fn stop_cast_server_inner(state: &AppState) -> bool {
             if let Ok(mut tok) = srv.session_token.lock() {
                 tok.clear();
             }
+            shutdown_active_cast_streams(&srv.active_streams);
             return true;
         }
     }
@@ -3523,12 +4061,14 @@ fn aaz_cast_start_server(
     let token = generate_session_token()?;
     let running = Arc::new(AtomicBool::new(true));
     let active_connections = Arc::new(AtomicUsize::new(0));
+    let active_streams: Arc<Mutex<Vec<(u64, TcpStream)>>> = Arc::new(Mutex::new(Vec::new()));
     let token_arc = Arc::new(Mutex::new(token.clone()));
     let path_arc = Arc::new(Mutex::new(Some(canon_media)));
     let title_arc = Arc::new(Mutex::new(title));
     let sub_arc = Arc::new(Mutex::new(subtitle_vtt));
 
     let r_flag = running.clone();
+    let streams_clone = active_streams.clone();
     let tok_clone = token_arc.clone();
     let p_clone = path_arc.clone();
     let t_clone = title_arc.clone();
@@ -3548,6 +4088,8 @@ fn aaz_cast_start_server(
                         );
                         continue;
                     };
+                    let rf = r_flag.clone();
+                    let st = streams_clone.clone();
                     let tk = tok_clone.clone();
                     let mp = p_clone.clone();
                     let mt = t_clone.clone();
@@ -3555,7 +4097,7 @@ fn aaz_cast_start_server(
                     let ip = ip_clone.clone();
                     std::thread::spawn(move || {
                         let _guard = conn_guard;
-                        handle_cast_http_client(stream, ip, port, tk, mp, mt, sv);
+                        handle_cast_http_client(stream, ip, port, rf, st, tk, mp, mt, sv);
                     });
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -3574,6 +4116,7 @@ fn aaz_cast_start_server(
         media_path: path_arc,
         media_title: title_arc,
         subtitle_vtt: sub_arc,
+        active_streams,
     });
 
     let base = format!("http://{bound_ip}:{port}");
@@ -3596,7 +4139,7 @@ async fn aaz_cast_discover_devices(state: State<'_, AppState>) -> Result<Vec<Cas
     let devices = tauri::async_runtime::spawn_blocking(|| {
         let mut locations = HashSet::new();
         if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
-            let _ = sock.set_read_timeout(Some(Duration::from_millis(300)));
+            let _ = sock.set_read_timeout(Some(Duration::from_millis(250)));
             let targets = [
                 "urn:schemas-upnp-org:service:AVTransport:1",
                 "urn:schemas-upnp-org:device:MediaRenderer:1",
@@ -3607,10 +4150,16 @@ async fn aaz_cast_discover_devices(state: State<'_, AppState>) -> Result<Vec<Cas
                 );
                 let _ = sock.send_to(req.as_bytes(), "239.255.255.250:1900");
             }
-            let deadline = Instant::now() + Duration::from_millis(1600);
+            // MX: 2 requires waiting at least 2000ms plus network response margin (F16)
+            let deadline = Instant::now() + Duration::from_millis(2600);
             let mut buf = [0u8; 4096];
-            while Instant::now() < deadline {
+            let mut packet_count = 0usize;
+            while Instant::now() < deadline
+                && packet_count < MAX_SSDP_PACKETS
+                && locations.len() < MAX_SSDP_LOCATIONS
+            {
                 if let Ok((n, _)) = sock.recv_from(&mut buf) {
+                    packet_count += 1;
                     let text = String::from_utf8_lossy(&buf[..n]);
                     for line in text.lines() {
                         if let Some((k, v)) = line.split_once(':') {
@@ -3841,15 +4390,25 @@ pub fn run() {
                     }
                 }
             }
-            if let Some(win) = app
-                .get_webview_window("main")
-                .or_else(|| app.webview_windows().values().next().cloned())
-            {
+            let target_win = app
+                .webview_windows()
+                .values()
+                .find(|w| w.is_focused().unwrap_or(false))
+                .cloned()
+                .or_else(|| app.get_webview_window("main"))
+                .or_else(|| app.webview_windows().values().next().cloned());
+
+            if let Some(win) = target_win {
                 let _ = win.unminimize();
                 let _ = win.set_focus();
-            }
-            if !files.is_empty() {
-                let _ = app.emit("aaz:open-external", files);
+                if !files.is_empty() {
+                    let _ = app.emit_to(win.label(), "aaz:open-external", files);
+                }
+            } else if !files.is_empty() {
+                let state = app.state::<AppState>();
+                if let Ok(mut queued) = state.launch_files.lock() {
+                    queued.extend(files);
+                }
             }
         }))
         .register_uri_scheme_protocol("aazmedia", |ctx, req| {
@@ -4318,5 +4877,241 @@ mod tests {
             &wrong_digest
         )
         .is_err());
+    }
+
+    #[test]
+    fn inspect_path_list_assigns_distinct_canonical_keys_for_same_basename() {
+        let root = make_temp_test_dir("f03_keys");
+        let dir_a = root.join("FolderA");
+        let dir_b = root.join("FolderB");
+        fs::create_dir_all(&dir_a).unwrap();
+        fs::create_dir_all(&dir_b).unwrap();
+        let file_a = dir_a.join("movie.mp4");
+        let file_b = dir_b.join("movie.mp4");
+        fs::write(&file_a, b"aaaa").unwrap();
+        fs::write(&file_b, b"bbbb").unwrap();
+
+        let res = inspect_path_list(vec![
+            file_a.to_string_lossy().into_owned(),
+            file_b.to_string_lossy().into_owned(),
+        ]);
+        assert_eq!(res.entries.len(), 2);
+        assert_ne!(res.entries[0].key, res.entries[1].key);
+        assert_eq!(res.entries[0].folder_path, "FolderA");
+        assert_eq!(res.entries[1].folder_path, "FolderB");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn xml_parser_handles_unicode_turkish_i_namespaces_cdata_and_urlbase() {
+        // U+0130 ('İ') expands from 2 bytes to 3 bytes when lowercased; must never panic (F05)
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0" xmlns:u="urn:schemas-upnp-org:service-1-0">
+  <!-- <service><controlURL>/fake</controlURL></service> -->
+  <URLBase>http://192.168.1.50:8080/dlna/root/</URLBase>
+  <device>
+    <friendlyName>İstanbul Salon &amp; TV <![CDATA[<b>4K</b>]]></friendlyName>
+    <manufacturer>İzmir Electronics</manufacturer>
+    <serviceList>
+      <u:service>
+        <u:serviceType>urn:schemas-upnp-org:service:AVTransport:1</u:serviceType>
+        <u:controlURL>upnp/control/AVTransport</u:controlURL>
+      </u:service>
+    </serviceList>
+  </device>
+</root>"#;
+
+        let name = extract_xml_tag(xml, "friendlyName").expect("friendlyName");
+        assert_eq!(name, "İstanbul Salon & TV <b>4K</b>");
+
+        let ctrl = extract_avtransport_control_url(xml, "http://192.168.1.50:8080/desc.xml")
+            .expect("controlURL with URLBase");
+        assert_eq!(ctrl, "http://192.168.1.50:8080/dlna/root/upnp/control/AVTransport");
+
+        // Without URLBase, relative controlURL resolves against description URL directory (F15)
+        let xml_rel = r#"<root><device><serviceList><service>
+            <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+            <controlURL>../ctrl/avt</controlURL>
+        </service></serviceList></device></root>"#;
+        let ctrl_rel =
+            extract_avtransport_control_url(xml_rel, "http://192.168.1.50:8080/upnp/desc/dev.xml")
+                .expect("relative controlURL");
+        assert_eq!(ctrl_rel, "http://192.168.1.50:8080/upnp/ctrl/avt");
+
+        // Public IP in URLBase or controlURL MUST be blocked by LAN SSRF validation
+        let xml_ssrf = r#"<root><device><serviceList><service>
+            <serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>
+            <controlURL>http://8.8.8.8/evil</controlURL>
+        </service></serviceList></device></root>"#;
+        assert!(
+            extract_avtransport_control_url(xml_ssrf, "http://192.168.1.50:8080/desc.xml").is_none()
+        );
+    }
+
+    #[test]
+    fn http_cast_reader_rejects_oversized_line_headers_and_premature_eof() {
+        // 1. Oversized request line -> 414 without reading megabytes (F06)
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        let streams = Arc::new(Mutex::new(Vec::new()));
+        let token = Arc::new(Mutex::new("secret".to_string()));
+        let media = Arc::new(Mutex::new(None));
+        let title = Arc::new(Mutex::new("Test".to_string()));
+        let sub = Arc::new(Mutex::new(None));
+
+        let srv_running = running.clone();
+        let srv_streams = streams.clone();
+        let srv_token = token.clone();
+        let srv_media = media.clone();
+        let srv_title = title.clone();
+        let srv_sub = sub.clone();
+        let handle = std::thread::spawn(move || {
+            for _ in 0..2 {
+                if let Ok((sock, _)) = listener.accept() {
+                    handle_cast_http_client(
+                        sock,
+                        "127.0.0.1".to_string(),
+                        addr.port(),
+                        srv_running.clone(),
+                        srv_streams.clone(),
+                        srv_token.clone(),
+                        srv_media.clone(),
+                        srv_title.clone(),
+                        srv_sub.clone(),
+                    );
+                }
+            }
+        });
+
+        let mut c1 = TcpStream::connect(addr).unwrap();
+        let huge_line = format!("GET /{} HTTP/1.1\r\n\r\n", "a".repeat(5000));
+        let _ = c1.write_all(huge_line.as_bytes());
+        let mut resp1 = String::new();
+        let _ = c1.read_to_string(&mut resp1);
+        assert!(resp1.starts_with("HTTP/1.1 414"));
+
+        // 2. Premature EOF before \r\n\r\n -> 400 Bad Request
+        let mut c2 = TcpStream::connect(addr).unwrap();
+        let _ = c2.write_all(b"GET /info?token=secret HTTP/1.1\r\nHost: localhost");
+        let _ = c2.shutdown(Shutdown::Write);
+        let mut resp2 = String::new();
+        let _ = c2.read_to_string(&mut resp2);
+        assert!(resp2.starts_with("HTTP/1.1 400"));
+
+        let _ = handle.join();
+    }
+
+    #[test]
+    fn cast_stop_immediately_terminates_active_media_stream() {
+        let dir = make_temp_test_dir("f07_stop");
+        let media_file = dir.join("large.mp4");
+        fs::write(&media_file, vec![0x55u8; 4 * 1024 * 1024]).unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        let active_streams: Arc<Mutex<Vec<(u64, TcpStream)>>> = Arc::new(Mutex::new(Vec::new()));
+        let token = Arc::new(Mutex::new("tok123".to_string()));
+        let media_path = Arc::new(Mutex::new(Some(media_file.clone())));
+        let title = Arc::new(Mutex::new("Movie".to_string()));
+        let sub = Arc::new(Mutex::new(None));
+
+        let srv_r = running.clone();
+        let srv_s = active_streams.clone();
+        let srv_t = token.clone();
+        let srv_m = media_path.clone();
+        let srv_title = title.clone();
+        let srv_sub = sub.clone();
+        let srv_thread = std::thread::spawn(move || {
+            if let Ok((sock, _)) = listener.accept() {
+                handle_cast_http_client(
+                    sock,
+                    "127.0.0.1".to_string(),
+                    addr.port(),
+                    srv_r,
+                    srv_s,
+                    srv_t,
+                    srv_m,
+                    srv_title,
+                    srv_sub,
+                );
+            }
+        });
+
+        let mut client = TcpStream::connect(addr).unwrap();
+        client
+            .write_all(b"GET /media?token=tok123 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        // Read just the initial response headers so streaming is actively in flight
+        let mut head_chunk = [0u8; 256];
+        let _ = client.read(&mut head_chunk);
+
+        // Simulate Stop Cast Server: flip running=false and shut down active sockets (F07)
+        running.store(false, Ordering::SeqCst);
+        shutdown_active_cast_streams(&active_streams);
+
+        let started = Instant::now();
+        let _ = srv_thread.join();
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "active cast stream should terminate promptly on stop"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn subtitle_scoring_honors_preferred_lang_and_blocks_episode_mismatch() {
+        let ar_pref_ar = score_subtitle_candidate(
+            "Show.S01E01.mp4",
+            "Show.S01E01.ar.srt",
+            0,
+            false,
+            2,
+            Some("ar"),
+            Some("en"),
+        );
+        let ar_pref_en = score_subtitle_candidate(
+            "Show.S01E01.mp4",
+            "Show.S01E01.en.srt",
+            0,
+            false,
+            2,
+            Some("ar"),
+            Some("en"),
+        );
+        assert!(ar_pref_ar > ar_pref_en);
+
+        let en_pref_en = score_subtitle_candidate(
+            "Show.S01E01.mp4",
+            "Show.S01E01.en.srt",
+            0,
+            false,
+            2,
+            Some("en"),
+            Some("ar"),
+        );
+        let en_pref_ar = score_subtitle_candidate(
+            "Show.S01E01.mp4",
+            "Show.S01E01.ar.srt",
+            0,
+            false,
+            2,
+            Some("en"),
+            Some("ar"),
+        );
+        assert!(en_pref_en > en_pref_ar);
+
+        // Wrong episode must score 0 even with preferred language tag
+        let wrong_ep = score_subtitle_candidate(
+            "Show.S01E01.mp4",
+            "Show.S01E02.ar.srt",
+            0,
+            true,
+            1,
+            Some("ar"),
+            Some("ar"),
+        );
+        assert_eq!(wrong_ep, 0);
     }
 }

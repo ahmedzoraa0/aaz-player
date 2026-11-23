@@ -10,6 +10,7 @@
  */
 
 import { SKIN_IDS } from '../modules/themes-catalog.js';
+import { sanitizeSubtitleStyle as sanitizeSharedSubtitleStyle } from '../modules/subtitle-style.js';
 
 export const TAB_TO_SHELL_TYPES = Object.freeze(
   new Set([
@@ -48,24 +49,7 @@ function sanitizeString(val, maxLen = 256) {
 }
 
 function sanitizeSubtitleStyle(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const out = {};
-  if (typeof raw.fontFamily === 'string') out.fontFamily = raw.fontFamily.slice(0, 120);
-  if (typeof raw.fontSize === 'number' && Number.isFinite(raw.fontSize)) {
-    out.fontSize = Math.min(200, Math.max(50, raw.fontSize));
-  }
-  if (typeof raw.color === 'string') out.color = raw.color.slice(0, 32);
-  if (typeof raw.bgColor === 'string') out.bgColor = raw.bgColor.slice(0, 32);
-  if (typeof raw.bgOpacity === 'number' && Number.isFinite(raw.bgOpacity)) {
-    out.bgOpacity = Math.min(1, Math.max(0, raw.bgOpacity));
-  }
-  if (typeof raw.edgeStyle === 'string') out.edgeStyle = raw.edgeStyle.slice(0, 32);
-  if (typeof raw.bold === 'boolean') out.bold = raw.bold;
-  if (typeof raw.italic === 'boolean') out.italic = raw.italic;
-  if (typeof raw.position === 'number' && Number.isFinite(raw.position)) {
-    out.position = Math.min(50, Math.max(0, raw.position));
-  }
-  return out;
+  return sanitizeSharedSubtitleStyle(raw, { partial: true });
 }
 
 /**

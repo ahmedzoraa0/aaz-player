@@ -10,14 +10,20 @@
  * - Supports full JSON Backup Export & validated Restore.
  */
 
+import { sanitizeSubtitleStyle } from './subtitle-style.js';
+
 export const SCHEMA_VERSION = 4;
 export const STORAGE_KEY = 'aaz_media_player_state_v4';
 export const BACKUP_PRE_V4_KEY = 'aaz_media_player_backup_v3';
+export const BACKUP_PRE_RESTORE_KEY = 'aaz_media_player_pre_restore_backup';
 export const LEGACY_KEYS = Object.freeze([
   'aaz_media_player_state_v3',
   'aaz_media_player_state_v2',
   'aaz_media_player_state_v1',
 ]);
+
+const MAX_BOOKMARK_SECONDS = 86400 * 14; // 14 days upper bound for finite timestamps
+const MAX_BACKUP_JSON_BYTES = 8 * 1024 * 1024; // 8 MB backup safety cap
 
 export const DEFAULT_PLAYBACK_SETTINGS = Object.freeze({
   defaultPlaybackRate: 1,
@@ -89,6 +95,33 @@ function clamp(num, min, max, fallback) {
   const n = Number(num);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Unifies and sanitizes a track's timestamp bookmark list (F02).
+ * Accepts both canonical `number[]` and legacy `{ time: number }[]` objects,
+ * drops non-finite / negative / out-of-range values, deduplicates, and sorts ascending.
+ */
+export function sanitizeBookmarkList(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  const seen = new Set();
+  const clean = [];
+  for (const item of rawList) {
+    let rawTime = NaN;
+    if (typeof item === 'number') {
+      rawTime = item;
+    } else if (item && typeof item === 'object' && !Array.isArray(item) && item.time !== undefined) {
+      rawTime = Number(item.time);
+    }
+    if (!Number.isFinite(rawTime) || rawTime < 0 || rawTime > MAX_BOOKMARK_SECONDS) continue;
+    const sec = Math.floor(rawTime);
+    if (seen.has(sec)) continue;
+    seen.add(sec);
+    clean.push(sec);
+    if (clean.length >= 200) break;
+  }
+  clean.sort((a, b) => a - b);
+  return clean;
 }
 
 export function sanitizePlaybackSettings(raw) {
@@ -182,11 +215,23 @@ export function sanitizeState(raw) {
 
   if (raw.progressByKey && typeof raw.progressByKey === 'object' && !Array.isArray(raw.progressByKey)) {
     const cleanProg = {};
+    let count = 0;
     for (const [k, v] of Object.entries(raw.progressByKey)) {
-      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) {
+      if (count >= 10000) break;
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_BOOKMARK_SECONDS) {
         cleanProg[k] = v;
-      } else if (v && typeof v === 'object') {
-        cleanProg[k] = v;
+        count += 1;
+      } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const t = Number(v.time);
+        const d = Number(v.duration);
+        if (Number.isFinite(t) && t >= 0 && t <= MAX_BOOKMARK_SECONDS) {
+          cleanProg[k] = {
+            time: t,
+            duration: Number.isFinite(d) && d >= 0 && d <= MAX_BOOKMARK_SECONDS ? d : 0,
+            updatedAt: Number.isFinite(Number(v.updatedAt)) ? Number(v.updatedAt) : Date.now(),
+          };
+          count += 1;
+        }
       }
     }
     out.progressByKey = cleanProg;
@@ -194,28 +239,31 @@ export function sanitizeState(raw) {
 
   if (raw.bookmarksByKey && typeof raw.bookmarksByKey === 'object' && !Array.isArray(raw.bookmarksByKey)) {
     const cleanBm = {};
+    let count = 0;
     for (const [k, list] of Object.entries(raw.bookmarksByKey)) {
-      if (!Array.isArray(list)) continue;
-      cleanBm[k] = list
-        .filter((b) => b && typeof b === 'object' && Number.isFinite(Number(b.time)))
-        .slice(0, 200);
+      if (count >= 5000) break;
+      const sanitizedList = sanitizeBookmarkList(list);
+      if (sanitizedList.length > 0) {
+        cleanBm[k] = sanitizedList;
+        count += 1;
+      }
     }
     out.bookmarksByKey = cleanBm;
   }
 
   // Optional active session fields
-  if (typeof raw.trackKey === 'string') out.trackKey = raw.trackKey;
+  if (typeof raw.trackKey === 'string') out.trackKey = raw.trackKey.slice(0, 1024);
   else delete out.trackKey;
-  if (typeof raw.trackName === 'string') out.trackName = raw.trackName;
+  if (typeof raw.trackName === 'string') out.trackName = raw.trackName.slice(0, 260);
   else delete out.trackName;
   if (typeof raw.trackFullPath === 'string' && raw.trackFullPath.trim()) {
     out.trackFullPath = raw.trackFullPath.slice(0, 1024);
   } else {
     delete out.trackFullPath;
   }
-  if (typeof raw.folderName === 'string') out.folderName = raw.folderName;
+  if (typeof raw.folderName === 'string') out.folderName = raw.folderName.slice(0, 260);
   else delete out.folderName;
-  if (typeof raw.nativeFolderPath === 'string') out.nativeFolderPath = raw.nativeFolderPath;
+  if (typeof raw.nativeFolderPath === 'string') out.nativeFolderPath = raw.nativeFolderPath.slice(0, 1024);
   else delete out.nativeFolderPath;
   if (Array.isArray(raw.nativeTrackPaths)) {
     out.nativeTrackPaths = raw.nativeTrackPaths
@@ -226,12 +274,12 @@ export function sanitizeState(raw) {
     out.nativeTrackPaths = [];
   }
   if (typeof raw.currentTime === 'number' && Number.isFinite(raw.currentTime)) {
-    out.currentTime = Math.max(0, raw.currentTime);
+    out.currentTime = Math.max(0, Math.min(MAX_BOOKMARK_SECONDS, raw.currentTime));
   } else {
     delete out.currentTime;
   }
   if (typeof raw.activeSavedPlaylistId === 'string') {
-    out.activeSavedPlaylistId = raw.activeSavedPlaylistId;
+    out.activeSavedPlaylistId = raw.activeSavedPlaylistId.slice(0, 128);
   } else {
     delete out.activeSavedPlaylistId;
   }
@@ -327,7 +375,7 @@ export function sanitizeState(raw) {
         x: typeof m.x === 'number' && Number.isFinite(m.x) ? Math.round(m.x) : null,
         y: typeof m.y === 'number' && Number.isFinite(m.y) ? Math.round(m.y) : null,
         width: clamp(m.width, 300, 1000, DEFAULT_WINDOW_LAYOUT.mini.width),
-        height: clamp(m.height, 190, 720, DEFAULT_WINDOW_LAYOUT.mini.height),
+        height: clamp(m.height, 150, 720, DEFAULT_WINDOW_LAYOUT.mini.height),
         alwaysOnTop:
           typeof m.alwaysOnTop === 'boolean' ? m.alwaysOnTop : DEFAULT_WINDOW_LAYOUT.mini.alwaysOnTop,
       };
@@ -362,8 +410,14 @@ export function migrateStateObject(raw) {
 
 /**
  * Creates a Storage Manager bound to a Storage-like backend (defaults to window.localStorage).
+ *
+ * Uses read-latest-modify-write (`update`) and same-document subscriber notification
+ * so independent controllers (player-app, phase3-controller, window-layout) never
+ * overwrite each other's changes with a stale full-state snapshot (F01).
  */
 export function createStorageManager(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  const listeners = new Set();
+
   function safeGetItem(key) {
     try {
       return storage ? storage.getItem(key) : null;
@@ -373,12 +427,31 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
   }
 
   function safeSetItem(key, val) {
+    if (!storage || typeof storage.setItem !== 'function') {
+      return false;
+    }
     try {
-      if (storage) storage.setItem(key, val);
+      storage.setItem(key, val);
       return true;
     } catch {
       return false;
     }
+  }
+
+  function notifyListeners(cleanState, changedKeys) {
+    for (const fn of listeners) {
+      try {
+        fn(cleanState, changedKeys);
+      } catch {
+        // Isolate subscriber failures
+      }
+    }
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== 'function') return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
   function load() {
@@ -414,11 +487,51 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
 
   function save(data) {
     const clean = sanitizeState(data);
-    return safeSetItem(STORAGE_KEY, JSON.stringify(clean));
+    clean.updatedAt = Date.now();
+    const ok = safeSetItem(STORAGE_KEY, JSON.stringify(clean));
+    if (ok) {
+      notifyListeners(clean, null);
+    }
+    return ok;
+  }
+
+  /**
+   * Atomically loads the freshest snapshot from storage, applies a partial object patch
+   * or targeted mutator function to ONLY the fields owned by the caller, and writes back.
+   * Prevents stale caches from wiping unrelated domains (playlists, bookmarks, history, settings, geometry).
+   */
+  function update(patchOrMutator) {
+    const latest = load();
+    let next = latest;
+    let changedKeys = null;
+
+    if (typeof patchOrMutator === 'function') {
+      const result = patchOrMutator(latest);
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        next = result;
+      }
+    } else if (patchOrMutator && typeof patchOrMutator === 'object' && !Array.isArray(patchOrMutator)) {
+      changedKeys = Object.keys(patchOrMutator);
+      next = { ...latest, ...patchOrMutator };
+    } else {
+      return { ok: false, state: latest, error: 'Invalid update payload' };
+    }
+
+    const clean = sanitizeState(next);
+    clean.updatedAt = Date.now();
+    const ok = safeSetItem(STORAGE_KEY, JSON.stringify(clean));
+    if (ok) {
+      notifyListeners(clean, changedKeys);
+      return { ok: true, state: clean };
+    }
+    return { ok: false, state: latest, error: 'Storage quota exceeded or unavailable' };
   }
 
   function exportBackupJson(extraPrefs = {}) {
     const state = load();
+    const cleanSubStyle = extraPrefs.subtitleStyle
+      ? sanitizeSubtitleStyle(extraPrefs.subtitleStyle)
+      : null;
     const payload = {
       app: 'AAZ Player',
       backupFormat: 'aaz-backup-v1',
@@ -426,19 +539,23 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
       exportedAt: new Date().toISOString(),
       state,
       prefs: {
-        theme: extraPrefs.theme || safeGetItem('aaz_theme') || 'dark',
-        skin: extraPrefs.skin || safeGetItem('aaz_skin') || 'foliage',
-        lang: extraPrefs.lang || safeGetItem('aaz_lang') || 'en',
-        subtitleStyle: extraPrefs.subtitleStyle || null,
+        theme: extraPrefs.theme === 'light' ? 'light' : (safeGetItem('aaz_theme') || 'dark'),
+        skin: typeof extraPrefs.skin === 'string' ? extraPrefs.skin : (safeGetItem('aaz_skin') || 'foliage'),
+        lang: extraPrefs.lang === 'ar' ? 'ar' : (safeGetItem('aaz_lang') || 'en'),
+        subtitleStyle: cleanSubStyle,
       },
     };
     return JSON.stringify(payload, null, 2);
   }
 
   function importBackupJson(jsonText) {
+    const rawText = String(jsonText || '');
+    if (rawText.length > MAX_BACKUP_JSON_BYTES) {
+      return { ok: false, error: 'Backup file exceeds maximum supported size (8 MB)' };
+    }
     let parsed;
     try {
-      parsed = JSON.parse(String(jsonText || ''));
+      parsed = JSON.parse(rawText);
     } catch {
       return { ok: false, error: 'Invalid JSON syntax' };
     }
@@ -457,23 +574,59 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
       return { ok: false, error: 'Unrecognized AAZ Player backup structure' };
     }
 
+    // Save a pre-restore rollback snapshot before replacing user state
+    const existingRaw = safeGetItem(STORAGE_KEY);
+    if (existingRaw) {
+      safeSetItem(BACKUP_PRE_RESTORE_KEY, existingRaw);
+    }
+
     const sanitized = migrateStateObject(rawState);
     const saved = save(sanitized);
     if (!saved) {
       return { ok: false, error: 'Storage quota exceeded or unavailable' };
     }
 
+    let cleanPrefs = null;
+    if (parsed.prefs && typeof parsed.prefs === 'object' && !Array.isArray(parsed.prefs)) {
+      cleanPrefs = {
+        theme: parsed.prefs.theme === 'light' ? 'light' : parsed.prefs.theme === 'dark' ? 'dark' : undefined,
+        skin: typeof parsed.prefs.skin === 'string' ? parsed.prefs.skin.slice(0, 40) : undefined,
+        lang: parsed.prefs.lang === 'ar' ? 'ar' : parsed.prefs.lang === 'en' ? 'en' : undefined,
+        subtitleStyle: parsed.prefs.subtitleStyle
+          ? sanitizeSubtitleStyle(parsed.prefs.subtitleStyle)
+          : undefined,
+      };
+    }
+
     return {
       ok: true,
       state: sanitized,
-      prefs: parsed.prefs && typeof parsed.prefs === 'object' ? parsed.prefs : null,
+      prefs: cleanPrefs,
+      rollbackKey: existingRaw ? BACKUP_PRE_RESTORE_KEY : null,
     };
+  }
+
+  function rollbackLastRestore() {
+    const prevRaw = safeGetItem(BACKUP_PRE_RESTORE_KEY);
+    if (!prevRaw) return { ok: false, error: 'No pre-restore backup available' };
+    try {
+      const prevState = sanitizeState(JSON.parse(prevRaw));
+      const ok = save(prevState);
+      return ok
+        ? { ok: true, state: prevState }
+        : { ok: false, error: 'Storage quota exceeded or unavailable' };
+    } catch {
+      return { ok: false, error: 'Pre-restore backup is corrupted' };
+    }
   }
 
   return {
     load,
     save,
+    update,
+    subscribe,
     exportBackupJson,
     importBackupJson,
+    rollbackLastRestore,
   };
 }

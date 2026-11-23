@@ -84,8 +84,10 @@ const P3_I18N = {
     scPressKey: 'Press key...',
     scResetAll: 'Reset All Defaults',
     scConflictMsg: '"{key}" is already assigned to "{action}".',
+    scReservedMsg: '"{key}" is reserved by the app window or system.',
     scOverrideBtn: 'Replace',
     scUpdated: 'Updated shortcut for "{action}" to {key}.',
+    scResetOneDone: 'Restored default shortcut for "{action}" ({key}).',
     scResetDone: 'All keyboard shortcuts restored to defaults.',
     settingsTitle: 'Playback Settings',
     setSpeed: 'Default Playback Speed',
@@ -102,8 +104,8 @@ const P3_I18N = {
     setAudioSysDefault: 'System Default Output',
     setHistoryRec: 'Record Watch History',
     setHistoryRecSub: 'Save recently played files and timestamps locally on this device.',
-    setHwAccel: 'Graphics / Hardware Acceleration',
-    setHwActive: 'Hardware Accelerated',
+    setHwAccel: 'WebGL Graphics Renderer',
+    setHwActive: 'WebGL GPU Active',
     setHwSoftware: 'Software Fallback',
     setBackupHeading: 'Backup & Restore Data',
     setBackupDesc: 'Export or restore your saved playlists, watch history, media library, shortcuts, and settings as JSON.',
@@ -111,6 +113,7 @@ const P3_I18N = {
     setImportBackup: 'Restore Backup...',
     setResetDefaults: 'Reset Settings',
     setSavedNotice: 'Playback settings updated.',
+    setSaveFailedNotice: 'Could not save changes — local storage is full or unavailable.',
     setBackupExported: 'Backup exported successfully.',
     setBackupRestored: 'Backup restored successfully.',
   },
@@ -171,8 +174,10 @@ const P3_I18N = {
     scPressKey: 'اضغط مفتاحاً...',
     scResetAll: 'استعادة الافتراضي',
     scConflictMsg: 'الاختصار "{key}" مستخدم بالفعل لـ "{action}".',
+    scReservedMsg: 'الاختصار "{key}" محجوز لإدارة النوافذ أو التبويبات.',
     scOverrideBtn: 'استبدال',
     scUpdated: 'تم تحديث اختصار "{action}" إلى {key}.',
+    scResetOneDone: 'تمت استعادة الاختصار الافتراضي لـ "{action}" ({key}).',
     scResetDone: 'تمت استعادة جميع الاختصارات الافتراضية.',
     settingsTitle: 'إعدادات التشغيل',
     setSpeed: 'سرعة التشغيل الافتراضية',
@@ -189,8 +194,8 @@ const P3_I18N = {
     setAudioSysDefault: 'مخرج النظام الافتراضي',
     setHistoryRec: 'تسجيل سجل المشاهدة',
     setHistoryRecSub: 'حفظ المقاطع التي تم تشغيلها مؤخراً محلياً على جهازك فقط.',
-    setHwAccel: 'الرسوميات وتسريع العتاد',
-    setHwActive: 'تسريع العتاد نشط',
+    setHwAccel: 'معالج رسوميات WebGL',
+    setHwActive: 'معالج WebGL نشط',
     setHwSoftware: 'وضع المعالجة البرمجية',
     setBackupHeading: 'النسخ الاحتياطي والاستعادة',
     setBackupDesc: 'تصدير أو استعادة القوائم المحفوظة وسجل المشاهدة والمكتبة والاختصارات والإعدادات كملف JSON.',
@@ -198,6 +203,7 @@ const P3_I18N = {
     setImportBackup: 'استعادة نسخة...',
     setResetDefaults: 'استعادة الإعدادات',
     setSavedNotice: 'تم حفظ إعدادات التشغيل.',
+    setSaveFailedNotice: 'تعذّر حفظ التغييرات — مساحة التخزين المحلية ممتلئة أو غير متاحة.',
     setBackupExported: 'تم تصدير النسخة الاحتياطية بنجاح.',
     setBackupRestored: 'تمت استعادة النسخة الاحتياطية بنجاح.',
   },
@@ -205,6 +211,15 @@ const P3_I18N = {
 
 export function createPhase3Controller(api) {
   let storeCache = api.storageManager.load();
+  let lastPersistOk = true;
+
+  if (typeof api.storageManager.subscribe === 'function') {
+    api.storageManager.subscribe((freshState) => {
+      if (freshState && typeof freshState === 'object') {
+        storeCache = freshState;
+      }
+    });
+  }
 
   function getStore() {
     if (!storeCache) {
@@ -217,8 +232,25 @@ export function createPhase3Controller(api) {
     storeCache = api.storageManager.load();
   }
 
-  function persistStore() {
-    api.storageManager.save(storeCache);
+  function persistDomain(domainKey) {
+    const domainValue = storeCache ? storeCache[domainKey] : undefined;
+    if (typeof api.storageManager.update === 'function') {
+      const res = api.storageManager.update((latest) => {
+        latest[domainKey] = domainValue;
+        return latest;
+      });
+      storeCache = res.state;
+      lastPersistOk = Boolean(res.ok);
+      if (!res.ok) {
+        api.showNotice?.(p3t('setSaveFailedNotice'), true);
+      }
+      return lastPersistOk;
+    }
+    lastPersistOk = Boolean(api.storageManager.save(storeCache));
+    if (!lastPersistOk) {
+      api.showNotice?.(p3t('setSaveFailedNotice'), true);
+    }
+    return lastPersistOk;
   }
 
   function p3t(key, vars = {}) {
@@ -229,24 +261,25 @@ export function createPhase3Controller(api) {
 
   const settingsManager = createSettingsManager({
     getStore,
-    persist: persistStore,
+    persist: () => persistDomain('playbackSettings'),
   });
 
   const historyManager = createHistoryManager({
     getStore,
-    persist: persistStore,
+    persist: () => persistDomain('watchHistory'),
     isRecordingEnabled: () => settingsManager.get().recordWatchHistory,
   });
 
   const libraryManager = createLibraryManager({
     getStore,
-    persist: persistStore,
+    persist: () => persistDomain('mediaLibrary'),
   });
 
   const shortcutsManager = createShortcutsManager({
     getStore,
-    persist: persistStore,
+    persist: () => persistDomain('customShortcuts'),
   });
+  shortcutsManager.normalizeStoredConflicts?.();
 
   // UI state
   const uiState = {
@@ -873,8 +906,35 @@ export function createPhase3Controller(api) {
         resetOne.title = p3t('scResetAll');
         resetOne.textContent = '↺';
         resetOne.addEventListener('click', () => {
-          shortcutsManager.resetBinding(item.id);
-          renderShortcutsEditor();
+          const res = shortcutsManager.resetBinding(item.id, { allowOverride: false });
+          if (res && !res.ok && res.reason === 'conflict') {
+            uiState.pendingConflict = {
+              mode: 'reset',
+              actionId: item.id,
+              combo: res.key,
+              conflict: res.conflict,
+            };
+            if (dom.shortcutsConflictBar && dom.shortcutsConflictText) {
+              const conflictLabel = isAr ? res.conflict.labelAr : res.conflict.labelEn;
+              dom.shortcutsConflictText.textContent = p3t('scConflictMsg', {
+                key: res.key,
+                action: conflictLabel,
+              });
+              dom.shortcutsConflictBar.hidden = false;
+            }
+            return;
+          }
+          if (res && res.ok) {
+            uiState.pendingConflict = null;
+            hideConflictBar();
+            renderShortcutsEditor();
+            api.showNotice(
+              p3t('scResetOneDone', {
+                action: isAr ? item.labelAr : item.labelEn,
+                key: res.key,
+              })
+            );
+          }
         });
         right.appendChild(resetOne);
       }
@@ -910,8 +970,15 @@ export function createPhase3Controller(api) {
     const res = shortcutsManager.setBinding(actionId, combo, { allowOverride: false });
     const isAr = api.getLang() === 'ar';
 
+    if (!res.ok && res.reason === 'reserved') {
+      uiState.pendingConflict = null;
+      hideConflictBar();
+      api.showNotice(p3t('scReservedMsg', { key: res.key || combo }), true);
+      return true;
+    }
+
     if (!res.ok && res.reason === 'conflict') {
-      uiState.pendingConflict = { actionId, combo, conflict: res.conflict };
+      uiState.pendingConflict = { mode: 'set', actionId, combo, conflict: res.conflict };
       if (dom.shortcutsConflictBar && dom.shortcutsConflictText) {
         const conflictLabel = isAr ? res.conflict.labelAr : res.conflict.labelEn;
         dom.shortcutsConflictText.textContent = p3t('scConflictMsg', {
@@ -1385,8 +1452,12 @@ export function createPhase3Controller(api) {
     if (dom.shortcutsConflictOverrideBtn) {
       dom.shortcutsConflictOverrideBtn.addEventListener('click', () => {
         if (!uiState.pendingConflict) return;
-        const { actionId, combo } = uiState.pendingConflict;
-        shortcutsManager.setBinding(actionId, combo, { allowOverride: true });
+        const { mode, actionId, combo } = uiState.pendingConflict;
+        if (mode === 'reset') {
+          shortcutsManager.resetBinding(actionId, { allowOverride: true });
+        } else {
+          shortcutsManager.setBinding(actionId, combo, { allowOverride: true });
+        }
         uiState.capturingActionId = null;
         uiState.pendingConflict = null;
         hideConflictBar();
@@ -1412,7 +1483,7 @@ export function createPhase3Controller(api) {
         const rate = parseFloat(e.target.value) || 1;
         settingsManager.update({ defaultPlaybackRate: rate });
         api.setPlaybackRate(rate);
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
     if (dom.setDefaultVolume) {
@@ -1428,13 +1499,13 @@ export function createPhase3Controller(api) {
     if (dom.setResumeToggle) {
       dom.setResumeToggle.addEventListener('change', (e) => {
         settingsManager.update({ resumePreviousPosition: e.target.checked });
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
     if (dom.setSubtitleLang) {
       dom.setSubtitleLang.addEventListener('change', (e) => {
         settingsManager.update({ defaultSubtitleLang: e.target.value });
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
     if (dom.setOpenSubStyleBtn) {
@@ -1453,7 +1524,7 @@ export function createPhase3Controller(api) {
       dom.setDefaultAspect.addEventListener('change', (e) => {
         settingsManager.update({ defaultAspectRatio: e.target.value });
         api.setVideoAspect(e.target.value);
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
     if (dom.setAudioDevice) {
@@ -1468,7 +1539,7 @@ export function createPhase3Controller(api) {
       dom.setHistoryRecToggle.addEventListener('change', (e) => {
         settingsManager.update({ recordWatchHistory: e.target.checked });
         renderHistory();
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
     if (dom.setResetBtn) {
@@ -1479,7 +1550,7 @@ export function createPhase3Controller(api) {
         api.setVideoAspect(def.defaultAspectRatio);
         syncSettingsModalUI();
         renderHistory();
-        api.showNotice(p3t('setSavedNotice'));
+        if (lastPersistOk) api.showNotice(p3t('setSavedNotice'));
       });
     }
 
@@ -1520,6 +1591,7 @@ export function createPhase3Controller(api) {
             return;
           }
           storeCache = res.state;
+          shortcutsManager.normalizeStoredConflicts?.();
           api.onBackupRestored(res.state, res.prefs);
           renderHistory();
           renderLibrary();
@@ -1548,6 +1620,7 @@ export function createPhase3Controller(api) {
     shortcutsManager,
     p3t,
     getSavedSearchQuery: () => uiState.savedSearch,
+    getPlaybackSettings: () => settingsManager.get(),
     shouldResumePosition: () => settingsManager.get().resumePreviousPosition,
     applyTranslations,
     renderHistory,

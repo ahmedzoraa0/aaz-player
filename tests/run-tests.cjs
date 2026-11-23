@@ -68,6 +68,9 @@ async function main() {
   const libraryMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/library-manager.js')).href);
   const shortcutsMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/shortcuts-manager.js')).href);
   const settingsMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/settings-manager.js')).href);
+  const subtitleStyleMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/subtitle-style.js')).href);
+  const trackIdMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/track-identity.js')).href);
+  const subMatcherMod = await import(pathToFileURL(path.join(ROOT, 'js/modules/subtitle-matcher.js')).href);
 
   // 1. JS Syntax Validation
   await runTest('All ES module files in js/ pass Node syntax check', () => {
@@ -589,9 +592,18 @@ async function main() {
     assert.equal(sm.getBinding('mute'), '', 'Overridden action must remain unbound');
     assert.equal(sm.matchAction({ key: 'm', code: 'KeyM', target: { tagName: 'BODY' } }), 'fullscreen');
 
-    // Resetting restores default
-    sm.resetBinding('mute');
+    // Resetting without override detects conflict with fullscreen ('M')
+    const resetBlocked = sm.resetBinding('mute');
+    assert.equal(resetBlocked.ok, false);
+    assert.equal(resetBlocked.reason, 'conflict');
+    assert.equal(resetBlocked.conflict.id, 'fullscreen');
+    assert.equal(sm.getBinding('mute'), '');
+
+    // Resetting with allowOverride restores default and unbinds conflicting action
+    const resetOk = sm.resetBinding('mute', { allowOverride: true });
+    assert.equal(resetOk.ok, true);
     assert.equal(sm.getBinding('mute'), 'M');
+    assert.equal(sm.getBinding('fullscreen'), '');
 
     // Range/button/checkbox/radio inputs must NOT block playback shortcuts; text/empty inputs MUST block
     assert.equal(
@@ -737,6 +749,301 @@ async function main() {
 
     const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
     assert.ok(changelog.includes(`## [${deskPkg.version}]`), `CHANGELOG.md must contain section ## [${deskPkg.version}]`);
+  });
+
+  // 21. F01: Atomic Storage Updates, Deleting Last Playlist & Storage-Full Safety
+  await runTest('F01: atomic storage updates preserve concurrent domains, honor last-playlist delete & report quota errors', () => {
+    const mem = createMemoryStorage();
+    const sm = storageMod.createStorageManager(mem);
+    let notifyCount = 0;
+    const unsub = sm.subscribe(() => {
+      notifyCount += 1;
+    });
+
+    // Simulate player saving a playlist + session + bookmark
+    const r1 = sm.update({
+      trackKey: 'c:/a/movie.mp4',
+      currentTime: 45,
+      savedPlaylists: [{ id: 'pl_1', name: 'Watchlist', trackCount: 1, trackKeys: ['c:/a/movie.mp4'] }],
+      bookmarksByKey: { 'c:/a/movie.mp4': [12, 45] },
+    });
+    assert.equal(r1.ok, true);
+
+    // Simulate Phase 3 domain update (history) via domain-scoped atomic persist
+    let phase3Snap = sm.load();
+    const hm = historyMod.createHistoryManager({
+      getStore: () => {
+        phase3Snap = sm.load();
+        return phase3Snap;
+      },
+      persist: () => sm.update({ watchHistory: phase3Snap.watchHistory }),
+      isRecordingEnabled: () => true,
+    });
+    hm.recordPlay({ title: 'Movie', name: 'movie.mp4', kind: 'video', fullPath: 'C:/A/movie.mp4' }, 45, 300);
+
+    const afterHistory = sm.load();
+    assert.equal(afterHistory.savedPlaylists.length, 1, 'History write must not wipe savedPlaylists');
+    assert.equal(afterHistory.trackKey, 'c:/a/movie.mp4', 'History write must not wipe session trackKey');
+    assert.equal(afterHistory.currentTime, 45, 'History write must not wipe currentTime');
+    assert.deepEqual(afterHistory.bookmarksByKey['c:/a/movie.mp4'], [12, 45]);
+    assert.equal(afterHistory.watchHistory.length, 1);
+
+    // Delete last playlist, then write settings — deleted playlist must NOT resurrect
+    sm.update({ savedPlaylists: [] });
+    sm.update((latest) => {
+      latest.playbackSettings.defaultPlaybackRate = 1.5;
+    });
+    const afterDelete = sm.load();
+    assert.equal(afterDelete.savedPlaylists.length, 0, 'Deleted last playlist must not resurrect');
+    assert.equal(afterDelete.playbackSettings.defaultPlaybackRate, 1.5);
+    assert.ok(notifyCount >= 4, 'Storage subscribers should be notified on updates');
+    unsub();
+
+    // QuotaExceededError must return ok: false without throwing
+    const quotaStorage = {
+      getItem: (k) => mem.getItem(k),
+      setItem: () => {
+        const e = new Error('QuotaExceededError');
+        e.name = 'QuotaExceededError';
+        throw e;
+      },
+      removeItem: (k) => mem.removeItem(k),
+    };
+    const smQuota = storageMod.createStorageManager(quotaStorage);
+    const failedSave = smQuota.update({ volume: 0.3 });
+    assert.equal(failedSave.ok, false, 'Storage quota failure must return ok: false');
+  });
+
+  // 22. F02: Bookmarks Sanitization, Legacy Object Migration & Backup Rollback
+  await runTest('F02: bookmarks preserve number[], migrate {time}[] objects, dedupe/sort & survive backup/rollback', () => {
+    const mem = createMemoryStorage();
+    const sm = storageMod.createStorageManager(mem);
+
+    const sanitized = storageMod.sanitizeState({
+      bookmarksByKey: {
+        'c:/a/ep1.mp4': [45, 12, 12.0001, -5, NaN, Infinity, 9999999, 30.5],
+        'c:/b/ep2.mp4': [{ time: 80 }, { time: 15.25 }, { time: -2 }, { label: 'bad' }],
+      },
+    });
+    assert.deepEqual(sanitized.bookmarksByKey['c:/a/ep1.mp4'], [12, 30, 45]);
+    assert.deepEqual(sanitized.bookmarksByKey['c:/b/ep2.mp4'], [15, 80]);
+
+    sm.update({ bookmarksByKey: { 'c:/a/ep1.mp4': [12, 45] } });
+    const backup = sm.exportBackupJson({ lang: 'ar', theme: 'dark' });
+
+    // Overwrite state, then restore backup, then verify rollback recovers pre-restore state
+    sm.update({ bookmarksByKey: { 'c:/a/ep1.mp4': [99] } });
+    const imported = sm.importBackupJson(backup);
+    assert.equal(imported.ok, true);
+    assert.deepEqual(sm.load().bookmarksByKey['c:/a/ep1.mp4'], [12, 45]);
+
+    const rolledBack = sm.rollbackLastRestore();
+    assert.equal(rolledBack.ok, true);
+    assert.deepEqual(sm.load().bookmarksByKey['c:/a/ep1.mp4'], [99]);
+  });
+
+  // 23. F03: Canonical Track Identity for Same-Name Files in Different Folders
+  await runTest('F03: distinct files with identical basename & size keep independent canonical keys & lookup', () => {
+    const k1 = trackIdMod.buildCanonicalTrackKey({ fullPath: 'C:\\FolderA\\movie.mp4', name: 'movie.mp4', size: 1024 });
+    const k2 = trackIdMod.buildCanonicalTrackKey({ fullPath: 'C:/FolderB/movie.mp4', name: 'movie.mp4', size: 1024 });
+    const k1Upper = trackIdMod.buildCanonicalTrackKey({ fullPath: 'c:/foldera/MOVIE.MP4', name: 'MOVIE.MP4', size: 1024 });
+    assert.notEqual(k1, k2, 'Same-name files in different folders must have distinct keys');
+    assert.equal(k1, k1Upper, 'Windows path normalization must be case- and slash-insensitive');
+
+    const tracks = [
+      { key: k1, name: 'movie.mp4', fullPath: 'C:\\FolderA\\movie.mp4', size: 1024 },
+      { key: k2, name: 'movie.mp4', fullPath: 'C:\\FolderB\\movie.mp4', size: 1024 },
+    ];
+    // Deduplication must NOT collapse distinct fullPaths that share name & size
+    const dedup = trackIdMod.deduplicateTracksSafely([
+      tracks[0],
+      tracks[1],
+      { key: k1Upper, name: 'MOVIE.MP4', fullPath: 'c:/foldera/MOVIE.MP4', size: 1024 },
+    ]);
+    assert.equal(dedup.kept.length, 2);
+    assert.equal(dedup.removed.length, 1);
+
+    // Safe lookup must select the exact matching folder, not first basename hit
+    assert.equal(trackIdMod.findTrackSafely(tracks, { key: k2 })?.fullPath, 'C:\\FolderB\\movie.mp4');
+    // Ambiguous basename-only lookup must refuse to guess when 2 files share the name
+    assert.equal(trackIdMod.findTrackSafely(tracks, { name: 'movie.mp4' }), null);
+    // Legacy basename fallback must only apply when unambiguous (not when 2 files share name)
+    assert.equal(trackIdMod.lookupLegacyKeyFallback(tracks[0], tracks), null);
+    assert.equal(trackIdMod.lookupLegacyKeyFallback(tracks[0], [tracks[0]]), 'movie.mp4');
+  });
+
+  // 24. F08: Unified Subtitle Style Contract Across Tab <-> Shell
+  await runTest('F08: full 14-field subtitle style survives messaging round-trip, sanitizes CSS injection & migrates legacy', () => {
+    const fullStyle = {
+      fontFamily: 'Cairo, sans-serif',
+      fontSize: 34,
+      fontWeight: '800',
+      italic: true,
+      textColor: '#aaffcc',
+      outlineColor: '#000000',
+      outlineWidth: 3,
+      bgColor: '#112233',
+      bgOpacity: 75,
+      borderColor: '#3dc479',
+      borderWidth: 2,
+      borderRadius: 12,
+      shadowBlur: 8,
+      bottomOffset: 16,
+    };
+    const toShell = messaging.validateTabToShellMessage(
+      { type: 'aaz-sync-prefs', tabId: 'tab_1', subtitleStyle: fullStyle },
+      'tab_1'
+    );
+    assert.deepEqual(toShell?.subtitleStyle, fullStyle);
+
+    const toTab = messaging.validateShellToTabMessage({
+      type: 'aaz-apply-prefs',
+      subtitleStyle: toShell.subtitleStyle,
+    });
+    assert.deepEqual(toTab?.subtitleStyle, fullStyle);
+
+    // Legacy fields migrate cleanly
+    const migrated = subtitleStyleMod.sanitizeSubtitleStyle({
+      color: '#ff00aa',
+      bold: true,
+      bgOpacity: 0.5,
+      position: 22,
+    });
+    assert.equal(migrated.textColor, '#ff00aa');
+    assert.equal(migrated.fontWeight, '700');
+    assert.equal(migrated.bgOpacity, 50);
+    assert.equal(migrated.bottomOffset, 22);
+
+    // Malicious CSS strings are rejected back to safe defaults
+    const hardened = subtitleStyleMod.sanitizeSubtitleStyle({
+      fontFamily: 'Arial; background: url(javascript:alert(1))',
+      textColor: 'expression(alert(1))',
+    });
+    assert.equal(hardened.fontFamily, subtitleStyleMod.SUBTITLE_STYLE_DEFAULTS.fontFamily);
+    assert.equal(hardened.textColor, subtitleStyleMod.SUBTITLE_STYLE_DEFAULTS.textColor);
+  });
+
+  // 25. F10 & F11: Playlist Paths (Windows/UNC/Unicode/Relative), Runtime URL Blocking & Strict Saved Filter
+  await runTest('F10 & F11: playlist round-trip handles UNC/Unicode/special chars/relative paths, blocks blob: & enforces strict filter', () => {
+    const tracks = [
+      { title: 'Z Last First', fullPath: 'D:\\مسلسلات\\Show #1 & 100%\\ep 02.mp4', duration: 300 },
+      { title: 'A Second', fullPath: '\\\\NAS-SERVER\\Media Share\\Film (2026)\\clip.mkv', duration: 600 },
+      { title: 'Transient Blob', url: 'blob:http://tauri.localhost/abc-123', duration: 50 },
+      { title: 'Transient Stream', url: 'http://aazmedia.localhost/stream?id=1', duration: 50 },
+    ];
+    for (const fmt of ['xspf', 'm3u8', 'pls']) {
+      const exported = playlistIo.buildPlaylistExport(tracks, fmt, 'Unicode Mix');
+      assert.equal(exported.skippedCount, 2, `${fmt} must skip blob: and aazmedia.localhost entries`);
+      const parsed = playlistIo.parsePlaylistText(
+        exported.content,
+        `mix.${exported.ext}`,
+        `D:/Playlists/mix.${exported.ext}`
+      );
+      assert.equal(parsed.length, 2, `${fmt} must preserve only durable entries`);
+      assert.equal(
+        parsed[0].location.replace(/\\/g, '/'),
+        'D:/مسلسلات/Show #1 & 100%/ep 02.mp4',
+        `${fmt} must preserve order and special chars`
+      );
+      assert.equal(parsed[1].location, '\\\\NAS-SERVER\\Media Share\\Film (2026)\\clip.mkv', `${fmt} must preserve UNC path`);
+    }
+
+    // Relative path resolution against playlist file path
+    const relParsed = playlistIo.parsePlaylistText(
+      '#EXTM3U\n../Videos/ep1.mp4\n',
+      'list.m3u8',
+      'D:/Media/Playlists/list.m3u8'
+    );
+    assert.equal(relParsed[0].location.replace(/\\/g, '/'), 'D:/Media/Videos/ep1.mp4');
+
+    // F11: strict filter with 0 matches must return [] (never fall back to full track list)
+    const filtered = playlistIo.filterTracksBySavedPlaylist(
+      [
+        { key: 'd:/a.mp4', name: 'a.mp4' },
+        { key: 'd:/b.mp4', name: 'b.mp4' },
+      ],
+      ['d:/missing.mp4'],
+      true
+    );
+    assert.deepEqual(filtered, [], 'Strict saved playlist filter must return [] when 0 tracks match');
+  });
+
+  // 26. F12 & F13: Subtitle Auto-Match Episode/Lang Guard & Carry-Safe WebVTT Timestamps
+  await runTest('F12 & F13: subtitle matcher guards episodes & honors lang; VTT shift handles carry boundaries & clamps', () => {
+    const track = {
+      key: 'd:/shows/show.s01e01.mp4',
+      name: 'Show.S01E01.mp4',
+      fullPath: 'D:/Shows/Show.S01E01.mp4',
+    };
+    const subMap = new Map([
+      ['d:/shows/show.s01e02.ar', { name: 'Show.S01E02.ar.srt', key: 's01e02_ar', fullPath: 'D:/Shows/Show.S01E02.ar.srt' }],
+      ['d:/shows/show.s01e01.en', { name: 'Show.S01E01.en.srt', key: 's01e01_en', fullPath: 'D:/Shows/Show.S01E01.en.srt' }],
+      ['d:/shows/show.s01e01.ar', { name: 'Show.S01E01.ar.srt', key: 's01e01_ar', fullPath: 'D:/Shows/Show.S01E01.ar.srt' }],
+    ]);
+    // With defaultSubtitleLang='en', must pick English S01E01
+    const enPick = subMatcherMod.selectBestSubtitleCandidate(track, subMap, {
+      preferredLang: 'en',
+      uiLang: 'ar',
+    });
+    assert.equal(enPick?.key, 's01e01_en');
+
+    // With defaultSubtitleLang='auto' and uiLang='ar', must pick Arabic S01E01
+    const arPick = subMatcherMod.selectBestSubtitleCandidate(track, subMap, {
+      preferredLang: 'auto',
+      uiLang: 'ar',
+    });
+    assert.equal(arPick?.key, 's01e01_ar');
+
+    // Episode mismatch must NEVER match S01E02 to S01E01 even if it is the only candidate
+    const wrongEpMap = new Map([
+      ['d:/shows/show.s01e02.ar', { name: 'Show.S01E02.ar.srt', key: 's01e02_ar', fullPath: 'D:/Shows/Show.S01E02.ar.srt' }],
+    ]);
+    const wrongEp = subMatcherMod.selectBestSubtitleCandidate(track, wrongEpMap, {
+      preferredLang: 'ar',
+      uiLang: 'ar',
+    });
+    assert.equal(wrongEp, null, 'Must never match subtitle from a different episode');
+
+    // F13: Carry-safe VTT timestamps (no :60.000 or .1000)
+    assert.equal(timeUtils.formatVttTimestamp(0), '00:00:00.000');
+    assert.equal(timeUtils.formatVttTimestamp(0.9998), '00:00:01.000');
+    assert.equal(timeUtils.formatVttTimestamp(59.9998), '00:01:00.000');
+    assert.equal(timeUtils.formatVttTimestamp(3599.9998), '01:00:00.000');
+
+    // Negative shift clamps start >= 0 and enforces end >= start + 0.05
+    const shifted = timeUtils.shiftWebVtt('WEBVTT\n\n00:00:01.000 --> 00:00:01.200\nLine 1\n', -5);
+    assert.ok(shifted.includes('00:00:00.000 --> 00:00:00.050'), `Unexpected shifted VTT: ${shifted}`);
+  });
+
+  // 27. F14: Reserved Combos, Canonical Modifiers, Arabic Layout & Stored Conflict Normalization
+  await runTest('F14: shortcuts block reserved combos, canonicalize modifiers, support Arabic layout & heal stored conflicts', () => {
+    const store = storageMod.createEmptyState();
+    store.customShortcuts = { playPause: 'X', mute: 'X' };
+    const sm = shortcutsMod.createShortcutsManager({
+      getStore: () => store,
+      persist: () => {},
+    });
+
+    // Reserved combos must be rejected
+    const resW = sm.setBinding('mute', 'Ctrl+W');
+    assert.equal(resW.ok, false);
+    assert.equal(resW.reason, 'reserved');
+    assert.equal(sm.setBinding('mute', 'Ctrl+T').reason, 'reserved');
+
+    // Canonical modifier ordering
+    assert.equal(shortcutsMod.normalizeKeyCombo('Shift+Ctrl+p'), 'Ctrl+Shift+P');
+    // Stored conflicts must be healed cleanly so two actions never share the same combo
+    const healed = sm.normalizeStoredConflicts();
+    assert.equal(healed, true);
+    assert.notEqual(sm.getBinding('playPause'), sm.getBinding('mute'));
+
+    // Arabic keyboard layout KeyM maps via physical code to default Mute ('M')
+    sm.resetAll();
+    assert.equal(
+      sm.matchAction({ key: 'ة', code: 'KeyM', ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, target: { tagName: 'BODY' } }),
+      'mute',
+      'Arabic keyboard layout KeyM must trigger mute'
+    );
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);

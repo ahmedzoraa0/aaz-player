@@ -35,6 +35,19 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     }
     return Promise.resolve(() => {});
   };
+  const listenWindow = (eventName, cb) => {
+    try {
+      const currentWin = tauriApi.webviewWindow?.getCurrentWebviewWindow?.();
+      if (currentWin && typeof currentWin.listen === 'function') {
+        return currentWin
+          .listen(eventName, (ev) => cb(ev ? ev.payload : null))
+          .catch(() => () => {});
+      }
+    } catch {
+      // Fall back to global event listener if webviewWindow API is unavailable
+    }
+    return listen(eventName, cb);
+  };
 
   const bridge = {
     isElectron: true, // Legacy compatibility flag used across existing modules
@@ -50,8 +63,8 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     selectFiles: () => invoke('aaz_select_files'),
     readFolder: (folderPath) => invoke('aaz_read_folder', { folderPath }),
     readTextFile: (filePath) => invoke('aaz_read_text_file', { filePath }),
-    findNearbySubtitle: (videoFullPath) =>
-      invoke('aaz_find_nearby_subtitle', { videoFullPath }),
+    findNearbySubtitle: (videoFullPath, preferredLang = 'auto', uiLang = 'en') =>
+      invoke('aaz_find_nearby_subtitle', { videoFullPath, preferredLang, uiLang }),
     inspectPaths: (paths) => invoke('aaz_inspect_paths', { paths }),
     setAlwaysOnTop: (enabled) => invoke('aaz_set_always_on_top', { enabled: Boolean(enabled) }),
     setWindowFullscreen: (enabled) => invoke('aaz_set_fullscreen', { enabled: Boolean(enabled) }),
@@ -88,7 +101,7 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
         canNext: Boolean(canNext),
         lang: lang === 'ar' ? 'ar' : 'en',
       }),
-    onTaskbarAction: (callback) => listen('aaz:taskbar-action', callback),
+    onTaskbarAction: (callback) => listenWindow('aaz:taskbar-action', callback),
     saveSnapshot: (dataBase64, suggestedName) =>
       invoke('aaz_save_snapshot', { dataBase64, suggestedName }),
     listSystemFonts: () => invoke('aaz_list_system_fonts'),
@@ -101,8 +114,8 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
     castDlnaControl: (controlUrl, action, seekTarget = null) =>
       invoke('aaz_cast_dlna_control', { controlUrl, action, seekTarget }),
     castOpenWindowsCast: () => invoke('aaz_cast_open_windows_cast'),
-    onOpenExternal: (callback) => listen('aaz:open-external', callback),
-    onFileDrop: (callback) => listen('tauri://drag-drop', callback),
+    onOpenExternal: (callback) => listenWindow('aaz:open-external', callback),
+    onFileDrop: (callback) => listenWindow('tauri://drag-drop', callback),
   };
 
   win.aazDesktop = bridge;

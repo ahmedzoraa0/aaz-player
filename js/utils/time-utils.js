@@ -48,9 +48,10 @@ export function formatRelativeDate(timestampMs, lang = 'en') {
 }
 
 export function formatVttTimestamp(seconds) {
-  const clamped = Math.max(0, Number(seconds) || 0);
-  const ms = Math.round((clamped % 1) * 1000);
-  const totalSec = Math.floor(clamped);
+  const clamped = Number.isFinite(Number(seconds)) ? Math.max(0, Number(seconds)) : 0;
+  const totalMs = Math.round(clamped * 1000);
+  const ms = totalMs % 1000;
+  const totalSec = Math.floor(totalMs / 1000);
   const s = totalSec % 60;
   const m = Math.floor(totalSec / 60) % 60;
   const h = Math.floor(totalSec / 3600);
@@ -73,21 +74,27 @@ export function parseVttTimestamp(raw) {
   return 0;
 }
 
+const VTT_CUE_RANGE_RE =
+  /(\d{1,2}:)?\d{2}:\d{2}[,.]\d{3}\s*-->\s*(\d{1,2}:)?\d{2}:\d{2}[,.]\d{3}/g;
+
+export function shiftWebVtt(rawVtt, offsetSeconds = 0) {
+  const text = String(rawVtt || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const shift = Number.isFinite(Number(offsetSeconds)) ? Number(offsetSeconds) : 0;
+  return text.replace(VTT_CUE_RANGE_RE, (match) => {
+    const [startStr, endStr] = match.split('-->').map((s) => s.trim());
+    const startSec = Math.max(0, parseVttTimestamp(startStr) + shift);
+    const rawEnd = parseVttTimestamp(endStr) + shift;
+    const endSec = Math.max(startSec + 0.05, rawEnd);
+    return `${formatVttTimestamp(startSec)} --> ${formatVttTimestamp(endSec)}`;
+  });
+}
+
 export function srtToWebVtt(rawText, offsetSeconds = 0) {
   let text = String(rawText || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const isAlreadyVtt = /^\s*WEBVTT/i.test(text);
   if (isAlreadyVtt) {
     text = text.replace(/^\s*WEBVTT[^\n]*\n+/i, '');
   }
-  const timeRegex =
-    /(\d{1,2}:)?\d{2}:\d{2}[,.]\d{3}\s*-->\s*(\d{1,2}:)?\d{2}:\d{2}[,.]\d{3}/g;
-
-  const shifted = text.replace(timeRegex, (match) => {
-    const [startStr, endStr] = match.split('-->').map((s) => s.trim());
-    const startSec = Math.max(0, parseVttTimestamp(startStr) + offsetSeconds);
-    const endSec = Math.max(startSec + 0.05, parseVttTimestamp(endStr) + offsetSeconds);
-    return `${formatVttTimestamp(startSec)} --> ${formatVttTimestamp(endSec)}`;
-  });
-
+  const shifted = shiftWebVtt(text, offsetSeconds);
   return `WEBVTT\n\n${shifted}`;
 }
