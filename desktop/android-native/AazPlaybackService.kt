@@ -57,8 +57,8 @@ class AazPlaybackService : Service() {
     private var isForegroundStarted = false
     private var noisyReceiverRegistered = false
 
-    private var currentTitle = "AAZ Player"
-    private var currentArtist = "AAZ Player"
+    private var currentTitle = "AZ0"
+    private var currentArtist = "AZ0"
     private var currentPlaying = false
     private var currentPositionMs = 0L
     private var currentDurationMs = 0L
@@ -129,8 +129,8 @@ class AazPlaybackService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_UPDATE -> {
-                currentTitle = intent.getStringExtra(EXTRA_TITLE)?.ifBlank { "AAZ Player" } ?: "AAZ Player"
-                currentArtist = intent.getStringExtra(EXTRA_ARTIST)?.ifBlank { "AAZ Player" } ?: "AAZ Player"
+                currentTitle = intent.getStringExtra(EXTRA_TITLE)?.ifBlank { "AZ0" } ?: "AZ0"
+                currentArtist = intent.getStringExtra(EXTRA_ARTIST)?.ifBlank { "AZ0" } ?: "AZ0"
                 currentPlaying = intent.getBooleanExtra(EXTRA_PLAYING, false)
                 currentPositionMs = intent.getLongExtra(EXTRA_POSITION, 0L).coerceAtLeast(0L)
                 currentDurationMs = intent.getLongExtra(EXTRA_DURATION, 0L).coerceAtLeast(0L)
@@ -318,7 +318,7 @@ class AazPlaybackService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "AAZ Player Playback",
+            "AZ0 Playback",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "Media playback controls and now playing status"
