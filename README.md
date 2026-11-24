@@ -17,11 +17,11 @@
 
 <p align="center">
   <img src="docs/screenshots/az0-desktop.png" alt="AZ0 on Windows" width="78%" />
-  <img src="docs/screenshots/az0-android.png" alt="AZ0 on Android" width="20%" />
+  <img src="docs/screenshots/az0-phone.png" alt="AZ0 on Android" width="20%" />
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/themes.png" alt="AZ0 themes" width="92%" />
+  <img src="docs/screenshots/az0-themes.png" alt="AZ0 themes" width="92%" />
 </p>
 
 ---
