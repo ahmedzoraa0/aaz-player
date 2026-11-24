@@ -479,7 +479,7 @@ class AazMediaHelper(
     }
 
     /**
-     * Phase 1 (R25): Save video snapshot PNG into Pictures/AAZ Player using MediaStore (API 29+) or Pictures dir.
+     * Phase 1 (R25): Save video snapshot PNG into Pictures/AZ0 using MediaStore (API 29+) or Pictures dir.
      */
     fun saveSnapshotPng(dataBase64: String, suggestedName: String): JSONObject {
         val cleanName = suggestedName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "aaz-snapshot.png" }
@@ -496,7 +496,7 @@ class AazMediaHelper(
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, finalName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/AAZ Player")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/AZ0")
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
                 val resolver = context.contentResolver
@@ -508,13 +508,13 @@ class AazMediaHelper(
                 resolver.update(uri, values, null, null)
                 JSONObject().apply {
                     put("saved", true)
-                    put("path", "Pictures/AAZ Player/$finalName")
+                    put("path", "Pictures/AZ0/$finalName")
                 }
             } else {
                 @Suppress("DEPRECATION")
                 val dir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                    "AAZ Player"
+                    "AZ0"
                 )
                 if (!dir.exists()) dir.mkdirs()
                 val outFile = File(dir, finalName)
