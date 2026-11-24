@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="desktop/assets/icon.png" alt="AAZ Player" width="96" height="96" />
-  <h1>AAZ Player</h1>
-  <p><strong>مشغّل صوت وفيديو محلي، خفيف وآمن — ويندوز وأندرويد</strong><br/>
-  Lightweight, security-hardened local audio &amp; video player — Windows &amp; Android</p>
+  <img src="desktop/assets/icon.png" alt="AZ0" width="96" height="96" />
+  <h1>AZ0</h1>
+  <p><strong>مشغّل الصوت والفيديو المحلي بتاعك — خفيف، سريع، وبيشتغل من غير نت</strong><br/>
+  A lightweight local audio &amp; video player for Windows and Android</p>
   <p>
     <img src="https://img.shields.io/badge/v1.8.0-3dc479?style=for-the-badge" alt="v1.8.0" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
@@ -15,11 +15,13 @@
   </p>
 </div>
 
-## 📸 لقطات من البرنامج · Screenshots
+<p align="center">
+  <img src="docs/screenshots/desktop.png" alt="AZ0 on Windows" width="78%" />
+  <img src="docs/screenshots/android.png" alt="AZ0 on Android" width="20%" />
+</p>
 
 <p align="center">
-  <img src="docs/screenshots/desktop.png" alt="AAZ Player on Windows" width="74%" />
-  <img src="docs/screenshots/android.png" alt="AAZ Player Android UI (Arabic)" width="22%" />
+  <img src="docs/screenshots/themes.png" alt="AZ0 themes" width="92%" />
 </p>
 
 ---
@@ -28,27 +30,23 @@
 
 ## 🇪🇬 العربية
 
-### المميزات
-- تشغيل ملفات الصوت والفيديو والمجلدات المحلية مع نظام تبويبات ونوافذ مستقلة واستئناف تلقائي لآخر جلسة
-- **تسريع مؤقت بالضغط المطوّل:** اضغط باستمرار على الشاشة أو زر التشغيل فتقفز السرعة إلى 2x ثابتة، وعند رفع إصبعك تعود لسرعتك السابقة بالضبط مهما كانت
-- **صوت يصل إلى 200%** بشريط تمرير حقيقي من 0 إلى 200 مع الوضع الافتراضي 100% (المستويات فوق 100% قد تسبب تشويهاً حسب الملف والجهاز)
-- **مكتبة أندرويد بهيكل مجلدات شجري (SAF):** تصفح ملفات جهازك كما في مدير الملفات، جذر ثم مجلدات ومجلدات فرعية، مع شريط مسار واضح وزر رجوع يصعد مستوى بمستوى
-- **واجهة موبايل مبسطة:** شريط علوي يحمل الشعار فقط على أندرويد مع أزرار لمس كبيرة ومريحة
-- توجيه قناة صوت مستقلة لكل تبويب ولكل نافذة
-- **المشغل المصغر (Mini Player)** بشريط تقديم وتأخير مباشر، أحجام سريعة (`S` / `M` / `L`)، وضع شريط صوت مضغوط للملفات الصوتية، تثبيت في الأعلى، وحفظ تلقائي للموضع والحجم داخل حدود الشاشة
-- **أزرار تحكم في شريط مهام ويندوز** (السابق / تشغيل وإيقاف / التالي) عند تمرير الفأرة على أيقونة البرنامج مع دعم أزرار الوسائط في لوحة المفاتيح
-- **16 ثيم بهوية خضراء (32 وضع داكن وفاتح)** تشمل ماينكرافت وليجو وروبلوكس وأركيد وويندوز 95 الكلاسيكي وجيم بوي والمزيد عبر قائمة العرض
-- **مكتبة الوسائط** للمجلدات التي تختارها فقط مع بحث وفلترة وفرز (الاسم / التاريخ / المدة)
-- **سجل المشاهدة** داخل قائمة الوسائط (`فتح الأخيرة`) لاستئناف التشغيل وتحديد المكتمل مع وضع إيقاف السجل للخصوصية
-- قوائم تشغيل احترافية (سحب وإفلات، كليك يمين، تشغيل تالٍ، حفظ، تكرار، بحث، تصدير `.XSPF` / `.M3U8` / `.PLS`)
-- **اختصارات لوحة مفاتيح قابلة للتخصيص** مع كشف التعارضات و**لوحة إعدادات تشغيل** مع نسخ احتياطي واستعادة بصيغة JSON
-- البث المباشر للشاشات والتلفزيون الذكي (DLNA / Wi-Fi) مع حماية الجلسة برمز أمان
-- اكتشاف تلقائي للترجمة وتخصيص الخطوط والتوقيت
-- تحكم كامل بالفيديو (الأبعاد، التكبير، القص، التنقل إطاراً بإطار، لقطات الشاشة، ملء الشاشة)
-- معادل صوت 5 نطاقات و4 أنماط عرض صوتي، واجهة عربي/إنجليزي، خطوط مدمجة محلياً بدون اتصال خارجي، وتحديثات محمية ببصمة SHA-256 وتوقيع Minisign مع حماية ضد إعادة التشغيل (تُرفض تلقائياً عند غياب التوقيع)
+### إيه هو AZ0؟
+مشغّل محلي لملفات الصوت والفيديو على ويندوز وأندرويد. يفتح الملفات والمجلدات وقوائم التشغيل من غير ما يحتاج نت ولا حسابات، وملفاتك بتفضل على جهازك — مفيش حاجة بتترفع لأي سيرفر.
+
+### اللي بيميزه
+- **تبويبات ونوافذ مستقلة** زي المتصفح: كل تبويب مشغّل لوحده بصوته وقائمته، والبرنامج بيرجّع آخر جلسة زي ما كانت بالظبط
+- **قوائم تشغيل جدّية:** سحب وإفلات، كليك يمين، "التالي في القائمة"، حفظ وتصدير `.XSPF` / `.M3U8` / `.PLS`
+- **16 ثيم كاملين** بداكن وفاتح (32 شكل)، منهم ماينكرافت وليجو وروبلوكس وأركيد وويندوز 95 الكلاسيكي — بتتبدل من قائمة العرض في ثانية
+- **مكتبة وسائط** للمجلدات اللي انت بتختارها بس، مع بحث وفلترة وفرز بالاسم أو التاريخ أو المدة، وسجل مشاهدة بيكمّل من آخر نقطة وقفت عندها
+- **تحكم حقيقي في الصوت:** شريط صوت من 0 لـ 200%، معادل 5 نطاقات، وتوجيه الصوت لكل تبويب أو نافذة لوحدها
+- **مشغّل مصغّر** يفضل فوق أي نافذة، وبيتحفظ مكانه وحجمه بين المرات
+- **ترجمة تلقائية** بتتكشف لوحدها مع تخصيص الخط والتوقيت، وتحكم كامل في الفيديو لحد التنقل إطار بإطار
+- **بث للتلفزيون والشاشات** على شبكتك المحلية (DLNA / Wi-Fi) محمي برمز أمان
+- **عربي وإنجليزي** بواجهة كاملة الاتجاهين، والخطوط مدمجة جوه البرنامج فبتشتغل أوفلاين
+- **تحديثات آمنة:** كل إصدار بيتأكد من بصمة SHA-256 وتوقيع Minisign قبل ما يتثبت، وأي إصدار من غير توقيع بيترفض تلقائياً
 
 ### التحميل
-- **[تحميل أحدث إصدار](../../releases/latest)** — حزمة ويندوز (مثبّت Setup أو نسخة محمولة Portable) متاحة الآن، وحزمة أندرويد (APK) قيد النشر وستظهر في نفس الصفحة فور جاهزيتها
+- **[تحميل أحدث إصدار](../../releases/latest)** — حزمة ويندوز متاحة الآن (مثبّت Setup أو نسخة محمولة Portable)
 
 </div>
 
@@ -56,24 +54,19 @@
 
 ## 🇬🇧 English
 
-### Features
-- Local audio, video & folder playback with a multi-tab workspace, independent windows, and automatic desktop session resume
-- **Hold-to-speed:** press and hold the screen or play control to jump to a fixed 2x speed, then release to return to exactly your previous rate, whatever it was
-- **Real 0–200% volume slider** with a 100% default (levels above 100% may distort depending on the file and device)
-- **Android SAF media library with a folder-tree hierarchy:** browse your device like a file manager — root, folders, subfolders — with a breadcrumb bar and a back button that climbs one level at a time
-- **Streamlined mobile UI:** a logo-only top bar on Android with large, comfortable touch controls
-- Per-tab & per-window audio output routing (`setSinkId`)
-- **Overhauled Mini Player Mode** with live scrubbable seek bar, `S`/`M`/`L` size presets, compact audio bar layout, crisp SVG controls, always-on-top pinning, and DPI/work-area-safe window layout persistence
-- **Native Windows Taskbar Thumbnail Media Controls** (Previous / Play-Pause / Next via `ITaskbarList3`) plus OS media key integration (`navigator.mediaSession`)
-- **16-Theme Green-Identity Studio (32 Dark & Light modes)** including Minecraft, LEGO, Roblox, Super Arcade 16-Bit, Classic OS 95, Game Boy LCD & more via `View -> Theme Style`
-- **Media Library** for user-selected folders with instant search, type filters, and Name / Date / Duration sorting
-- **Watch History** integrated cleanly under `Media -> Open Recent` with automatic resume, completion tracking, search, and privacy pause toggle
-- Pro playlists (drag-and-drop, right-click menu, Up Next, Save, Duplicate, Search, `.XSPF` / `.M3U8` / `.PLS` export)
-- **Customizable Keyboard Shortcuts** with conflict detection & **Playback Settings** modal with JSON backup/restore
-- Token-protected LAN streaming & private-network DLNA Smart TV casting
-- Auto-detected subtitles with custom system fonts, styling studio & timing sync
-- Full video controls (aspect ratio, zoom, crop, frame stepping, HD snapshots, fullscreen)
-- 5-band audio equalizer, 4 live visualizers, Arabic/English UI, offline bundled fonts, & fail-closed SHA-256 + Minisign updater verification
+AZ0 is a local audio &amp; video player for Windows and Android. It opens files, folders and playlists fully offline — no accounts, no uploads, your media stays on your device.
+
+- Browser-style multi-tab workspace with independent windows and exact session resume
+- Serious playlists: drag-and-drop, right-click actions, Up Next, `.XSPF` / `.M3U8` / `.PLS` export
+- 16 full themes in dark and light, switchable in one click from the View menu
+- Media library for the folders you choose, with search, filters, sorting and resumable watch history
+- Real 0–200% volume, 5-band EQ, and per-tab audio output routing
+- Always-on-top Mini Player, auto-detected subtitles, frame-accurate video controls
+- Token-protected local-network casting to TVs and screens
+- Full Arabic/English UI with offline bundled fonts
+- Fail-closed updates: every release is verified against SHA-256 sums and a Minisign signature, and unsigned builds are refused automatically
+
+**[Download the latest release](../../releases/latest)** — Windows packages (Setup installer or Portable) are available now.
 
 ### Updater Signing & Key Handling
 The desktop updater enforces **fail-closed verification**: every release installer must provide both a valid SHA-256 checksum (`SHA256SUMS.txt` or GitHub asset digest) and a valid **Minisign** Ed25519 signature (`.minisig`) whose trusted comment binds the exact release version, filename, and SHA-256 digest (`aaz-player|version=<ver>|file=<name>|sha256=<hash>`) to prevent replay or downgrade attacks. Unsigned releases or builds without a configured public key are refused automatically.
@@ -87,7 +80,7 @@ To enable signed releases in your repository:
    - `AAZ_UPDATER_SIGNING_KEY`: full contents of `aaz-updater.key`
    - `AAZ_UPDATER_SIGNING_KEY_PASSWORD`: passphrase used when generating the key (leave empty if unprotected)
 3. Add the base64 public key line (from `aaz-updater.pub`, starting with `RW...`) as a GitHub Repository Variable or Secret named `AAZ_UPDATER_PUBLIC_KEY`.
-4. `.github/workflows/release.yml` fails closed on stable releases if either `AAZ_UPDATER_SIGNING_KEY` or `AAZ_UPDATER_PUBLIC_KEY` is missing (unless manually triggered via `workflow_dispatch` with `allow_unsigned_preview=true`). When configured, it embeds `AAZ_UPDATER_PUBLIC_KEY` at compile time and signs `AAZ-Player-Setup-*.exe`, `AAZ-Player-Portable-*.exe`, and `SHA256SUMS.txt` with version-bound `.minisig` signatures before publishing.
+4. `.github/workflows/release.yml` fails closed on stable releases if either `AAZ_UPDATER_SIGNING_KEY` or `AAZ_UPDATER_PUBLIC_KEY` is missing. It never publishes into an existing release: both push and manual `workflow_dispatch` runs refuse to touch a tag that already has a release, so previews can never overwrite or append to a published version.
 5. **Key rotation**: publish a transitional release signed with the old key whose binary embeds the new public key before retiring the old secret key.
 
 ### Project Structure
@@ -99,5 +92,8 @@ To enable signed releases in your repository:
 - `desktop/src-tauri/` — Native Rust + Tauri v2 backend (media protocol, Cast/DLNA, Windows taskbar thumbnail toolbar, fail-closed Minisign/SHA-256 updater, window management)
 - `tests/` — Automated Node.js test suite (`node tests/run-tests.cjs`)
 
-### Download
-- **[Download Latest Release](../../releases/latest)** — Windows (Setup installer or Portable) available now; the Android APK is still being published and will appear on the same page once ready
+---
+
+<div align="center">
+  <sub>AZ0 — MIT License</sub>
+</div>
