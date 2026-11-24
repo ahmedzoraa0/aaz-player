@@ -3,7 +3,7 @@
  * Configures the generated Tauri Android project (`desktop/src-tauri/gen/android`) after
  * `tauri android init` & `tauri icon` so that every CI build automatically receives:
  * 1. Crisp Android Adaptive Icon VectorDrawables (full-bleed dark foliage green background
- *    + properly centered 66dp safe-zone AAZ Play emblem — zero cropping, zero white corners).
+ *    + properly centered 66dp safe-zone AZ0 ring-play emblem — zero cropping, zero white corners).
  * 2. Native Kotlin bridge sources (`AazContentServer.kt`, `AazMediaHelper.kt`, `MainActivity.kt`).
  * 3. `network_security_config.xml` permitting cleartext strictly for loopback `127.0.0.1` / `localhost`.
  * 4. `AndroidManifest.xml` patches: ACTION_VIEW/SEND intent filters, PiP, configChanges, scoped Phase 1+2 perms.
@@ -83,46 +83,75 @@ const adaptiveFgXml = `<?xml version="1.0" encoding="utf-8"?>
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Subtle inner border frame inside safe zone -->
+    <!-- AZ0 approved mark (icon.svg geometry scaled into the 66dp safe zone): A over Z left, play-ring right -->
     <path
-        android:pathData="M34,26 L74,26 Q82,26 82,34 L82,74 Q82,82 74,82 L34,82 Q26,82 26,74 L26,34 Q26,26 34,26 Z"
-        android:strokeColor="#3A8357"
-        android:strokeWidth="1.6"
-        android:strokeAlpha="0.55"
-        android:fillColor="#00000000" />
-    <!-- Iconic AAZ Play Triangle (centered upper safe zone) -->
-    <path android:pathData="M45.5,33.5 L68.5,46.8 L45.5,60.1 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="45"
-                android:startY="33"
-                android:endX="69"
-                android:endY="60"
-                android:type="linear">
-                <item android:color="#6AE8A2" android:offset="0.0" />
-                <item android:color="#2EA865" android:offset="1.0" />
+        android:pathData="M26.16,61.22 L33.38,35.44 L40.59,61.22"
+        android:strokeWidth="6.19"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
+                <item android:color="#7BF0AD" android:offset="0.0" />
+                <item android:color="#3DC479" android:offset="0.55" />
+                <item android:color="#1F8A4F" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Gold Horizon Accent Bar -->
     <path
-        android:pathData="M36,63.8 L72,63.8 Q73.4,63.8 73.4,65.2 Q73.4,66.6 72,66.6 L36,66.6 Q34.6,66.6 34.6,65.2 Q34.6,63.8 36,63.8 Z"
-        android:fillColor="#D6B267" />
-    <!-- Crisp Geometric "A A Z" Vector Glyphs (inside safe zone y=69.5..78) -->
-    <!-- Letter A (left) -->
+        android:pathData="M29.77,52.97 L36.97,52.97"
+        android:strokeWidth="4.12"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
+                <item android:color="#7BF0AD" android:offset="0.0" />
+                <item android:color="#3DC479" android:offset="0.55" />
+                <item android:color="#1F8A4F" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:pathData="M35.5,78 L39.2,69.5 L41.4,69.5 L45.1,78 L42.9,78 L42.0,75.8 L38.6,75.8 L37.7,78 Z M39.3,74.1 L41.3,74.1 L40.3,71.6 Z"
-        android:fillColor="#EEF7F1"
-        android:fillType="evenOdd" />
-    <!-- Letter A (center) -->
+        android:pathData="M27.19,68.44 L42.66,68.44 L27.19,80.81 L49.88,80.81"
+        android:strokeWidth="6.19"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
+                <item android:color="#7BF0AD" android:offset="0.0" />
+                <item android:color="#3DC479" android:offset="0.55" />
+                <item android:color="#1F8A4F" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:pathData="M49.2,78 L52.9,69.5 L55.1,69.5 L58.8,78 L56.6,78 L55.7,75.8 L52.3,75.8 L51.4,78 Z M53.0,74.1 L55.0,74.1 L54.0,71.6 Z"
-        android:fillColor="#EEF7F1"
-        android:fillType="evenOdd" />
-    <!-- Letter Z (right) -->
+        android:pathData="M43.69,57.09 A19.59,19.59 0 1 1 82.87,57.09 A19.59,19.59 0 1 1 43.69,57.09 Z M48.84,57.09 A14.44,14.44 0 1 0 77.72,57.09 A14.44,14.44 0 1 0 48.84,57.09 Z"
+        android:fillType="evenOdd">
+        <aapt:attr name="android:fillColor">
+            <gradient android:startX="44" android:startY="38" android:endX="83" android:endY="77" android:type="linear">
+                <item android:color="#7BF0AD" android:offset="0.0" />
+                <item android:color="#3DC479" android:offset="0.55" />
+                <item android:color="#1F8A4F" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
-        android:pathData="M62.6,69.5 L71.2,69.5 L71.2,71.2 L65.4,76.3 L71.4,76.3 L71.4,78 L62.4,78 L62.4,76.3 L68.2,71.2 L62.6,71.2 Z"
-        android:fillColor="#EEF7F1" />
+        android:pathData="M56.74,48.58 L72.31,57.09 L56.74,65.61 Z"
+        android:strokeWidth="2.6"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:fillColor">
+            <gradient android:startX="57" android:startY="49" android:endX="72" android:endY="66" android:type="linear">
+                <item android:color="#C8FFDD" android:offset="0.0" />
+                <item android:color="#39C177" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient android:startX="57" android:startY="49" android:endX="72" android:endY="66" android:type="linear">
+                <item android:color="#C8FFDD" android:offset="0.0" />
+                <item android:color="#39C177" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
 `;
 
@@ -349,7 +378,7 @@ if (fs.existsSync(manifestPath)) {
 // 6. Enable R8 shrinking & add ProGuard keep rules for compact APK (~5 MB)
 const proguardPath = path.join(appDir, 'proguard-rules.pro');
 const extraKeepRules = `
-# AAZ Player — keep JS bridge and Tauri runtime reflection targets
+# AZ0 — keep JS bridge and Tauri runtime reflection targets
 -keepattributes *Annotation*
 -keep class com.aaz.player.** { *; }
 -keepclassmembers class * {
