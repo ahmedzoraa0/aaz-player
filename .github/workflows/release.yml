@@ -273,22 +273,34 @@ jobs:
           $notesFile = Join-Path $env:RUNNER_TEMP "release-notes-$ver.md"
           Set-Content -Path $notesFile -Value $notes -Encoding UTF8
 
-          $ErrorActionPreference = "Continue"
-          gh release view $tag *> $null
-          $exists = ($LASTEXITCODE -eq 0)
-          $global:LASTEXITCODE = 0
-
-          if ($exists) {
-            Write-Host "::error::Release $tag already exists at publish time. Refusing to modify an existing release (fail-closed)."
-            exit 1
+          $isPreview = ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ inputs.allow_unsigned_preview }}" -eq "true")
+          if ($isPreview) {
+            Write-Host "::notice::Unsigned preview build: skipping ALL GitHub Release operations (fail-closed separation). Artifacts are published as workflow artifacts only, never on any release."
           } else {
+            $ErrorActionPreference = "Continue"
+            gh release view $tag *> $null
+            $exists = ($LASTEXITCODE -eq 0)
+            $global:LASTEXITCODE = 0
+
+            if ($exists) {
+              Write-Host "::error::Release $tag already exists at publish time. Refusing to modify an existing release (fail-closed)."
+              exit 1
+            } else {
             $createArgs = @("release", "create", $tag) + $uploadFiles + @("--title", "AZ0 $tag", "--notes-file", $notesFile)
             if ($env:IS_PRERELEASE -eq "true") {
               $createArgs += "--prerelease"
             }
             & gh @createArgs
+            }
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload unsigned preview as workflow artifacts (never a release)
+        if: steps.version_check.outputs.should_release == 'true' && github.event_name == 'workflow_dispatch' && inputs.allow_unsigned_preview == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZ0-unsigned-preview-windows
+          path: release-out/
 
   build-android:
     needs: build-windows
@@ -424,10 +436,21 @@ jobs:
           ls -lh "release-android/${FINAL_NAME}"
           cat "release-android/${FINAL_NAME}.sha256"
 
-          gh release upload "$REL_TAG" \
-            "release-android/${FINAL_NAME}" \
-            "release-android/${FINAL_NAME}.sha256" \
-            --clobber
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.allow_unsigned_preview }}" = "true" ]; then
+            echo "::notice::Unsigned preview build: skipping GitHub Release upload (fail-closed separation). APK is published as a workflow artifact only."
+          else
+            gh release upload "$REL_TAG" \
+              "release-android/${FINAL_NAME}" \
+              "release-android/${FINAL_NAME}.sha256" \
+              --clobber
+          fi
+
+      - name: Upload unsigned preview APK as workflow artifact (never a release)
+        if: github.event_name == 'workflow_dispatch' && inputs.allow_unsigned_preview == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: AZ0-unsigned-preview-android
+          path: release-android/
 
       - name: Clean temporary Android signing keystore
         if: always()
