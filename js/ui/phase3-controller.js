@@ -2035,4 +2035,4 @@ const LIB_FOLDER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fil
       hideConflictBar();
     },
   };
-            }
+}
