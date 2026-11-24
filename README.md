@@ -1,13 +1,26 @@
 <div align="center">
   <img src="desktop/assets/icon.png" alt="AAZ Player" width="96" height="96" />
   <h1>AAZ Player</h1>
+  <p><strong>مشغّل صوت وفيديو محلي، خفيف وآمن — ويندوز وأندرويد</strong><br/>
+  Lightweight, security-hardened local audio &amp; video player — Windows &amp; Android</p>
   <p>
     <img src="https://img.shields.io/badge/v1.8.0-3dc479?style=for-the-badge" alt="v1.8.0" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
+    <img src="https://img.shields.io/badge/Android-0f2d1d?style=for-the-badge&logo=android" alt="Android" />
     <img src="https://img.shields.io/badge/Rust%20%2B%20Tauri%20v2-1f6f46?style=for-the-badge&logo=rust" alt="Rust + Tauri v2" />
     <img src="https://img.shields.io/badge/MIT-2ea05f?style=for-the-badge" alt="MIT" />
   </p>
+  <p>
+    <a href="../../releases/latest"><strong>⬇️ تحميل أحدث إصدار · Download Latest Release</strong></a>
+  </p>
 </div>
+
+## 📸 لقطات من البرنامج · Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/desktop.png" alt="AAZ Player on Windows" width="74%" />
+  <img src="docs/screenshots/mobile.png" alt="AAZ Player on Android" width="22%" />
+</p>
 
 ---
 
@@ -15,10 +28,12 @@
 
 ## 🇪🇬 العربية
 
-**مشغّل صوت وفيديو محلي خفيف وآمن لنظام ويندوز (Rust + Tauri v2)**
-
 ### المميزات
 - تشغيل ملفات الصوت والفيديو والمجلدات المحلية مع نظام تبويبات ونوافذ مستقلة واستئناف تلقائي لآخر جلسة
+- **تسريع مؤقت بالضغط المطوّل:** اضغط باستمرار على الشاشة أو زر التشغيل فتقفز السرعة إلى 2x ثابتة، وعند رفع إصبعك تعود لسرعتك السابقة بالضبط مهما كانت
+- **صوت يصل إلى 200%** بشريط تمرير حقيقي من 0 إلى 200 مع الوضع الافتراضي 100% (المستويات فوق 100% قد تسبب تشويهاً حسب الملف والجهاز)
+- **مكتبة أندرويد بهيكل مجلدات شجري (SAF):** تصفح ملفات جهازك كما في مدير الملفات، جذر ثم مجلدات ومجلدات فرعية، مع شريط مسار واضح وزر رجوع يصعد مستوى بمستوى
+- **واجهة موبايل مبسطة:** شريط علوي يحمل الشعار فقط على أندرويد مع أزرار لمس كبيرة ومريحة
 - توجيه قناة صوت مستقلة لكل تبويب ولكل نافذة
 - **المشغل المصغر (Mini Player)** بشريط تقديم وتأخير مباشر، أحجام سريعة (`S` / `M` / `L`)، وضع شريط صوت مضغوط للملفات الصوتية، تثبيت في الأعلى، وحفظ تلقائي للموضع والحجم داخل حدود الشاشة
 - **أزرار تحكم في شريط مهام ويندوز** (السابق / تشغيل وإيقاف / التالي) عند تمرير الفأرة على أيقونة البرنامج مع دعم أزرار الوسائط في لوحة المفاتيح
@@ -33,7 +48,7 @@
 - معادل صوت 5 نطاقات و4 أنماط عرض صوتي، واجهة عربي/إنجليزي، خطوط مدمجة محلياً بدون اتصال خارجي، وتحديثات محمية ببصمة SHA-256 وتوقيع Minisign مع حماية ضد إعادة التشغيل (تُرفض تلقائياً عند غياب التوقيع)
 
 ### التحميل
-- **[تحميل أحدث إصدار لويندوز](../../releases/latest)**
+- **[تحميل أحدث إصدار](../../releases/latest)** — حزمة ويندوز (مثبّت Setup أو نسخة محمولة Portable) وحزمة أندرويد (APK) من نفس الصفحة
 
 </div>
 
@@ -41,10 +56,12 @@
 
 ## 🇬🇧 English
 
-**Lightweight, security-hardened local audio & video player for Windows (Rust + Tauri v2)**
-
 ### Features
 - Local audio, video & folder playback with a multi-tab workspace, independent windows, and automatic desktop session resume
+- **Hold-to-speed:** press and hold the screen or play control to jump to a fixed 2x speed, then release to return to exactly your previous rate, whatever it was
+- **Real 0–200% volume slider** with a 100% default (levels above 100% may distort depending on the file and device)
+- **Android SAF media library with a folder-tree hierarchy:** browse your device like a file manager — root, folders, subfolders — with a breadcrumb bar and a back button that climbs one level at a time
+- **Streamlined mobile UI:** a logo-only top bar on Android with large, comfortable touch controls
 - Per-tab & per-window audio output routing (`setSinkId`)
 - **Overhauled Mini Player Mode** with live scrubbable seek bar, `S`/`M`/`L` size presets, compact audio bar layout, crisp SVG controls, always-on-top pinning, and DPI/work-area-safe window layout persistence
 - **Native Windows Taskbar Thumbnail Media Controls** (Previous / Play-Pause / Next via `ITaskbarList3`) plus OS media key integration (`navigator.mediaSession`)
@@ -83,4 +100,4 @@ To enable signed releases in your repository:
 - `tests/` — Automated Node.js test suite (`node tests/run-tests.cjs`)
 
 ### Download
-- **[Download Latest Windows Release](../../releases/latest)**
+- **[Download Latest Release](../../releases/latest)** — Windows (Setup installer or Portable) and Android (APK) from the same page
