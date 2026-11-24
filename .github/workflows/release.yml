@@ -370,8 +370,8 @@ jobs:
       - name: Initialize Tauri Android project, adaptive icons & Phase 4 native Kotlin bridge
         working-directory: desktop
         run: |
-          npx @tauri-apps/cli icon assets/icon.png -o src-tauri/icons
           npx @tauri-apps/cli android init --skip-targets-install
+          npx @tauri-apps/cli icon assets/icon.png
           node scripts/configure-android.cjs
 
       - name: Build lightweight ARM64 Release APK
