@@ -4,6 +4,16 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.9.0] - 2026-11-24
+
+### AZ0 Rebrand
+- **New Name and Mark**: The player is now **AZ0** (previously AAZ Player) across the Windows and Android interfaces, the window title, and the installer/portable/APK asset names (`AZ0-Setup`, `AZ0-Portable`, `AZ0-Android-arm64`). A new shaped transparent logo (play intertwined with the lettering) replaces the boxed mark in the app, the README, and all generated taskbar and launcher icons on both platforms.
+- **Updater Continuity Preserved**: The app identifier (`com.aaz.player`), update signature prefix (`aaz-player|`), storage keys (`aaz_*`), and the Minisign public key are unchanged, so existing installs keep their settings and continue to receive signed updates; both updater asset-selection predicates accept the new asset names (covered by automated tests).
+- **Arabic Startup Fix**: A fresh launch with Arabic saved as the interface language now applies the Arabic strings immediately; previously the Scan Device, Library and Player surfaces opened in English until the language was toggled (regression test added).
+- **Presentation**: README refreshed with a natural core-strengths intro, an 8-theme readable montage of real theme UI, and a fully-Arabic Android mockup of the current UI.
+
+---
+
 ## [1.8.0] - 2026-11-24
 
 ### Android App (New Platform)
