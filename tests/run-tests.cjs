@@ -55,7 +55,7 @@ async function runTest(name, fn) {
 }
 
 async function main() {
-  console.log('\nAAZ Player Automated Test Suite\n================================');
+  console.log('\nAZ0 Automated Test Suite\n================================');
 
   const messaging = await import(pathToFileURL(path.join(ROOT, 'js/core/messaging.js')).href);
   const fileUtils = await import(pathToFileURL(path.join(ROOT, 'js/utils/file-utils.js')).href);
@@ -465,8 +465,8 @@ async function main() {
     const csp = tauriConf.app?.security?.csp || '';
     assert.equal(/googleapis|gstatic/i.test(csp), false, 'CSP must not allow googleapis or gstatic');
 
-    const videoAssoc = (tauriConf.bundle?.fileAssociations || []).find((a) => a.name === 'AAZ Video File');
-    assert.ok(videoAssoc, 'AAZ Video File association must exist');
+    const videoAssoc = (tauriConf.bundle?.fileAssociations || []).find((a) => a.name === 'AZ0 Video File');
+    assert.ok(videoAssoc, 'AZ0 Video File association must exist');
     assert.equal(videoAssoc.ext.includes('ts'), false, 'ts extension must be removed from Windows file associations');
   });
 
@@ -674,7 +674,7 @@ async function main() {
   await runTest('Mini Player & UI v1.7.0: SVG-only Mini Player HUD with seek/presets/controls & synced hints', () => {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     const deskPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/package.json'), 'utf8'));
-    assert.ok(html.includes(`AAZ Player v${deskPkg.version}`), 'Menu version label must match desktop/package.json');
+    assert.ok(html.includes(`AZ0 v${deskPkg.version}`), 'Menu version label must match desktop/package.json');
     assert.ok(html.includes('id="miniSeekSlider"'), 'Mini Player must include #miniSeekSlider');
     assert.ok(html.includes('id="miniTimeLabel"'), 'Mini Player must include #miniTimeLabel');
     assert.ok(html.includes('id="miniSizeBtn"'), 'Mini Player must include #miniSizeBtn');
@@ -1391,7 +1391,7 @@ async function main() {
     const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8');
     assert.ok(releaseYml.includes('build-android:'), 'release.yml must include build-android release job');
     assert.ok(releaseYml.includes('ANDROID_KEYSTORE_BASE64'), 'release.yml must support signed release keystore');
-    assert.ok(releaseYml.includes('AAZ-Player-Android-arm64-'), 'release.yml must publish named ARM64 APK & .sha256');
+    assert.ok(releaseYml.includes('AZ0-Android-arm64-'), 'release.yml must publish named ARM64 APK & .sha256');
 
     // Verify desktop-bridge Phase 4 Android routing (system bars, cast, updater + error propagation)
     const p4Calls = [];
@@ -1722,6 +1722,70 @@ async function main() {
     assert.ok(css.includes('@media (max-width: 768px)'), 'narrow layouts must hide the header wordmark');
     const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     assert.ok(indexHtml.includes('tabstrip-brand'), 'brand block must remain (logo SVG)');
+  });
+
+
+  // 39. AZ0 rebrand: old-brand backup still imports, renamed release assets still match updater predicates, identity preserved
+  await runTest('AZ0 rebrand: legacy AAZ backup import, renamed-asset updater matching & identity preservation', () => {
+    // (a) Backup exported by AAZ Player 1.8.0 (app tag "AAZ Player") must still restore
+    const legacyBackup = JSON.stringify({
+      app: 'AAZ Player',
+      backupFormat: 'aaz-backup-v1',
+      schemaVersion: 4,
+      exportedAt: '2026-11-20T00:00:00.000Z',
+      state: { savedPlaylists: [{ id: 'pl_old', name: 'Old Brand Playlist', trackCount: 1 }] },
+      prefs: { theme: 'dark', skin: 'foliage', lang: 'ar' },
+    });
+    const memLegacy = createMemoryStorage();
+    const smLegacy = storageMod.createStorageManager(memLegacy);
+    const resLegacy = smLegacy.importBackupJson(legacyBackup);
+    assert.equal(resLegacy.ok, true, 'legacy AAZ Player backup must import');
+    assert.equal(resLegacy.state.savedPlaylists[0].name, 'Old Brand Playlist');
+    // New exports carry the AZ0 tag while keeping the aaz-backup-v1 format key
+    const newExport = smLegacy.exportBackupJson({});
+    assert.ok(newExport.includes('"app": "AZ0"'), 'new exports must be tagged AZ0');
+    assert.ok(newExport.includes('"backupFormat": "aaz-backup-v1"'), 'backup format key must stay aaz-backup-v1');
+
+    // (b) Renamed release assets still satisfy both updater selection predicates
+    const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    assert.ok(releaseYml.includes('AZ0-Setup-$ver.exe'), 'Windows setup asset renamed to AZ0');
+    assert.ok(releaseYml.includes('AZ0-Portable-$ver.exe'), 'Windows portable asset renamed to AZ0');
+    assert.ok(releaseYml.includes('AZ0-Android-arm64-${REL_VERSION}.apk'), 'Android APK asset renamed to AZ0');
+    assert.ok(releaseYml.includes('"aaz-player|version='), 'Minisign trusted-comment protocol prefix must stay aaz-player|');
+    assert.ok(releaseYml.includes('"${FINAL_NAME}.sha256"'), 'APK sha256 companion must use exact APK name');
+    // Windows predicate (lib.rs): .exe && contains("setup"), fallback excludes "portable"
+    const winSetup = 'AZ0-Setup-1.9.0.exe'.toLowerCase();
+    const winPortable = 'AZ0-Portable-1.9.0.exe'.toLowerCase();
+    assert.ok(winSetup.endsWith('.exe') && winSetup.includes('setup'), 'AZ0 setup asset matches Windows updater predicate');
+    assert.ok(!(winPortable.endsWith('.exe') && !winPortable.includes('portable')), 'AZ0 portable must stay excluded from fallback selection');
+    // Android predicate (AazUpdater.kt): .apk with arm64/aarch64 preferred, sha file name matches
+    const apkName = 'AZ0-Android-arm64-1.9.0.apk'.toLowerCase();
+    assert.ok(apkName.endsWith('.apk') && (apkName.includes('arm64') || apkName.includes('aarch64')), 'AZ0 APK matches Android updater predicate');
+    assert.equal(`${apkName}.sha256`, 'az0-android-arm64-1.9.0.apk.sha256', 'sha companion naming stays consistent');
+
+    // (c) Installed-app identity & user data continuity preserved
+    const tauriConf = JSON.parse(fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/tauri.conf.json'), 'utf8'));
+    assert.equal(tauriConf.identifier, 'com.aaz.player', 'Tauri identifier must stay com.aaz.player');
+    assert.equal(tauriConf.productName, 'AZ0', 'productName becomes AZ0');
+    const storageSrc = fs.readFileSync(path.join(ROOT, 'js/modules/storage-manager.js'), 'utf8');
+    assert.ok(storageSrc.includes('aaz_media_player_state'), 'localStorage keys must stay aaz_*');
+    const libRs = fs.readFileSync(path.join(ROOT, 'desktop/src-tauri/src/lib.rs'), 'utf8');
+    assert.ok(libRs.includes('aaz-player|'), 'Rust updater must keep aaz-player| signature prefix');
+
+    // (d) No user-visible AAZ Player strings remain in shipped UI surfaces
+    const surfaces = [
+      'index.html', 'js/app/player-app.js', 'js/ui/phase3-controller.js', 'js/ui/workspace-shell.js',
+      'js/utils/error-handler.js', 'js/modules/playlist-io.js', 'js/modules/storage-manager.js',
+      'desktop/android-native/AazCastHelper.kt', 'desktop/android-native/AazPlaybackService.kt',
+      'desktop/android-native/MainActivity.kt', 'desktop/android-native/AazMediaHelper.kt',
+      'desktop/android-native/AazUpdater.kt',
+    ];
+    for (const rel of surfaces) {
+      const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+      assert.ok(!src.includes('AAZ Player'), `${rel} must not contain user-visible 'AAZ Player'`);
+    }
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    assert.ok(indexHtml.includes('<title>AZ0</title>'), 'document title must be AZ0');
   });
 
   console.log(`\nSummary: ${passed} passed, ${failed} failed\n`);
