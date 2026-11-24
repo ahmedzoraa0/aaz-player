@@ -89,7 +89,7 @@ export function createMobileGestureController(handlers = {}) {
     return { action: 'toggle-play' };
   }
 
-  function handleVerticalSwipe({ relativeXRatio, deltaY, stageHeight = 400, currentVolume = 0.8 }) {
+  function handleVerticalSwipe({ relativeXRatio, deltaY, stageHeight = 400, currentVolume = 0.8, maxVolume = 1 }) {
     if (locked) return { action: 'blocked-locked' };
     const height = Math.max(120, Number(stageHeight) || 400);
     // Swipe up (negative deltaY) increases value
@@ -103,7 +103,8 @@ export function createMobileGestureController(handlers = {}) {
       return { action: 'brightness', value: brightness };
     }
     if (zone === 'right') {
-      const nextVol = Math.min(1, Math.max(0, Number(((Number(currentVolume) || 0) + deltaRatio).toFixed(3))));
+      const volCap = volumeMode === 'system' ? 1 : Math.max(1, Number(maxVolume) || 1);
+      const nextVol = Math.min(volCap, Math.max(0, Number(((Number(currentVolume) || 0) + deltaRatio).toFixed(3))));
       if (typeof handlers.onVolumeChange === 'function') {
         handlers.onVolumeChange(nextVol, volumeMode === 'system');
       }

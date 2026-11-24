@@ -43,6 +43,16 @@ import {
   decideGestureAxis,
   TOUCH_SLOP_PX,
 } from '../modules/mobile-gestures.js';
+import {
+  createSpeedBoostController,
+  SPEED_BOOST_PIN_RATE,
+} from '../modules/speed-boost.js';
+import {
+  clampVolume,
+  makeOverdriveCurve,
+  resolveVolumeStages,
+  MAX_VOLUME,
+} from '../modules/volume-overdrive.js';
 
 export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
   const CURRENT_TAB_ID = currentTabId;
@@ -410,6 +420,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         eqPreset: 'flat',
         eqGains: [0, 0, 0, 0, 0],
         preampGain: 1,
+
+        // Volume: 0..2 slider domain (100%..200% = real Web Audio overdrive)
+        volume: 1,
+        volumeLimitNotified: false,
 
         // Favorites, Bookmarks & Playlist Powerhouse State
         starredKeys: new Set(),
@@ -1356,6 +1370,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         source: null,
         filters: [],
         preamp: null,
+        overdrive: null,
+        overdriveGainWanted: 1,
         analyser: null,
         freqData: null,
         timeData: null,
@@ -1372,6 +1388,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         hasActiveDSP() {
           if (state.preampGain > 1.001) return true;
+          if (Number.isFinite(state.volume) && state.volume > 1) return true;
           return Array.isArray(state.eqGains) && state.eqGains.some((g) => Math.abs(Number(g) || 0) > 0.05);
         },
 
@@ -1448,6 +1465,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 this.preamp = this.ctx.createGain();
                 this.preamp.gain.value = state.preampGain || 1;
 
+                // Volume overdrive stage (100%..200%): soft-limited WaveShaper so
+                // amplified peaks can never hard-clip past the tested ceiling.
+                this.overdrive = this.ctx.createWaveShaper();
+                this.overdrive.oversample = '4x';
+                if (this.overdriveGainWanted > 1) {
+                  this.overdrive.curve = makeOverdriveCurve(this.overdriveGainWanted);
+                }
+
                 this.analyser = this.ctx.createAnalyser();
                 this.analyser.fftSize = 256;
                 this.analyser.smoothingTimeConstant = 0.8;
@@ -1460,7 +1485,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                   node = f;
                 }
                 node.connect(this.preamp);
-                this.preamp.connect(this.analyser);
+                this.preamp.connect(this.overdrive);
+                this.overdrive.connect(this.analyser);
                 this.analyser.connect(this.ctx.destination);
 
                 this.initialized = true;
@@ -1509,6 +1535,27 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             this.failed = true;
             return false;
           }
+        },
+
+        /**
+         * Volume >100% gain stage. Returns false when the Web Audio path is
+         * unavailable so the caller can clamp honestly at 100% instead of
+         * claiming amplification the output never receives.
+         */
+        setOverdrive(gain) {
+          const g = Math.max(1, Number(gain) || 1);
+          this.overdriveGainWanted = g;
+          if (g <= 1) {
+            if (this.overdrive) this.overdrive.curve = null;
+            return true;
+          }
+          if (this.failed) return false;
+          if (!this.initialized) {
+            this.ensureInit(true); // async; curve applied in finalizeGraph
+            return !this.failed;
+          }
+          if (this.overdrive) this.overdrive.curve = makeOverdriveCurve(g);
+          return true;
         },
 
         applyEQ() {
@@ -3239,7 +3286,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           activeSavedPlaylistId: hasActiveTracks ? state.activeSavedPlaylistId : (state.savedSession?.activeSavedPlaylistId || null),
           currentTime: cleanTime,
           duration: Number.isFinite(el.media.duration) ? el.media.duration : 0,
-          volume: el.media.volume,
+          volume: Number.isFinite(state.volume) ? state.volume : el.media.volume,
           muted: el.media.muted,
           playbackRate: el.media.playbackRate,
           playlistMode: state.playlistMode,
@@ -4389,9 +4436,30 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
          12. Controls, EQ, Stars, Bookmarks & Sleep Timer
          ======================================================================= */
       function setVolume(val, persist = true) {
-        const clamped = Math.max(0, Math.min(1, Number(val)));
-        el.media.volume = clamped;
-        if (clamped > 0 && el.media.muted) el.media.muted = false;
+        const stages = resolveVolumeStages(val);
+        state.volume = stages.clamped;
+        el.media.volume = stages.elementVolume;
+        if (stages.overdrive) {
+          if (!AudioStudio.setOverdrive(stages.gain)) {
+            // Gain path unavailable: clamp honestly at 100% rather than claim
+            // 200% while the output stays at 100%.
+            el.media.volume = 1;
+            if (!state.volumeLimitNotified) {
+              state.volumeLimitNotified = true;
+              showNotice(
+                state.lang === 'ar'
+                  ? 'التضخيم فوق 100% غير متاح هنا — الحد الأقصى 100%'
+                  : 'Volume boost above 100% is unavailable here — capped at 100%',
+                true
+              );
+            }
+          } else {
+            state.volumeLimitNotified = false;
+          }
+        } else {
+          AudioStudio.setOverdrive(1);
+        }
+        if (stages.clamped > 0 && el.media.muted) el.media.muted = false;
         updateVolumeUI();
         if (persist) persistPlaybackState();
       }
@@ -4481,52 +4549,48 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         return clamped;
       }
 
-      const speedBoost = {
-        active: false,
-        source: null,
-        baseRate: 1,
-        boostedRate: 2,
-      };
+      // Hold-to-speed: pins playback at EXACTLY SPEED_BOOST_PIN_RATE (2.0x)
+      // while held, whatever the base rate; release restores the prior base.
+      const boostController = createSpeedBoostController({
+        getBaseRate: () =>
+          Number.isFinite(state.playbackRate) && state.playbackRate > 0 ? state.playbackRate : 1,
+        applyRate: (rate) => applyEffectivePlaybackRate(rate),
+        onChange: ({ active, boostedRate, restoredRate }) => {
+          if (active) {
+            const label = formatPlaybackRate(boostedRate);
+            if (el.speedBoostText) el.speedBoostText.textContent = label;
+            if (el.speedBoostBadge) el.speedBoostBadge.hidden = false;
+            if (el.speedCycleBtn) {
+              el.speedCycleBtn.textContent = label;
+              el.speedCycleBtn.classList.add('is-active');
+            }
+          } else {
+            const restoreRate = Number.isFinite(restoredRate) ? restoredRate : state.playbackRate;
+            if (el.speedBoostBadge) el.speedBoostBadge.hidden = true;
+            if (el.speedCycleBtn) {
+              el.speedCycleBtn.textContent = formatPlaybackRate(restoreRate);
+              el.speedCycleBtn.classList.toggle('is-active', restoreRate !== 1);
+            }
+          }
+        },
+      });
+      const speedBoost = boostController.state;
 
       function startSpeedBoost(source) {
         if (!getCurrentTrack() || el.media.paused || el.media.ended) return false;
-        if (speedBoost.active && speedBoost.source === source) return true;
-        const base = Number.isFinite(state.playbackRate) && state.playbackRate > 0 ? state.playbackRate : 1;
-        const boosted = Math.max(
-          MIN_PLAYBACK_RATE,
-          Math.min(MAX_KEYBOARD_PLAYBACK_RATE, Number((base * 2).toFixed(2)))
-        );
-        speedBoost.active = true;
-        speedBoost.source = source;
-        speedBoost.baseRate = base;
-        speedBoost.boostedRate = boosted;
-        applyEffectivePlaybackRate(boosted);
-        const label = formatPlaybackRate(boosted);
-        if (el.speedBoostText) el.speedBoostText.textContent = label;
-        if (el.speedBoostBadge) el.speedBoostBadge.hidden = false;
-        if (el.speedCycleBtn) {
-          el.speedCycleBtn.textContent = label;
-          el.speedCycleBtn.classList.add('is-active');
-        }
-        return true;
+        return boostController.start(source);
       }
 
       function stopSpeedBoost(source = null) {
-        if (!speedBoost.active) return false;
-        if (source && speedBoost.source !== source) return false;
-        const restoreRate = Number.isFinite(state.playbackRate) && state.playbackRate > 0
-          ? state.playbackRate
-          : speedBoost.baseRate;
-        speedBoost.active = false;
-        speedBoost.source = null;
-        applyEffectivePlaybackRate(restoreRate);
-        if (el.speedBoostBadge) el.speedBoostBadge.hidden = true;
-        if (el.speedCycleBtn) {
-          el.speedCycleBtn.textContent = formatPlaybackRate(restoreRate);
-          el.speedCycleBtn.classList.toggle('is-active', restoreRate !== 1);
-        }
-        return true;
+        return boostController.stop(source);
       }
+
+      // A hold must never get stuck on: window blur, app backgrounding and page
+      // hide end an active boost exactly like a release (restore base rate).
+      window.addEventListener('blur', () => boostController.cancel());
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) boostController.cancel();
+      });
 
       function setPlaybackRate(rate, persist = true) {
         const parsed = Number(rate);
@@ -4539,7 +4603,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           el.speedCycleBtn.textContent = formatPlaybackRate(chosen);
           el.speedCycleBtn.classList.toggle('is-active', chosen !== 1);
         } else {
-          speedBoost.baseRate = chosen;
+          boostController.setBaseRate(chosen);
         }
         document.querySelectorAll('.menu-action[data-speed]').forEach((item) => {
           item.classList.toggle('is-checked', Number(item.dataset.speed) === chosen);
@@ -5311,11 +5375,20 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function updateVolumeUI() {
-        const muted = el.media.muted || el.media.volume === 0;
-        const displayVol = el.media.muted ? 0 : el.media.volume;
+        const vol = Number.isFinite(state.volume) ? state.volume : Math.min(1, el.media.volume || 0);
+        const muted = el.media.muted || vol === 0;
+        const displayVol = el.media.muted ? 0 : vol;
         el.volumeSlider.value = String(displayVol);
-        setRangeFill(el.volumeSlider, displayVol);
+        setRangeFill(el.volumeSlider, displayVol / MAX_VOLUME);
         el.volumeReadout.textContent = `${Math.round(displayVol * 100)}%`;
+        const overdrive = displayVol > 1.001;
+        el.volumeReadout.classList.toggle('is-overdrive', overdrive);
+        // Honest wording: above 100% can distort and can be uncomfortably loud.
+        el.volumeReadout.title = overdrive
+          ? (state.lang === 'ar'
+              ? 'الصوت أعلى من 100% وقد يحدث تشويه أو يكون مرتفعًا بشكل غير مريح'
+              : 'Volume above 100% — may distort and can be uncomfortably loud')
+          : '';
         el.volHighIcon.style.display = muted ? 'none' : 'block';
         el.volMuteIcon.style.display = muted ? 'block' : 'none';
       }
@@ -8125,7 +8198,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         state.savedSession = saved;
 
         if (saved) {
-          el.media.volume = Number.isFinite(saved.volume) ? Math.max(0, Math.min(1, saved.volume)) : 0.85;
+          setVolume(Number.isFinite(saved.volume) ? saved.volume : 1, false);
           el.media.muted = Boolean(saved.muted);
           setPlaybackRate(saved.playbackRate || 1, false);
           if (['all', 'audio', 'video', 'starred'].includes(saved.playlistMode)) state.playlistMode = saved.playlistMode;
@@ -8146,7 +8219,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           // Do NOT pre-populate state.nativeFolderPath before a folder is actually loaded into this tab!
           state.nativeFolderPath = '';
         } else {
-          el.media.volume = 0.85;
+          setVolume(1, false);
           setPlaybackRate(1, false);
         }
 
@@ -8409,6 +8482,16 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 toggleFullscreen();
               },
               onNavigateBack: () => {
+                // File-manager style library: Back climbs one folder level
+                // before leaving the library view.
+                if (
+                  state.mobileView === 'library' &&
+                  phase3 &&
+                  typeof phase3.libraryHandleBack === 'function' &&
+                  phase3.libraryHandleBack()
+                ) {
+                  return;
+                }
                 setMobileView('player');
               },
               onConfirmExit: () => {
@@ -8510,7 +8593,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                       relativeXRatio: relX,
                       deltaY,
                       stageHeight: rect.height || 360,
-                      currentVolume: el.media.volume,
+                      currentVolume: Number.isFinite(state.volume) ? state.volume : el.media.volume,
+                      maxVolume: MAX_VOLUME,
                     });
                   }
                 },
@@ -8696,6 +8780,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             });
           },
           loadTrackByKey,
+          enqueueExternalPath: async (fullPath) => {
+            if (!desktopBridge || !fullPath || typeof desktopBridge.inspectPaths !== 'function') return false;
+            const inspected = await desktopBridge.inspectPaths([fullPath]);
+            const entries = inspected?.entries || [];
+            if (!entries.length) return false;
+            const { tracks, subMap } = buildTracksFromElectronEntries(entries);
+            appendTracksToQueue(tracks, subMap);
+            return tracks.length > 0;
+          },
           openExternalPathAtTime: async (fullPath, startTime = 0) => {
             const opened = await handleExternalOpenPaths([fullPath], { startTime });
             if (!opened) {
@@ -8715,7 +8808,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             persistPlaybackState(0);
           },
           skipBySeconds,
-          adjustVolume: (delta) => setVolume(el.media.volume + delta, true),
+          adjustVolume: (delta) =>
+            setVolume((Number.isFinite(state.volume) ? state.volume : el.media.volume) + delta, true),
           setVolume: (vol) => setVolume(vol, true),
           setPlaybackRate: (rate) => setPlaybackRate(rate, true),
           adjustPlaybackSpeed: (delta) => adjustPlaybackSpeed(delta, true),

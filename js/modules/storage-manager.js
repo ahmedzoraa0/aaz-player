@@ -27,7 +27,7 @@ const MAX_BACKUP_JSON_BYTES = 8 * 1024 * 1024; // 8 MB backup safety cap
 
 export const DEFAULT_PLAYBACK_SETTINGS = Object.freeze({
   defaultPlaybackRate: 1,
-  defaultVolume: 0.85,
+  defaultVolume: 1,
   resumePreviousPosition: true,
   defaultSubtitleLang: 'auto', // 'auto' | 'ar' | 'en'
   defaultAspectRatio: 'default', // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
@@ -52,7 +52,7 @@ export function createEmptyState() {
     version: SCHEMA_VERSION,
     updatedAt: Date.now(),
     // Existing v3 session & playback fields (preserved 100%)
-    volume: 0.85,
+    volume: 1,
     muted: false,
     playbackRate: 1,
     playlistMode: 'all',
@@ -137,7 +137,7 @@ export function sanitizePlaybackSettings(raw) {
 
   return {
     defaultPlaybackRate,
-    defaultVolume: clamp(src.defaultVolume, 0, 1, DEFAULT_PLAYBACK_SETTINGS.defaultVolume),
+    defaultVolume: clamp(src.defaultVolume, 0, 2, DEFAULT_PLAYBACK_SETTINGS.defaultVolume),
     resumePreviousPosition:
       typeof src.resumePreviousPosition === 'boolean'
         ? src.resumePreviousPosition
@@ -185,7 +185,8 @@ export function sanitizeState(raw) {
   out.version = SCHEMA_VERSION;
   out.updatedAt = Number.isFinite(Number(raw.updatedAt)) ? Number(raw.updatedAt) : Date.now();
 
-  out.volume = clamp(raw.volume, 0, 1, base.volume);
+  // Volume domain is 0..2 (100%..200% = real Web Audio overdrive gain)
+  out.volume = clamp(raw.volume, 0, 2, base.volume);
   out.muted = Boolean(raw.muted);
   out.playbackRate = clamp(raw.playbackRate, 0.25, 4, base.playbackRate);
   out.playlistMode = ['all', 'audio', 'video', 'starred'].includes(raw.playlistMode)

@@ -106,6 +106,88 @@ class AazMediaHelper(
         }
     }
 
+    /**
+     * Describe a SAF tree grant without scanning it (folder name + path only).
+     * Used by the hierarchical library browser, which lists one level at a time.
+     */
+    fun describeSafTree(treeUri: Uri): JSONObject {
+        return JSONObject().apply {
+            put("folderName", resolveTreeDisplayName(treeUri))
+            put("folderPath", treeUri.toString())
+            put("entries", JSONArray())
+        }
+    }
+
+    /**
+     * List ONE directory level of a SAF tree (non-recursive): subfolders and
+     * that folder's own media files, via buildChildDocumentsUriUsingTree, so
+     * large folders open fast. parentDocId blank/null = the tree root.
+     */
+    fun listSafChildren(treeUri: Uri, parentDocId: String?): JSONObject {
+        val folders = JSONArray()
+        val entries = JSONArray()
+        val docId = try {
+            if (parentDocId.isNullOrBlank()) DocumentsContract.getTreeDocumentId(treeUri) else parentDocId
+        } catch (_: Exception) {
+            return JSONObject().apply {
+                put("treeUri", treeUri.toString())
+                put("parentDocId", "")
+                put("folders", folders)
+                put("entries", entries)
+            }
+        }
+
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        )
+
+        try {
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { c ->
+                val idIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val sizeIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                val modIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+
+                while (c.moveToNext()) {
+                    val childId = if (idIdx >= 0) c.getString(idIdx) else null
+                    val name = if (nameIdx >= 0) c.getString(nameIdx) else null
+                    val mime = if (mimeIdx >= 0) c.getString(mimeIdx) else null
+                    if (childId.isNullOrBlank() || name.isNullOrBlank()) continue
+
+                    if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        folders.put(JSONObject().apply {
+                            put("docId", childId)
+                            put("name", name)
+                        })
+                        continue
+                    }
+
+                    val kind = classifyKind(name, mime) ?: continue
+                    if (kind != "audio" && kind != "video") continue
+
+                    val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId).toString()
+                    val size = if (sizeIdx >= 0 && !c.isNull(sizeIdx)) c.getLong(sizeIdx) else 0L
+                    val mtime = if (modIdx >= 0 && !c.isNull(modIdx)) c.getLong(modIdx) else 0L
+                    entries.put(buildEntryJson(name, name, kind, size, mtime, docUri, ""))
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        return JSONObject().apply {
+            put("treeUri", treeUri.toString())
+            put("parentDocId", docId)
+            put("folders", folders)
+            put("entries", entries)
+        }
+    }
+
     fun scanSafTree(treeUri: Uri): JSONObject {
         val entries = JSONArray()
         val folderName = resolveTreeDisplayName(treeUri)

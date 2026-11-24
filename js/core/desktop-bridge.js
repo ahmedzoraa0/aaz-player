@@ -26,6 +26,7 @@ export function buildPlatformCapabilities(isAndroid) {
     directoryPicker: !isAndroid,
     safPicker: isAndroid,
     mediaStoreScan: isAndroid,
+    hierarchicalLibrary: isAndroid,
     touchGestures: isAndroid,
     windowsCast: !isAndroid,
     lanCast: true,
@@ -223,6 +224,26 @@ export function attachDesktopBridge(win = typeof window !== 'undefined' ? window
         return callAndroidAsync((native, cbId) => native.selectFolder(cbId));
       }
       return invoke('aaz_select_folder');
+    },
+    // Android SAF grant without the recursive scan: hierarchical browsing
+    // lists one level at a time instead (see listSafChildren).
+    selectFolderShallow: () => {
+      if (isAndroid && getAndroidNative() && typeof getAndroidNative().selectFolderShallow === 'function') {
+        return callAndroidAsync((native, cbId) => native.selectFolderShallow(cbId));
+      }
+      if (isAndroid && getAndroidNative()) {
+        return callAndroidAsync((native, cbId) => native.selectFolder(cbId));
+      }
+      return invoke('aaz_select_folder');
+    },
+    // One directory level of a SAF tree (folders + media files, non-recursive).
+    listSafChildren: (treeUri, parentDocId = '') => {
+      if (isAndroid && getAndroidNative() && typeof getAndroidNative().listSafChildren === 'function') {
+        return callAndroidAsync((native, cbId) =>
+          native.listSafChildren(cbId, String(treeUri), String(parentDocId || ''))
+        );
+      }
+      return Promise.resolve(null);
     },
     selectFiles: () => {
       if (isAndroid && getAndroidNative()) {

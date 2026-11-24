@@ -58,6 +58,7 @@ class MainActivity : TauriActivity() {
     private val pendingLaunchUris = ArrayList<String>()
     private var pendingFilesCallbackId: String? = null
     private var pendingFolderCallbackId: String? = null
+    private var pendingFolderShallow: Boolean = false
     private var pendingSaveTextCallbackId: String? = null
     private var pendingSaveTextContent: String? = null
     private var pendingScanCallbackId: String? = null
@@ -97,18 +98,23 @@ class MainActivity : TauriActivity() {
         openFolderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val cbId = pendingFolderCallbackId
             pendingFolderCallbackId = null
+            val shallow = pendingFolderShallow
+            pendingFolderShallow = false
             if (cbId == null) return@registerForActivityResult
             val treeUri = if (result.resultCode == RESULT_OK) result.data?.data else null
             if (treeUri == null) {
                 resolveJsCallback(cbId, "null")
                 return@registerForActivityResult
             }
+            // Persisted grant so the folder survives app restarts.
             try {
                 contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: Exception) {
             }
             ioExecutor.execute {
-                val payload = mediaHelper.scanSafTree(treeUri)
+                // Shallow grants skip the recursive scan: the hierarchical
+                // library browser lists one level at a time instead.
+                val payload = if (shallow) mediaHelper.describeSafTree(treeUri) else mediaHelper.scanSafTree(treeUri)
                 resolveJsCallback(cbId, payload.toString())
             }
         }
@@ -517,9 +523,15 @@ class MainActivity : TauriActivity() {
         }
 
         @JavascriptInterface
-        fun selectFolder(callbackId: String) {
+        fun selectFolder(callbackId: String) = launchFolderPicker(callbackId, shallow = false)
+
+        @JavascriptInterface
+        fun selectFolderShallow(callbackId: String) = launchFolderPicker(callbackId, shallow = true)
+
+        private fun launchFolderPicker(callbackId: String, shallow: Boolean) {
             runOnUiThread {
                 pendingFolderCallbackId = callbackId
+                pendingFolderShallow = shallow
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                     addFlags(
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -531,8 +543,21 @@ class MainActivity : TauriActivity() {
                     openFolderLauncher.launch(intent)
                 } catch (_: Exception) {
                     pendingFolderCallbackId = null
+                    pendingFolderShallow = false
                     resolveJsCallback(callbackId, "null")
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun listSafChildren(callbackId: String, treeUriStr: String, parentDocId: String) {
+            ioExecutor.execute {
+                val res = if (treeUriStr.startsWith("content://")) {
+                    mediaHelper.listSafChildren(Uri.parse(treeUriStr), parentDocId).toString()
+                } else {
+                    "null"
+                }
+                resolveJsCallback(callbackId, res)
             }
         }
 

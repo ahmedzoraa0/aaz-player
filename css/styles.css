@@ -1408,6 +1408,13 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* On phones the long helper text must wrap, not truncate mid-word */
+    @media (max-width: 768px) {
+      .track-subpath {
+        white-space: normal;
+      }
+    }
+
     .audio-stage-actions {
       display: flex;
       align-items: center;
@@ -2875,8 +2882,74 @@
       font-size: 11px;
       font-variant-numeric: tabular-nums;
       color: var(--text-muted);
-      width: 32px;
+      width: 36px;
       text-align: right;
+    }
+
+    /* Clear visual mark whenever volume is boosted above 100% */
+    .volume-readout.is-overdrive {
+      color: var(--gold);
+      font-weight: 700;
+    }
+
+    /* Android file-manager style library browsing */
+    .lib-browse-crumbs {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 2px;
+      padding: 6px 4px 8px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border-hairline);
+      position: sticky;
+      top: 0;
+      background: var(--bg-panel, var(--bg-canvas));
+      z-index: 2;
+    }
+
+    .lib-browse-up,
+    .lib-browse-crumb {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: 12.5px;
+      min-height: 44px;
+      padding: 0 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .lib-browse-up {
+      font-size: 16px;
+      color: var(--text-primary);
+    }
+
+    .lib-browse-crumb.is-active {
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .lib-browse-up:active,
+    .lib-browse-crumb:active {
+      background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+    }
+
+    .lib-browse-sep {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .lib-browse-folder .track-name {
+      font-weight: 600;
+    }
+
+    .track-index.lib-folder-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
     }
 
     .sleep-badge {
@@ -3232,6 +3305,30 @@
     .tabstrip-brand-accent {
       color: var(--gold);
       font-weight: 700;
+    }
+
+    /* Mobile top bar: logo only, no wordmark crowding the header.
+       Applies on Android generally and on any narrow (phone-width) layout;
+       desktop keeps the full "AAZ Player" wordmark. */
+    html.is-android .tabstrip-brand > span,
+    html.is-android .tabstrip-brand-accent {
+      display: none;
+    }
+
+    html.is-android .tabstrip-brand {
+      padding: 0 6px 1px;
+      border-inline-end: none;
+    }
+
+    @media (max-width: 768px) {
+      .tabstrip-brand > span,
+      .tabstrip-brand-accent {
+        display: none;
+      }
+      .tabstrip-brand {
+        padding: 0 6px 1px;
+        border-inline-end: none;
+      }
     }
 
     .tabstrip-drag-spacer {
@@ -3963,6 +4060,11 @@
       padding: 6px 9px 7px 9px;
     }
 
+    /* Browse file rows have no icon cell: info, duration, queue-button */
+    .track-row.lib-track-row:not(.lib-browse-folder) {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
     html[dir="rtl"] .track-row.lib-track-row {
       padding: 6px 9px 7px 9px;
     }
@@ -4525,9 +4627,14 @@
       flex: 1 1 auto;
     }
 
+    /* Mobile top bar carries the logo only; the "AAZ Player" wordmark is a
+       desktop affordance and just crowds a phone header. */
     html.is-android .brand-wordmark {
-      font-size: 15px;
-      white-space: nowrap;
+      display: none;
+    }
+
+    html.is-android .brand-lockup {
+      pointer-events: none;
     }
 
     html.is-android .topbar-right {
@@ -4535,6 +4642,27 @@
       align-items: center;
       gap: 6px;
       flex-shrink: 0;
+    }
+
+    /* Very narrow phones (<=360dp): keep the top bar inside the viewport */
+    @media (max-width: 360px) {
+      html.is-android .topbar {
+        padding: 0 8px;
+        gap: 6px;
+      }
+      html.is-android .topbar-right {
+        gap: 4px;
+      }
+      html.is-android .topbar-right .btn {
+        padding: 0 8px;
+      }
+      html.is-android .brand-logo-svg {
+        width: 24px;
+        height: 24px;
+      }
+      html.is-android .lang-toggle-btn {
+        padding: 0 8px;
+      }
     }
 
     html.is-android .topbar-right .btn {
