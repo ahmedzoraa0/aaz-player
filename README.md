@@ -48,7 +48,7 @@
 - معادل صوت 5 نطاقات و4 أنماط عرض صوتي، واجهة عربي/إنجليزي، خطوط مدمجة محلياً بدون اتصال خارجي، وتحديثات محمية ببصمة SHA-256 وتوقيع Minisign مع حماية ضد إعادة التشغيل (تُرفض تلقائياً عند غياب التوقيع)
 
 ### التحميل
-- **[تحميل أحدث إصدار](../../releases/latest)** — حزمة ويندوز (مثبّت Setup أو نسخة محمولة Portable) وحزمة أندرويد (APK) من نفس الصفحة
+- **[تحميل أحدث إصدار](../../releases/latest)** — حزمة ويندوز (مثبّت Setup أو نسخة محمولة Portable) متاحة الآن، وحزمة أندرويد (APK) قيد النشر وستظهر في نفس الصفحة فور جاهزيتها
 
 </div>
 
@@ -100,4 +100,4 @@ To enable signed releases in your repository:
 - `tests/` — Automated Node.js test suite (`node tests/run-tests.cjs`)
 
 ### Download
-- **[Download Latest Release](../../releases/latest)** — Windows (Setup installer or Portable) and Android (APK) from the same page
+- **[Download Latest Release](../../releases/latest)** — Windows (Setup installer or Portable) available now; the Android APK is still being published and will appear on the same page once ready
