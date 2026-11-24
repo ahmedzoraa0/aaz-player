@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="docs/screenshots/desktop.png" alt="AAZ Player on Windows" width="74%" />
-  <img src="docs/screenshots/mobile.png" alt="AAZ Player on Android" width="22%" />
+  <img src="docs/screenshots/android.png" alt="AAZ Player Android UI (Arabic)" width="22%" />
 </p>
 
 ---
