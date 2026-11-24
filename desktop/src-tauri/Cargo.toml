@@ -1,6 +1,6 @@
 [package]
 name = "aaz-player"
-version = "1.8.0"
+version = "1.9.0"
 description = "AAZ Player — Lightweight Native Rust & WebView2 Local Audio & Video Player"
 authors = ["AAZ"]
 edition = "2021"
