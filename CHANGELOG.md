@@ -4,6 +4,11 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
+## [1.9.1] - 2026-11-24
+
+### Fixed
+- Android launcher icon on legacy devices (API 24-25): generated icon bitmaps now run after `android init` in the release workflow, so the AZ0 mark replaces the Tauri default icon everywhere. Adaptive icon (API 26+) was already correct in 1.9.0.
+
 ## [1.9.0] - 2026-11-24
 
 ### AZ0 Rebrand
