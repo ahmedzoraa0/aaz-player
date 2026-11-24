@@ -1,5 +1,5 @@
 /**
- * Lightweight, duplicate-safe EventBus for AAZ Player internal modules.
+ * Lightweight, duplicate-safe EventBus for AZ0 internal modules.
  */
 export function createEventBus() {
   const listeners = new Map();
