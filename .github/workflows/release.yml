@@ -1,4 +1,4 @@
-name: Build & Release AAZ Player (Windows & Android — Rust / Tauri)
+name: Build & Release AZ0 (Windows & Android — Rust / Tauri)
 
 on:
   push:
@@ -162,7 +162,7 @@ jobs:
             Write-Error "Could not locate built NSIS installer!"
             exit 1
           }
-          $setupDest = "release-out/AAZ-Player-Setup-$ver.exe"
+          $setupDest = "release-out/AZ0-Setup-$ver.exe"
           Copy-Item $nsisInstaller.FullName -Destination $setupDest -Force
 
           $portableBin = "desktop/src-tauri/target/release/aaz-player.exe"
@@ -170,7 +170,7 @@ jobs:
             Write-Error "Could not locate built portable Rust binary!"
             exit 1
           }
-          $portableDest = "release-out/AAZ-Player-Portable-$ver.exe"
+          $portableDest = "release-out/AZ0-Portable-$ver.exe"
           Copy-Item $portableBin -Destination $portableDest -Force
 
           # Generate SHA256SUMS.txt for fail-closed integrity verification
@@ -178,8 +178,8 @@ jobs:
           $portableHash = (Get-FileHash -Path $portableDest -Algorithm SHA256).Hash.ToLower()
           $sumsPath = "release-out/SHA256SUMS.txt"
           @(
-            "$setupHash  AAZ-Player-Setup-$ver.exe",
-            "$portableHash  AAZ-Player-Portable-$ver.exe"
+            "$setupHash  AZ0-Setup-$ver.exe",
+            "$portableHash  AZ0-Portable-$ver.exe"
           ) | Set-Content -Path $sumsPath -Encoding UTF8
 
           $uploadFiles = @($setupDest, $portableDest, $sumsPath)
@@ -258,7 +258,7 @@ jobs:
             }
           }
           if ([string]::IsNullOrWhiteSpace($notes)) {
-            $notes = "AAZ Player $tag — Security-hardened local audio & video player for Windows with overhauled Mini Player, native Windows taskbar media controls, 16 green-identity themes, and fail-closed SHA-256 + Minisign auto-updater."
+            $notes = "AZ0 $tag — Security-hardened local audio & video player for Windows with overhauled Mini Player, native Windows taskbar media controls, 16 green-identity themes, and fail-closed SHA-256 + Minisign auto-updater."
           }
           if ($env:IS_PRERELEASE -eq "true") {
             $notes = "> **Unsigned Preview Build:** Minisign secrets were not configured for this manual preview build. The in-app auto-updater refuses unsigned updates.`n`n$notes"
@@ -274,7 +274,7 @@ jobs:
           if ($exists) {
             gh release upload $tag @uploadFiles --clobber
           } else {
-            $createArgs = @("release", "create", $tag) + $uploadFiles + @("--title", "AAZ Player $tag", "--notes-file", $notesFile)
+            $createArgs = @("release", "create", $tag) + $uploadFiles + @("--title", "AZ0 $tag", "--notes-file", $notesFile)
             if ($env:IS_PRERELEASE -eq "true") {
               $createArgs += "--prerelease"
             }
@@ -382,7 +382,7 @@ jobs:
           APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 
           ALIGNED_APK="$RUNNER_TEMP/aaz-aligned.apk"
-          FINAL_NAME="AAZ-Player-Android-arm64-${REL_VERSION}.apk"
+          FINAL_NAME="AZ0-Android-arm64-${REL_VERSION}.apk"
           FINAL_APK="release-android/${FINAL_NAME}"
           KEYSTORE_FILE="$RUNNER_TEMP/aaz-release.keystore"
 
@@ -400,7 +400,7 @@ jobs:
           else
             keytool -genkeypair -v -keystore "$KEYSTORE_FILE" -storepass android -keypass android \
               -alias aazpreview -keyalg RSA -keysize 2048 -validity 365 \
-              -dname "CN=AAZ Player Preview,O=AAZ,C=US"
+              -dname "CN=AZ0 Preview,O=AZ0,C=US"
             "$APKSIGNER" sign \
               --ks "$KEYSTORE_FILE" \
               --ks-key-alias aazpreview \
