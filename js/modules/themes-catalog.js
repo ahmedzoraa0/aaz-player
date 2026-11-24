@@ -1,6 +1,6 @@
 /**
- * AAZ Player Theme Studio Catalog — 16 Distinct Green-Identity Visual Themes (Dark + Light = 32 Modes).
- * Every theme keeps AAZ Player's signature green primary brand identity while dramatically transforming
+ * AZ0 Theme Studio Catalog — 16 Distinct Green-Identity Visual Themes (Dark + Light = 32 Modes).
+ * Every theme keeps AZ0's signature green primary brand identity while dramatically transforming
  * surface materials, supporting accent palettes, box geometry, borders, shadows, controls & typography.
  */
 
