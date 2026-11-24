@@ -52,7 +52,7 @@ class AazCastHelper(private val context: Context) {
     private var activeMediaPath: String = ""
 
     @Volatile
-    private var activeTitle: String = "AAZ Player"
+    private var activeTitle: String = "AZ0"
 
     @Volatile
     private var activeSubtitleVtt: String? = null
@@ -85,7 +85,7 @@ class AazCastHelper(private val context: Context) {
             sessionToken = generateHexToken(16)
         }
         activeMediaPath = cleanPath
-        activeTitle = title.ifBlank { "AAZ Player" }
+        activeTitle = title.ifBlank { "AZ0" }
         activeSubtitleVtt = subtitleVtt?.takeIf { it.isNotBlank() }
 
         val encodedToken = URLEncoder.encode(sessionToken, "UTF-8")
@@ -212,7 +212,7 @@ class AazCastHelper(private val context: Context) {
         if (!isPrivateLanUrl(mediaUrl)) {
             throw SecurityException("Blocked non-LAN media URL.")
         }
-        val safeTitle = escapeXml(title.ifBlank { "AAZ Media" })
+        val safeTitle = escapeXml(title.ifBlank { "AZ0 Media" })
         val safeMediaUrl = escapeXml(mediaUrl)
         val safeMime = escapeXml(mimeType.ifBlank { "video/mp4" })
         val upnpClass = if (mimeType.startsWith("audio/", ignoreCase = true)) {
@@ -518,7 +518,7 @@ class AazCastHelper(private val context: Context) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>$safeTitle — AAZ Player Wi-Fi Receiver</title>
+<title>$safeTitle — AZ0 Wi-Fi Receiver</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#060b08;color:#eef7f1;font-family:system-ui,-apple-system,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
@@ -530,7 +530,7 @@ class AazCastHelper(private val context: Context) {
 </head>
 <body>
   <div class="bar">
-    <div class="brand">AAZ Player · Wi-Fi Cast</div>
+    <div class="brand">AZ0 · Wi-Fi Cast</div>
     <div class="title">$safeTitle</div>
   </div>
   <video controls autoplay playsinline src="/media?token=$encodedToken">$trackTag</video>
