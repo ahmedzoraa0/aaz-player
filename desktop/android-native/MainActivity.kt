@@ -779,8 +779,8 @@ class MainActivity : TauriActivity() {
             }
             val svcIntent = Intent(this@MainActivity, AazPlaybackService::class.java).apply {
                 action = AazPlaybackService.ACTION_UPDATE
-                putExtra(AazPlaybackService.EXTRA_TITLE, title.ifBlank { "AAZ Player" })
-                putExtra(AazPlaybackService.EXTRA_ARTIST, artist.ifBlank { "AAZ Player" })
+                putExtra(AazPlaybackService.EXTRA_TITLE, title.ifBlank { "AZ0" })
+                putExtra(AazPlaybackService.EXTRA_ARTIST, artist.ifBlank { "AZ0" })
                 putExtra(AazPlaybackService.EXTRA_PLAYING, isPlaying)
                 putExtra(AazPlaybackService.EXTRA_POSITION, positionMs.coerceAtLeast(0L))
                 putExtra(AazPlaybackService.EXTRA_DURATION, durationMs.coerceAtLeast(0L))

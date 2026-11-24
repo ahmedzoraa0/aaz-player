@@ -1,5 +1,5 @@
 /**
- * AAZ Player Core Tab Player Application Module.
+ * AZ0 Core Tab Player Application Module.
  * Refactored from monolithic inline script into clean ES module architecture.
  */
 import { sendSafeMessage, receiveShellMessage } from '../core/messaging.js';
@@ -550,7 +550,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           cmdThemes: 'Theme Styles (16)...',
           themesBtnTitle: 'Theme Studio (16 Styles)',
           themesModalTitle: 'Theme Studio (16 Styles)',
-          themesModalSub: 'Choose from 16 distinct visual styles — including Minecraft, LEGO, Roblox, Arcade, Retro 95 & more — every style keeps AAZ Player\'s signature green identity with Dark and Light modes.',
+          themesModalSub: 'Choose from 16 distinct visual styles — including Minecraft, LEGO, Roblox, Arcade, Retro 95 & more — every style keeps AZ0\'s signature green identity with Dark and Light modes.',
           modeDark: 'Dark',
           modeLight: 'Light',
           setSkinLabel: 'Interface Style & Theme',
@@ -632,8 +632,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           updateAvailable: 'Update v{v} is ready to download.',
           updateDownloading: 'Downloading update... {p}%',
           updateDownloaded: 'Update v{v} downloaded — restart to install.',
-          updateLatest: 'You are already using the latest version of AAZ Player.',
-          updateDevHint: 'Auto-updates work inside the installed Windows AAZ Player app.',
+          updateLatest: 'You are already using the latest version of AZ0.',
+          updateDevHint: 'Auto-updates work inside the installed Windows AZ0 app.',
           updateBtnDownload: 'Download',
           updateBtnRestart: 'Restart & Install',
           updateError: 'Could not check for updates right now.',
@@ -643,11 +643,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           outputSub: 'Independent for this window / tab',
           outputDefault: 'System Default Output',
           outputUnlock: 'Select / Show Device Names...',
-          outputUnsupported: 'Audio output switching requires Chrome, Edge, or the Windows AAZ Player app.',
+          outputUnsupported: 'Audio output switching requires Chrome, Edge, or the Windows AZ0 app.',
           outputSwitched: 'Audio output for this window: {name}',
           outputFailed: 'Could not switch audio output device.',
           outputNoExtra: 'No extra output devices detected.',
-          newWindowBrowserHint: 'In browser mode, open another tab of AAZ Player to assign a separate audio output.',
+          newWindowBrowserHint: 'In browser mode, open another tab of AZ0 to assign a separate audio output.',
           cmdNewTab: 'New Tab',
           scNewTab: 'Open new tab',
           scCloseTab: 'Close current tab',
@@ -675,7 +675,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPosition: 'Bottom Position',
           subReset: 'Reset Defaults',
           subDone: 'Done',
-          subPreviewSample: 'AAZ Player — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
+          subPreviewSample: 'AZ0 — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
           menuSubtitles: 'Subtitles',
           headingSubSync: 'Subtitle Timing Sync',
           cmdSubEarlier: 'Earlier (-0.25s)',
@@ -770,7 +770,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           castScanning: 'Scanning Wi-Fi...',
           castScanningHint: 'Click "Scan Network" to discover Samsung, LG, Sony, Android TV, Xbox, or DLNA screens on the same Wi-Fi.',
           castNoneFound: 'No DLNA Smart TVs responded yet. Make sure your TV and PC are on the same Wi-Fi, or use Wi-Fi TV Browser Stream / Windows Cast below.',
-          castDesktopOnly: 'Automatic DLNA TV discovery and LAN streaming require the AAZ Player Windows desktop app.',
+          castDesktopOnly: 'Automatic DLNA TV discovery and LAN streaming require the AZ0 Windows desktop app.',
           castBtnSend: 'Cast Here',
           castBtnConnected: 'Casting',
           castLanHeading: 'Wi-Fi TV Browser & Phone Stream',
@@ -919,7 +919,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           updateAvailable: 'يتوفر تحديث جديد (v{v}) جاهز للتحميل.',
           updateDownloading: 'جار تحميل التحديث... {p}%',
           updateDownloaded: 'تم تحميل التحديث (v{v}) — أعد التشغيل للتثبيت.',
-          updateLatest: 'أنت تستخدم أحدث إصدار من AAZ Player بالفعل.',
+          updateLatest: 'أنت تستخدم أحدث إصدار من AZ0 بالفعل.',
           updateDevHint: 'تعمل التحديثات التلقائية داخل نسخة برنامج ويندوز المثبتة.',
           updateBtnDownload: 'تحميل التحديث',
           updateBtnRestart: 'إعادة التشغيل والتثبيت',
@@ -962,7 +962,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPosition: 'المسافة من أسفل الشاشة',
           subReset: 'استعادة الافتراضي',
           subDone: 'تم',
-          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAAZ Player — Subtitle Live Preview',
+          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAZ0 — Subtitle Live Preview',
           menuSubtitles: 'الترجمة',
           headingSubSync: 'تقديم وتأخير الترجمة',
           cmdSubEarlier: 'تقديم الترجمة (-0.25 ثانية)',
@@ -2325,7 +2325,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
-        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run AAZ Player on Windows to open file paths directly).`);
+        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run AZ0 on Windows to open file paths directly).`);
       }
 
       /* =======================================================================
@@ -5238,7 +5238,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         if (!track) {
           const isAndroid = Boolean(desktopBridge?.isAndroid);
-          el.nowPlayingKicker.textContent = 'AAZ Player';
+          el.nowPlayingKicker.textContent = 'AZ0';
           el.trackTitle.textContent = t(isAndroid ? 'stageEmptyTitleMobile' : 'stageEmptyTitle');
           el.trackTitle.classList.add('is-empty');
           el.trackSubpath.textContent = t(isAndroid ? 'stageEmptySubMobile' : 'stageEmptySub');
@@ -5252,7 +5252,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           setRangeFill(el.seekBar, 0);
           setRangeFill(el.fsSeekBar, 0);
           if (el.mobileStageCta) el.mobileStageCta.hidden = !isAndroid;
-          document.title = 'AAZ Player';
+          document.title = 'AZ0';
           notifyShellTabState();
           return;
         }
@@ -5273,7 +5273,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.dockNowTitle.title = track.name;
         el.dockNowMeta.textContent = `${pos} · ${track.ext} · ${state.folderName}`;
         el.fsTitleLabel.textContent = track.displayName;
-        document.title = `${track.displayName} — AAZ Player`;
+        document.title = `${track.displayName} — AZ0`;
         notifyShellTabState();
       }
 
@@ -5283,8 +5283,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (desktopBridge?.isAndroid && typeof desktopBridge.updateMediaSession === 'function') {
           Promise.resolve(
             desktopBridge.updateMediaSession({
-              title: track ? track.displayName || track.name || 'AAZ Player' : 'AAZ Player',
-              artist: state.folderName || 'AAZ Player',
+              title: track ? track.displayName || track.name || 'AZ0' : 'AZ0',
+              artist: state.folderName || 'AZ0',
               isPlaying: Boolean(track && isPlaying),
               durationMs: Number.isFinite(el.media.duration) ? Math.round(el.media.duration * 1000) : 0,
               positionMs: Number.isFinite(el.media.currentTime) ? Math.round(el.media.currentTime * 1000) : 0,
@@ -5295,9 +5295,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         try {
           if (track && typeof MediaMetadata === 'function') {
             navigator.mediaSession.metadata = new MediaMetadata({
-              title: track.displayName || track.name || 'AAZ Player',
-              artist: state.folderName || 'AAZ Player',
-              album: 'AAZ Player',
+              title: track.displayName || track.name || 'AZ0',
+              artist: state.folderName || 'AZ0',
+              album: 'AZ0',
             });
           } else if (!track) {
             navigator.mediaSession.metadata = null;
@@ -6345,7 +6345,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       // Suppress WebView2/Browser default context menu everywhere (except editable inputs)
-      // and open AAZ Player's custom themed context menu on the media stage
+      // and open AZ0's custom themed context menu on the media stage
       document.addEventListener('contextmenu', (e) => {
         if (e.target.closest('input[type="text"], input[type="search"], input:not([type]), textarea, [contenteditable="true"]')) {
           return;
@@ -7456,8 +7456,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               el.updateActionBtn.disabled = false;
               showNotice(
                 state.lang === 'ar'
-                  ? 'فعّل إذن "تثبيت التطبيقات غير المعروفة" لـ AAZ Player ثم اضغط تثبيت مجدداً.'
-                  : (launched.message || "Allow 'Install unknown apps' for AAZ Player, then tap Install again."),
+                  ? 'فعّل إذن "تثبيت التطبيقات غير المعروفة" لـ AZ0 ثم اضغط تثبيت مجدداً.'
+                  : (launched.message || "Allow 'Install unknown apps' for AZ0, then tap Install again."),
                 true
               );
             } else if (!launched || (typeof launched === 'object' && launched.status === 'error')) {
@@ -8303,9 +8303,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               const ver = await desktopBridge.getAppVersion();
               if (ver) {
                 state.appVersion = ver;
-                el.menuVersionLabel.textContent = `AAZ Player v${ver}`;
+                el.menuVersionLabel.textContent = `AZ0 v${ver}`;
                 const setVerLabel = document.getElementById('setAppVersionLabel');
-                if (setVerLabel) setVerLabel.textContent = `AAZ Player v${ver}`;
+                if (setVerLabel) setVerLabel.textContent = `AZ0 v${ver}`;
               }
             } catch (err) {
               errorHandler.log('desktop.getAppVersion', err);
@@ -8499,7 +8499,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 showNotice(
                   state.lang === 'ar'
                     ? 'اضغط رجوع مرة أخرى للخروج من التطبيق.'
-                    : 'Press Back again to exit AAZ Player.'
+                    : 'Press Back again to exit AZ0.'
                 );
               },
             });

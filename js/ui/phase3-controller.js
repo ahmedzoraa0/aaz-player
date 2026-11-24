@@ -1,5 +1,5 @@
 /**
- * Phase 3 Product Evolution Controller for AAZ Player.
+ * Phase 3 Product Evolution Controller for AZ0.
  *
  * Cleanly integrates all 8 Phase 3 features with the core player engine:
  * 1. Watch History Sidebar Tab (resume, completion, search, remove, clear, privacy toggle)
@@ -72,6 +72,7 @@ const P3_I18N = {
     libScanDenied: 'Media permission was not granted. You can still use "+ Folder" to pick any folder.',
     libScanEmpty: 'No audio or video files were found on this device.',
     navPlayer: 'Player',
+    tabLibrary: 'Library',
     libRescan: 'Rescan',
     libRemoveFolder: 'Remove folder',
     libAllFolders: 'All Folders',
@@ -175,6 +176,7 @@ const P3_I18N = {
     libScanDenied: 'لم يتم منح إذن فحص الوسائط. يمكنك استخدام "+ مجلد" لاختيار أي مجلد يدوياً.',
     libScanEmpty: 'لم يتم العثور على ملفات صوت أو فيديو على الجهاز.',
     navPlayer: 'المشغل',
+    tabLibrary: 'المكتبة',
     libRescan: 'تحديث',
     libRemoveFolder: 'إزالة المجلد',
     libAllFolders: 'كل المجلدات',
@@ -189,7 +191,7 @@ const P3_I18N = {
     libFolderRescanned: 'تم تحديث "{name}" ({count} ملف).',
     libFolderRemoved: 'تمت إزالة "{name}" من المكتبة.',
     libFolderMissing: 'تعذر العثور على المجلد على القرص: "{name}".',
-    libWebUnsupported: 'فحص المجلدات الدائم يعمل في تطبيق سطح المكتب AAZ Player. استخدم فتح مجلد في المتصفح.',
+    libWebUnsupported: 'فحص المجلدات الدائم يعمل في تطبيق AZ0. استخدم فتح مجلد في المتصفح.',
     libBrowseUp: 'مستوى أعلى',
     libBrowseLoading: 'جارٍ فتح المجلد...',
     libBrowseEmpty: 'هذا المجلد فارغ',
@@ -1491,7 +1493,7 @@ const LIB_FOLDER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fil
     if (!dom.miniPlayerHud) return;
     const track = api.getCurrentTrack();
     if (dom.miniTrackTitle) {
-      dom.miniTrackTitle.textContent = track ? track.displayName || track.name : 'AAZ Player';
+      dom.miniTrackTitle.textContent = track ? track.displayName || track.name : 'AZ0';
     }
     const isPaused = api.media.paused;
     const isAudioMode = !track || track.kind !== 'video';
@@ -1999,6 +2001,9 @@ const LIB_FOLDER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fil
   }
 
   bindEvents();
+
+  // Apply persisted language to Phase 3 UI on startup (language toggle syncs later changes)
+  applyTranslations();
 
   // Apply persisted default aspect ratio on startup
   const initialCfg = settingsManager.get();

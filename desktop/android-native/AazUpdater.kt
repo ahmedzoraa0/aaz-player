@@ -272,7 +272,7 @@ class AazUpdater(
             }
             return JSONObject()
                 .put("status", "permission-required")
-                .put("message", "Allow 'Install unknown apps' for AAZ Player, then tap Install again.")
+                .put("message", "Allow 'Install unknown apps' for AZ0, then tap Install again.")
         }
 
         return try {
