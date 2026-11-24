@@ -51,8 +51,15 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
 
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
+            $ErrorActionPreference = "Continue"
+            gh release view $tag *> $null
+            $exists = ($LASTEXITCODE -eq 0)
             $global:LASTEXITCODE = 0
+            if ($exists) {
+              Write-Host "::error::Release $tag already exists. workflow_dispatch is fail-closed: it never publishes or uploads into an existing release. Bump the version in desktop/package.json for a new release."
+              exit 1
+            }
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "should_release=true"
             exit 0
           }
 
@@ -272,7 +279,8 @@ jobs:
           $global:LASTEXITCODE = 0
 
           if ($exists) {
-            gh release upload $tag @uploadFiles --clobber
+            Write-Host "::error::Release $tag already exists at publish time. Refusing to modify an existing release (fail-closed)."
+            exit 1
           } else {
             $createArgs = @("release", "create", $tag) + $uploadFiles + @("--title", "AZ0 $tag", "--notes-file", $notesFile)
             if ($env:IS_PRERELEASE -eq "true") {
