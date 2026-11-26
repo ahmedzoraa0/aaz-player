@@ -6,6 +6,8 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-26
+
 ### Changed
 - Rebrand: the app is now **Hamza / همزة** (replaces AZ0). New icon and wordmark (`public/brand/hamza-icon.svg`), updated window title, UI text, Android launcher label and adaptive icon, Windows file-association names and release asset names (`Hamza-Setup-*`, `Hamza-Portable-*`, `Hamza-Android-arm64-*`). Internal identifiers (`aaz_*` storage keys, `com.aaz.player`, `backupFormat`) are intentionally unchanged so existing data, backups and updates keep working.
 - Status messages are now floating toasts that auto-dismiss (pause on hover/focus, visible in fullscreen) instead of a persistent banner that took space above the video.

@@ -4,7 +4,7 @@
   <p><strong>مشغّل الصوت والفيديو المحلي بتاعك — خفيف، سريع، وبيشتغل من غير نت</strong><br/>
   A lightweight local audio &amp; video player for Windows and Android</p>
   <p>
-    <img src="https://img.shields.io/badge/v1.9.1-3dc479?style=for-the-badge" alt="v1.9.1" />
+    <img src="https://img.shields.io/badge/v1.10.0-3dc479?style=for-the-badge" alt="v1.10.0" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
     <img src="https://img.shields.io/badge/Android-0f2d1d?style=for-the-badge&logo=android" alt="Android" />
     <img src="https://img.shields.io/badge/Rust%20%2B%20Tauri%20v2-1f6f46?style=for-the-badge&logo=rust" alt="Rust + Tauri v2" />
