@@ -6,6 +6,16 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-11-26
+
+### Fixed
+- The Hamza logo was missing from the packaged app header because the brand folder was not copied into the app bundle. It now ships with the app.
+- Remaining "AAZ" text in the app (visualizer centre label, theme preview card, new-window and file-dialog titles) now reads همزة.
+- README screenshots refreshed with the Hamza interface.
+
+### Notes
+- The repository is now `ahmedzoraa0/hamza`. Windows builds up to 1.10.0 look for updates under their old repository name and will refuse the automatic update; install 1.10.1 manually once.
+
 ## [1.10.0] - 2026-11-26
 
 ### Changed
