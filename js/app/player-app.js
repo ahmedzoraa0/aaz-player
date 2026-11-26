@@ -1137,7 +1137,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           miniTop.className = 'theme-mini-top';
           const miniTitle = document.createElement('span');
           miniTitle.className = 'theme-mini-title';
-          miniTitle.textContent = 'AAZ';
+          miniTitle.textContent = 'همزة';
           const miniDots = document.createElement('span');
           miniDots.className = 'theme-mini-dots';
           miniDots.append(
@@ -1680,10 +1680,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             ctx.stroke();
 
             ctx.fillStyle = pal.coreText;
-            ctx.font = `700 ${Math.round(baseR * 0.38)}px "Plus Jakarta Sans", sans-serif`;
+            ctx.font = `700 ${Math.round(baseR * 0.38)}px "Cairo", "Plus Jakarta Sans", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('AAZ', cx, cy + 1 * dpr);
+            ctx.fillText('همزة', cx, cy + 1 * dpr);
             return;
           }
 
@@ -1910,10 +1910,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             ctx.stroke();
 
             ctx.fillStyle = pal.coreText;
-            ctx.font = `800 ${Math.round(baseR * 0.42)}px "Plus Jakarta Sans", sans-serif`;
+            ctx.font = `800 ${Math.round(baseR * 0.42)}px "Cairo", "Plus Jakarta Sans", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('AAZ', cx, cy + 1 * dpr);
+            ctx.fillText('همزة', cx, cy + 1 * dpr);
             return;
           }
 

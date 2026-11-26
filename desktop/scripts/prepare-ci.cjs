@@ -21,7 +21,8 @@ fs.copyFileSync(path.join(rootDir, 'index.html'), path.join(appDir, 'index.html'
 copyDirClean(path.join(rootDir, 'css'), path.join(appDir, 'css'));
 copyDirClean(path.join(rootDir, 'js'), path.join(appDir, 'js'));
 copyDirClean(path.join(rootDir, 'public', 'fonts'), path.join(appDir, 'fonts'));
-console.log('[prepare-ci] Synced index.html, css/, js/, and fonts/ -> desktop/app/');
+copyDirClean(path.join(rootDir, 'public', 'brand'), path.join(appDir, 'brand'));
+console.log('[prepare-ci] Synced index.html, css/, js/, fonts/, and brand/ -> desktop/app/');
 
 // 2. Sync version from desktop/package.json -> tauri.conf.json & Cargo.toml
 const pkgPath = path.join(desktopDir, 'package.json');

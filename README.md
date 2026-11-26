@@ -4,7 +4,7 @@
   <p><strong>مشغّل الصوت والفيديو المحلي بتاعك — خفيف، سريع، وبيشتغل من غير نت</strong><br/>
   A lightweight local audio &amp; video player for Windows and Android</p>
   <p>
-    <img src="https://img.shields.io/badge/v1.10.0-3dc479?style=for-the-badge" alt="v1.10.0" />
+    <img src="https://img.shields.io/badge/v1.10.1-3dc479?style=for-the-badge" alt="v1.10.1" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
     <img src="https://img.shields.io/badge/Android-0f2d1d?style=for-the-badge&logo=android" alt="Android" />
     <img src="https://img.shields.io/badge/Rust%20%2B%20Tauri%20v2-1f6f46?style=for-the-badge&logo=rust" alt="Rust + Tauri v2" />
@@ -27,25 +27,25 @@
 بتفتح ملفاتك على طول، والقائمة قدامك بكل تفاصيلها: الاسم، النوع، المدة، والحجم. الصوت شغال بمستوى حقيقي من 0 لـ 200%، والتقدّم بينحفظ حتى لو قفلت البرنامج ورجعت.
 
 <p align="center">
-  <img src="docs/screenshots/az0-desktop.png" alt="همزة على ويندوز — التشغيل وقائمة الانتظار" width="92%" />
+  <img src="docs/screenshots/hamza-desktop.png" alt="همزة على ويندوز — التشغيل وقائمة الانتظار" width="92%" />
 </p>
 
 الموجات المتحركة بتتابع الصوت لحظة بلحظة بأكتر من شكل: طيف متناظر، موجة حريرية، هالة صوتية، وأعمدة استوديو — كلها جزء من البرنامج مش إضافات خارجية.
 
 <p align="center">
-  <img src="docs/screenshots/az0-visualizer.png" alt="المصور الموسيقي المتفاعل في همزة" width="92%" />
+  <img src="docs/screenshots/hamza-visualizer.png" alt="المصور الموسيقي المتفاعل في همزة" width="92%" />
 </p>
 
 شكل البرنامج على ذوقك: 16 ثيم كامل، كل واحد له وضع داكن وفاتح، من الكلاسيك الهادي لأشكال زي سايبر وماينكرافت وليجو — بتتبدل من قائمة العرض في ثانية، والأيقونات والألوان بتتظبط مع الثيم على طول.
 
 <p align="center">
-  <img src="docs/screenshots/az0-themes.png" alt="ثيم سايبر في همزة" width="92%" />
+  <img src="docs/screenshots/hamza-themes.png" alt="ثيم سايبر في همزة" width="92%" />
 </p>
 
 ونفس البرنامج على موبايلك: واجهة عربية كاملة بالاتجاه الصح، أزرار كبيرة مريحة للمس، وشريط تنقل سفلي بين المشغل والقائمة والمكتبة والمحفوظة — المشغل كامل بالعربي، في جيبك.
 
 <p align="center">
-  <img src="docs/screenshots/az0-phone.png" alt="همزة على أندرويد" width="30%" />
+  <img src="docs/screenshots/hamza-phone.png" alt="معاينة واجهة أندرويد في همزة (محاكاة، مش لقطة من جهاز حقيقي)" width="30%" />
 </p>
 
 ### اللي بيميزه

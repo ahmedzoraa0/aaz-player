@@ -1701,7 +1701,7 @@ fn aaz_new_window(app: AppHandle) -> Result<bool, String> {
     let id = WINDOW_COUNTER.fetch_add(1, Ordering::SeqCst);
     let label = format!("win_{id}");
     let builder = WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
-        .title("AAZ Player")
+        .title("همزة")
         .inner_size(1200.0, 780.0)
         .min_inner_size(460.0, 540.0)
         .resizable(true)
@@ -1728,7 +1728,7 @@ fn aaz_new_window() -> Result<bool, String> {
 async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderResult>, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
         let folder = rfd::FileDialog::new()
-            .set_title("AAZ Player")
+            .set_title("همزة")
             .pick_folder()?;
         let mut entries = Vec::new();
         scan_local_directory(&folder, "", &mut entries);
@@ -1773,7 +1773,7 @@ async fn aaz_select_files(state: State<'_, AppState>) -> Result<Option<InspectRe
         all_exts.extend_from_slice(PLAYLIST_EXTS);
 
         let files = rfd::FileDialog::new()
-            .set_title("AAZ Player")
+            .set_title("همزة")
             .add_filter("Media & Playlists", &all_exts)
             .pick_files()?;
 
