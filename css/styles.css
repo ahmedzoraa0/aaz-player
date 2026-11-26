@@ -17,7 +17,7 @@
 
       --text-primary: #edf5ef;
       --text-secondary: #98b5a2;
-      --text-muted: #627f6d;
+      --text-muted: #748e7e;
 
       --accent: #3dc479;
       --accent-hover: #53d68d;
@@ -62,9 +62,11 @@
 
       --text-primary: #10251a;
       --text-secondary: #395948;
-      --text-muted: #5d7b6a;
+      --text-muted: #526d5e;
 
       --accent: #188551;
+
+      --accent-text: #146c42;
       --accent-hover: #136d42;
       --accent-ink: #ffffff;
       --accent-soft: rgba(24, 133, 81, 0.12);
@@ -289,7 +291,7 @@
     }
 
     .btn-icon.is-active {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
     }
@@ -323,7 +325,7 @@
       min-width: 0;
     }
 
-    /* Strong Geometric A-Z Media Player Brand Lockup */
+    /* Hamza brand lockup (icon + Arabic wordmark) */
     .brand-lockup {
       display: inline-flex;
       align-items: center;
@@ -334,15 +336,30 @@
       border-right: 1px solid var(--border-hairline);
     }
 
-    .brand-logo-svg {
+    .brand-logo-img,
+    .tabstrip-logo-img {
       display: block;
       flex-shrink: 0;
+      object-fit: contain;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .brand-logo-img {
+      width: 28px;
+      height: 28px;
+    }
+
+    .tabstrip-logo-img {
+      width: 20px;
+      height: 20px;
     }
 
     .brand-wordmark {
-      font-size: 16px;
+      font-family: var(--font-ar);
+      font-size: 18px;
       font-weight: 800;
-      letter-spacing: 0.06em;
+      letter-spacing: 0;
       color: var(--text-primary);
       display: inline-flex;
       align-items: center;
@@ -427,7 +444,7 @@
 
     .menu-action.is-checked::after {
       content: '✓';
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       font-weight: 700;
       margin-inline-start: auto;
       padding-inline-start: 10px;
@@ -487,7 +504,7 @@
 
     .menu-sub:hover > .menu-sub-trigger .menu-sub-arrow,
     .menu-sub.is-sub-open > .menu-sub-trigger .menu-sub-arrow {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .menu-sub-panel {
@@ -650,7 +667,7 @@
       border-radius: 4px;
       background-color: var(--accent-soft);
       border: 1px solid var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .menu-recent-kind.is-audio {
@@ -921,7 +938,7 @@
     .resume-label {
       font-size: 11px;
       font-weight: 600;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .resume-track {
@@ -949,16 +966,80 @@
       flex-shrink: 0;
     }
 
+    /* Floating toast: overlays the app (never takes layout space from the video),
+       auto-dismisses (JS timer), pauses while hovered/focused/touched. */
     .status-notice {
+      --toast-ms: 4000ms;
+      position: fixed;
+      z-index: 1000;
+      top: calc(env(safe-area-inset-top, 0px) + 58px);
+      left: 50%;
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 12px;
-      border-radius: var(--radius-control);
+      width: max-content;
+      max-width: min(560px, calc(100vw - 24px));
+      padding: 10px 12px 11px;
+      border-radius: 12px;
       font-size: 12.5px;
+      line-height: 1.45;
       border: 1px solid var(--border-strong);
       background-color: var(--bg-surface-elevated);
-      color: var(--text-secondary);
+      color: var(--text-primary);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.38), 0 2px 8px rgba(0, 0, 0, 0.22);
+      -webkit-backdrop-filter: blur(14px) saturate(1.2);
+      backdrop-filter: blur(14px) saturate(1.2);
+      overflow: hidden;
+      opacity: 0;
+      transform: translate(-50%, -10px) scale(0.98);
+      pointer-events: none;
+      transition: opacity 170ms ease, transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .status-notice.is-showing {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+      pointer-events: auto;
+    }
+
+    .status-notice.is-leaving {
+      opacity: 0;
+      transform: translate(-50%, -8px) scale(0.98);
+      pointer-events: none;
+    }
+
+    .status-notice > svg:first-child {
+      color: var(--accent-text, var(--accent));
+    }
+
+    /* Countdown bar */
+    .status-notice::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      height: 3px;
+      background: var(--accent);
+      opacity: 0.85;
+      transform-origin: left center;
+      transform: scaleX(0);
+    }
+
+    html[dir="rtl"] .status-notice::after {
+      transform-origin: right center;
+    }
+
+    .status-notice.is-showing::after {
+      animation: statusNoticeCountdown var(--toast-ms) linear forwards;
+    }
+
+    .status-notice.is-paused::after {
+      animation-play-state: paused;
+    }
+
+    @keyframes statusNoticeCountdown {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
     }
 
     .status-notice[hidden] {
@@ -969,6 +1050,37 @@
       border-color: var(--danger-border);
       background-color: var(--danger-soft);
       color: var(--danger-text);
+    }
+
+    .status-notice.is-error > svg:first-child {
+      color: var(--danger-text);
+    }
+
+    .status-notice.is-error::after {
+      background: var(--danger-text);
+    }
+
+    @supports not (backdrop-filter: blur(1px)) {
+      .status-notice {
+        background-color: var(--bg-surface-elevated);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .status-notice {
+        top: calc(env(safe-area-inset-top, 0px) + 48px);
+        max-width: calc(100vw - 20px);
+        font-size: 13px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .status-notice,
+      .status-notice.is-showing,
+      .status-notice.is-leaving {
+        transition: opacity 120ms linear;
+        transform: translate(-50%, 0);
+      }
     }
 
     /* Auto-Update Banner (GitHub Releases / electron-updater) */
@@ -1374,7 +1486,7 @@
     .stage-kicker {
       font-family: var(--font-mono);
       font-size: 12px;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       font-variant-numeric: tabular-nums;
     }
 
@@ -1483,7 +1595,7 @@
 
     .viz-mode-btn.is-active {
       background-color: var(--accent-soft);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       border: 1px solid var(--accent-border);
     }
 
@@ -1538,7 +1650,7 @@
     .eq-preset-btn.is-active {
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .eq-bands-grid {
@@ -1559,7 +1671,7 @@
       font-family: var(--font-mono);
       font-size: 10.5px;
       font-variant-numeric: tabular-nums;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .eq-band-slider {
@@ -1690,14 +1802,14 @@
     .sidebar-tab-btn.is-active {
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .tab-badge-num {
       font-family: var(--font-mono);
       font-size: 11px;
       font-variant-numeric: tabular-nums;
-      opacity: 0.85;
+      opacity: 1;
       flex-shrink: 0;
     }
 
@@ -1821,7 +1933,7 @@
 
     .seg-btn.is-active {
       background-color: var(--bg-surface-hover);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .mode-tabs {
@@ -1842,8 +1954,8 @@
 
     .mode-count {
       font-family: var(--font-mono);
-      font-size: 10px;
-      opacity: 0.72;
+      font-size: 11px;
+      opacity: 0.92;
       font-variant-numeric: tabular-nums;
     }
 
@@ -1930,7 +2042,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .empty-title {
@@ -2034,7 +2146,7 @@
     }
 
     .track-drag-handle:hover {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       opacity: 1 !important;
     }
 
@@ -2091,7 +2203,7 @@
     }
 
     .track-row.is-active .track-index {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .track-info {
@@ -2133,7 +2245,7 @@
     }
 
     .track-watched-dot {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       font-size: 11px;
       font-weight: 800;
       flex-shrink: 0;
@@ -2153,7 +2265,7 @@
     .track-mini-tag.is-upnext {
       background-color: var(--accent-soft);
       border: 1px solid var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .track-mini-tag.is-stop {
@@ -2218,7 +2330,7 @@
     }
 
     .track-row.is-active .track-right {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     /* Playlist Header Tools Dropdown & Notice Undo Button */
@@ -2265,7 +2377,7 @@
       font-weight: 700;
       background-color: var(--accent-soft);
       border: 1px solid var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       flex-shrink: 0;
     }
 
@@ -2303,7 +2415,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .cast-device-list {
@@ -2376,7 +2488,7 @@
       font-family: var(--font-mono);
       font-size: 13px;
       font-weight: 600;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -2408,7 +2520,7 @@
     }
 
     .btn-icon.is-casting {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
     }
@@ -2499,7 +2611,7 @@
 
     .saved-pl-drag-handle:active {
       cursor: grabbing;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .saved-pl-head-actions {
@@ -2602,7 +2714,7 @@
     }
 
     .mini-link-btn:hover {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       border-color: var(--accent-border);
     }
 
@@ -2857,7 +2969,7 @@
       font-size: 9px;
       font-weight: 700;
       line-height: 1;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .dock-right {
@@ -3018,7 +3130,7 @@
     .shortcut-key {
       font-family: var(--font-mono);
       font-size: 11.5px;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       text-align: right;
     }
 
@@ -3218,7 +3330,7 @@
 
     .output-device-item.is-active {
       background-color: var(--accent-soft);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       font-weight: 600;
     }
 
@@ -3297,9 +3409,10 @@
       border-inline-end: 1px solid var(--border-hairline);
       flex-shrink: 0;
       color: var(--text-primary);
+      font-family: var(--font-ar);
       font-weight: 800;
-      font-size: 12.5px;
-      letter-spacing: 0.04em;
+      font-size: 14px;
+      letter-spacing: 0;
     }
 
     .tabstrip-brand-accent {
@@ -3493,7 +3606,7 @@
       height: 18px;
       border-radius: 4px;
       background-color: var(--accent-soft);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       flex-shrink: 0;
     }
 
@@ -3540,7 +3653,7 @@
     .tab-add-btn:hover {
       background-color: var(--bg-surface-elevated);
       border-color: var(--border-hairline);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .tab-frames-host {
@@ -3697,7 +3810,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -3814,7 +3927,7 @@
     .sub-font-option.is-active {
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .sub-color-row {
@@ -3875,7 +3988,7 @@
       font-family: var(--font-mono);
       font-size: 12.5px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
       background-color: var(--accent-soft);
       border: 1px solid var(--accent-border);
       border-radius: 6px;
@@ -3998,7 +4111,7 @@
     .lib-folder-item.is-active {
       background-color: var(--accent-soft);
       border-color: var(--accent-border);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .lib-folder-label {
@@ -4127,7 +4240,7 @@
     }
 
     .p3-icon-btn.is-active {
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .p3-icon-btn.is-danger:hover {
@@ -4204,7 +4317,7 @@
     .sc-bind-btn.is-capturing {
       border-color: var(--accent);
       background: rgba(61, 196, 121, 0.22);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .sc-bind-btn.is-custom {
@@ -4290,7 +4403,7 @@
 
     .settings-hw-badge.is-ok {
       background: rgba(61, 196, 121, 0.16);
-      color: var(--accent);
+      color: var(--accent-text, var(--accent));
     }
 
     .settings-backup-actions {
@@ -4656,7 +4769,7 @@
       html.is-android .topbar-right .btn {
         padding: 0 8px;
       }
-      html.is-android .brand-logo-svg {
+      html.is-android .brand-logo-img {
         width: 24px;
         height: 24px;
       }
@@ -4975,7 +5088,7 @@
       }
 
       html.is-android .mobile-nav-btn.is-active {
-        color: var(--accent);
+        color: var(--accent-text, var(--accent));
         background-color: var(--accent-soft);
       }
 

@@ -55,24 +55,20 @@ const adaptiveBgXml = `<?xml version="1.0" encoding="utf-8"?>
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Hamza brand tile gradient (matches public/brand/hamza-icon.svg) -->
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="12"
-                android:startY="10"
-                android:endX="98"
-                android:endY="102"
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
                 android:type="linear">
-                <item android:color="#153723" android:offset="0.0" />
-                <item android:color="#0C2215" android:offset="0.52" />
-                <item android:color="#06120B" android:offset="1.0" />
+                <item android:color="#83E6B6" android:offset="0.0" />
+                <item android:color="#14955F" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-    <path
-        android:pathData="M54,18a36,36 0 1,0 0,72a36,36 0 1,0 0,-72z"
-        android:fillColor="#1A472C"
-        android:fillAlpha="0.22" />
 </vector>
 `;
 
@@ -83,75 +79,25 @@ const adaptiveFgXml = `<?xml version="1.0" encoding="utf-8"?>
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- AZ0 approved mark (icon.svg geometry scaled into the 66dp safe zone): A over Z left, play-ring right -->
-    <path
-        android:pathData="M26.16,61.22 L33.38,35.44 L40.59,61.22"
-        android:strokeWidth="6.19"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
-                <item android:color="#7BF0AD" android:offset="0.0" />
-                <item android:color="#3DC479" android:offset="0.55" />
-                <item android:color="#1F8A4F" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M29.77,52.97 L36.97,52.97"
-        android:strokeWidth="4.12"
-        android:strokeLineCap="round">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
-                <item android:color="#7BF0AD" android:offset="0.0" />
-                <item android:color="#3DC479" android:offset="0.55" />
-                <item android:color="#1F8A4F" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M27.19,68.44 L42.66,68.44 L27.19,80.81 L49.88,80.81"
-        android:strokeWidth="6.19"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:startX="26" android:startY="35" android:endX="83" android:endY="81" android:type="linear">
-                <item android:color="#7BF0AD" android:offset="0.0" />
-                <item android:color="#3DC479" android:offset="0.55" />
-                <item android:color="#1F8A4F" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M43.69,57.09 A19.59,19.59 0 1 1 82.87,57.09 A19.59,19.59 0 1 1 43.69,57.09 Z M48.84,57.09 A14.44,14.44 0 1 0 77.72,57.09 A14.44,14.44 0 1 0 48.84,57.09 Z"
-        android:fillType="evenOdd">
-        <aapt:attr name="android:fillColor">
-            <gradient android:startX="44" android:startY="38" android:endX="83" android:endY="77" android:type="linear">
-                <item android:color="#7BF0AD" android:offset="0.0" />
-                <item android:color="#3DC479" android:offset="0.55" />
-                <item android:color="#1F8A4F" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:pathData="M56.74,48.58 L72.31,57.09 L56.74,65.61 Z"
-        android:strokeWidth="2.6"
-        android:strokeLineJoin="round">
-        <aapt:attr name="android:fillColor">
-            <gradient android:startX="57" android:startY="49" android:endX="72" android:endY="66" android:type="linear">
-                <item android:color="#C8FFDD" android:offset="0.0" />
-                <item android:color="#39C177" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-        <aapt:attr name="android:strokeColor">
-            <gradient android:startX="57" android:startY="49" android:endX="72" android:endY="66" android:type="linear">
-                <item android:color="#C8FFDD" android:offset="0.0" />
-                <item android:color="#39C177" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <!-- Hamza glyph (public/brand/hamza-icon.svg geometry, 1024-unit space) scaled into the 66dp adaptive safe zone -->
+    <group
+        android:pivotX="0"
+        android:pivotY="0"
+        android:scaleX="0.0794"
+        android:scaleY="0.0794"
+        android:translateX="15.73"
+        android:translateY="15.16">
+        <path
+            android:pathData="M411.0,290.7 L759.0,290.7 L661.0,488.7 L759.0,687.7 L205.0,687.7 L317.0,553.7 L317.0,418.7 Z M459.0,415.7 L459.0,559.7 L661.0,488.7 Z"
+            android:fillType="evenOdd">
+            <aapt:attr name="android:fillColor">
+                <gradient android:startX="0" android:startY="290" android:endX="0" android:endY="688" android:type="linear">
+                    <item android:color="#FFFFFF" android:offset="0.0" />
+                    <item android:color="#C0F2DE" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
 </vector>
 `;
 
@@ -165,7 +111,7 @@ const adaptiveIconXml = `<?xml version="1.0" encoding="utf-8"?>
 
 const iconBgColorXml = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0B1D13</color>
+    <color name="ic_launcher_background">#14955F</color>
 </resources>
 `;
 
@@ -191,7 +137,7 @@ writeFileEnsureDir(path.join(resDir, 'drawable', 'ic_launcher_foreground.xml'), 
 writeFileEnsureDir(path.join(resDir, 'mipmap-anydpi-v26', 'ic_launcher.xml'), adaptiveIconXml);
 writeFileEnsureDir(path.join(resDir, 'mipmap-anydpi-v26', 'ic_launcher_round.xml'), adaptiveIconXml);
 writeFileEnsureDir(path.join(resDir, 'values', 'ic_launcher_background.xml'), iconBgColorXml);
-console.log('[configure-android] Wrote adaptive launcher vector icons (safe-zone centered, #0B1D13 background).');
+console.log('[configure-android] Wrote adaptive launcher vector icons (safe-zone centered, Hamza green gradient background).');
 
 // 3. Write strict loopback-only network_security_config.xml
 const netSecXml = `<?xml version="1.0" encoding="utf-8"?>
@@ -235,6 +181,15 @@ const aazConfigXml = `<?xml version="1.0" encoding="utf-8"?>
 </resources>
 `;
 writeFileEnsureDir(path.join(resDir, 'values', 'aaz_config.xml'), aazConfigXml);
+
+// 3D. Launcher / app label: show the Arabic product name (productName stays ASCII for installer & file names)
+const stringsXmlPath = path.join(resDir, 'values', 'strings.xml');
+if (fs.existsSync(stringsXmlPath)) {
+  let stringsXml = fs.readFileSync(stringsXmlPath, 'utf8');
+  stringsXml = stringsXml.replace(/(<string name="(?:app_name|main_activity_title)">)[^<]*(<\/string>)/g, '$1همزة$2');
+  fs.writeFileSync(stringsXmlPath, stringsXml, 'utf8');
+  console.log('[configure-android] Set app label to همزة.');
+}
 
 // 4. Patch res/values/themes.xml dark background so startup has zero white flash
 const themesXmlPath = path.join(resDir, 'values', 'themes.xml');

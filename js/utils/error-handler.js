@@ -1,5 +1,5 @@
 /**
- * Centralized bilingual Error Handling utility for AZ0 (Phase 2 Task 3).
+ * Centralized bilingual Error Handling utility for Hamza (Phase 2 Task 3).
  *
  * Translates low-level browser, MediaError, filesystem, subtitle, playlist,
  * DLNA/Cast, and updater exceptions into clear, actionable user-facing messages
@@ -33,7 +33,7 @@ const MESSAGES = {
     mediaNetwork: 'A network or local stream error interrupted playback.',
     mediaDecode: 'Could not decode this media file. The codec or file structure may be damaged.',
     mediaSrcNotSupported: 'This file format or audio/video codec is not supported.',
-    backupInvalid: 'Invalid backup file. Please choose a valid AZ0 JSON backup.',
+    backupInvalid: 'Invalid backup file. Please choose a valid همزة JSON backup.',
     unknown: 'An unexpected playback error occurred.',
   },
   ar: {
@@ -50,7 +50,7 @@ const MESSAGES = {
     mediaNetwork: 'حدث خطأ في البث أو الشبكة أثناء التشغيل.',
     mediaDecode: 'تعذر فك ترميز هذا الملف. قد يكون الترميز غير مدعوم أو الملف تالفاً.',
     mediaSrcNotSupported: 'صيغة هذا الملف أو ترميز الصوت/الفيديو غير مدعوم.',
-    backupInvalid: 'ملف النسخة الاحتياطية غير صالح. يرجى اختيار ملف JSON صحيح خاص بـ AZ0.',
+    backupInvalid: 'ملف النسخة الاحتياطية غير صالح. يرجى اختيار ملف JSON صحيح خاص بـ همزة.',
     unknown: 'حدث خطأ غير متوقع أثناء التشغيل.',
   },
 };

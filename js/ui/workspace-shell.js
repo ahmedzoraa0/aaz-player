@@ -98,7 +98,7 @@ export function initWorkspaceShell() {
 
   function updateWindowTitle() {
     const active = tabs.find((tb) => tb.id === activeTabId);
-    document.title = active && active.title ? `${active.title} — AZ0` : 'AZ0';
+    document.title = active && active.title ? `${active.title} — همزة` : 'همزة';
     syncTaskbarControls();
   }
 

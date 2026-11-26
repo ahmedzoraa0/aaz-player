@@ -534,7 +534,7 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
       ? sanitizeSubtitleStyle(extraPrefs.subtitleStyle)
       : null;
     const payload = {
-      app: 'AZ0',
+      app: 'همزة',
       backupFormat: 'aaz-backup-v1',
       schemaVersion: SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
@@ -572,7 +572,7 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
           : null;
 
     if (!rawState) {
-      return { ok: false, error: 'Unrecognized AZ0 backup structure' };
+      return { ok: false, error: 'Unrecognized همزة backup structure' };
     }
 
     // Save a pre-restore rollback snapshot before replacing user state

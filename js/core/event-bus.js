@@ -1,5 +1,5 @@
 /**
- * Lightweight, duplicate-safe EventBus for AZ0 internal modules.
+ * Lightweight, duplicate-safe EventBus for Hamza internal modules.
  */
 export function createEventBus() {
   const listeners = new Map();

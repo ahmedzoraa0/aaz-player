@@ -496,7 +496,7 @@ class AazMediaHelper(
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, finalName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/AZ0")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Hamza")
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
                 val resolver = context.contentResolver
@@ -508,13 +508,13 @@ class AazMediaHelper(
                 resolver.update(uri, values, null, null)
                 JSONObject().apply {
                     put("saved", true)
-                    put("path", "Pictures/AZ0/$finalName")
+                    put("path", "Pictures/Hamza/$finalName")
                 }
             } else {
                 @Suppress("DEPRECATION")
                 val dir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-                    "AZ0"
+                    "Hamza"
                 )
                 if (!dir.exists()) dir.mkdirs()
                 val outFile = File(dir, finalName)

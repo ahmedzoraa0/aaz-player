@@ -197,14 +197,14 @@ function pickExportLocation(tr) {
   return '';
 }
 
-export function buildPlaylistExport(tracks, format, playlistName = 'AZ0 Playlist') {
+export function buildPlaylistExport(tracks, format, playlistName = 'همزة Playlist') {
   const fmt = String(format || 'xspf').toLowerCase();
   const safeList = Array.isArray(tracks) ? tracks : [];
   let exportedCount = 0;
   let skippedCount = 0;
 
   if (fmt === 'm3u8' || fmt === 'm3u') {
-    const lines = ['#EXTM3U', `#PLAYLIST:${String(playlistName || 'AZ0 Playlist').replace(/[\r\n]+/g, ' ')}`];
+    const lines = ['#EXTM3U', `#PLAYLIST:${String(playlistName || 'همزة Playlist').replace(/[\r\n]+/g, ' ')}`];
     for (const tr of safeList) {
       const loc = pickExportLocation(tr);
       if (!loc) {
@@ -281,7 +281,7 @@ export function buildPlaylistExport(tracks, format, playlistName = 'AZ0 Playlist
   const xspf = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<playlist version="1" xmlns="http://xspf.org/ns/0/">',
-    `  <title>${escapeXml(playlistName || 'AZ0 Playlist')}</title>`,
+    `  <title>${escapeXml(playlistName || 'همزة Playlist')}</title>`,
     '  <trackList>',
     trackBlocks.join('\n'),
     '  </trackList>',

@@ -1,8 +1,8 @@
 {
   "name": "aaz-player",
-  "productName": "AZ0",
+  "productName": "Hamza",
   "version": "1.9.1",
-  "description": "AZ0 — Lightweight Native Rust & WebView2 Local Audio & Video Player for Windows",
+  "description": "Hamza (همزة) — Lightweight Native Rust & WebView2 Local Audio & Video Player for Windows",
   "author": "AAZ",
   "license": "MIT",
   "scripts": {

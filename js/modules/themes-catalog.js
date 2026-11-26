@@ -1,6 +1,6 @@
 /**
- * AZ0 Theme Studio Catalog — 16 Distinct Green-Identity Visual Themes (Dark + Light = 32 Modes).
- * Every theme keeps AZ0's signature green primary brand identity while dramatically transforming
+ * Hamza Theme Studio Catalog — 16 Distinct Green-Identity Visual Themes (Dark + Light = 32 Modes).
+ * Every theme keeps Hamza's signature green primary brand identity while dramatically transforming
  * surface materials, supporting accent palettes, box geometry, borders, shadows, controls & typography.
  */
 

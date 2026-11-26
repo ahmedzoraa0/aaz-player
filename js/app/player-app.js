@@ -1,5 +1,5 @@
 /**
- * AZ0 Core Tab Player Application Module.
+ * Hamza Core Tab Player Application Module.
  * Refactored from monolithic inline script into clean ES module architecture.
  */
 import { sendSafeMessage, receiveShellMessage } from '../core/messaging.js';
@@ -550,7 +550,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           cmdThemes: 'Theme Styles (16)...',
           themesBtnTitle: 'Theme Studio (16 Styles)',
           themesModalTitle: 'Theme Studio (16 Styles)',
-          themesModalSub: 'Choose from 16 distinct visual styles — including Minecraft, LEGO, Roblox, Arcade, Retro 95 & more — every style keeps AZ0\'s signature green identity with Dark and Light modes.',
+          themesModalSub: 'Choose from 16 distinct visual styles — including Minecraft, LEGO, Roblox, Arcade, Retro 95 & more — every style keeps همزة\'s signature green identity with Dark and Light modes.',
           modeDark: 'Dark',
           modeLight: 'Light',
           setSkinLabel: 'Interface Style & Theme',
@@ -632,8 +632,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           updateAvailable: 'Update v{v} is ready to download.',
           updateDownloading: 'Downloading update... {p}%',
           updateDownloaded: 'Update v{v} downloaded — restart to install.',
-          updateLatest: 'You are already using the latest version of AZ0.',
-          updateDevHint: 'Auto-updates work inside the installed Windows AZ0 app.',
+          updateLatest: 'You are already using the latest version of همزة.',
+          updateDevHint: 'Auto-updates work inside the installed Windows همزة app.',
           updateBtnDownload: 'Download',
           updateBtnRestart: 'Restart & Install',
           updateError: 'Could not check for updates right now.',
@@ -643,11 +643,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           outputSub: 'Independent for this window / tab',
           outputDefault: 'System Default Output',
           outputUnlock: 'Select / Show Device Names...',
-          outputUnsupported: 'Audio output switching requires Chrome, Edge, or the Windows AZ0 app.',
+          outputUnsupported: 'Audio output switching requires Chrome, Edge, or the Windows همزة app.',
           outputSwitched: 'Audio output for this window: {name}',
           outputFailed: 'Could not switch audio output device.',
           outputNoExtra: 'No extra output devices detected.',
-          newWindowBrowserHint: 'In browser mode, open another tab of AZ0 to assign a separate audio output.',
+          newWindowBrowserHint: 'In browser mode, open another tab of همزة to assign a separate audio output.',
           cmdNewTab: 'New Tab',
           scNewTab: 'Open new tab',
           scCloseTab: 'Close current tab',
@@ -675,7 +675,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPosition: 'Bottom Position',
           subReset: 'Reset Defaults',
           subDone: 'Done',
-          subPreviewSample: 'AZ0 — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
+          subPreviewSample: 'همزة — Subtitle Live Preview\nمعاينة مباشرة لشكل وخط الترجمة',
           menuSubtitles: 'Subtitles',
           headingSubSync: 'Subtitle Timing Sync',
           cmdSubEarlier: 'Earlier (-0.25s)',
@@ -770,7 +770,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           castScanning: 'Scanning Wi-Fi...',
           castScanningHint: 'Click "Scan Network" to discover Samsung, LG, Sony, Android TV, Xbox, or DLNA screens on the same Wi-Fi.',
           castNoneFound: 'No DLNA Smart TVs responded yet. Make sure your TV and PC are on the same Wi-Fi, or use Wi-Fi TV Browser Stream / Windows Cast below.',
-          castDesktopOnly: 'Automatic DLNA TV discovery and LAN streaming require the AZ0 Windows desktop app.',
+          castDesktopOnly: 'Automatic DLNA TV discovery and LAN streaming require the همزة Windows desktop app.',
           castBtnSend: 'Cast Here',
           castBtnConnected: 'Casting',
           castLanHeading: 'Wi-Fi TV Browser & Phone Stream',
@@ -919,7 +919,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           updateAvailable: 'يتوفر تحديث جديد (v{v}) جاهز للتحميل.',
           updateDownloading: 'جار تحميل التحديث... {p}%',
           updateDownloaded: 'تم تحميل التحديث (v{v}) — أعد التشغيل للتثبيت.',
-          updateLatest: 'أنت تستخدم أحدث إصدار من AZ0 بالفعل.',
+          updateLatest: 'أنت تستخدم أحدث إصدار من همزة بالفعل.',
           updateDevHint: 'تعمل التحديثات التلقائية داخل نسخة برنامج ويندوز المثبتة.',
           updateBtnDownload: 'تحميل التحديث',
           updateBtnRestart: 'إعادة التشغيل والتثبيت',
@@ -962,7 +962,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           subPosition: 'المسافة من أسفل الشاشة',
           subReset: 'استعادة الافتراضي',
           subDone: 'تم',
-          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nAZ0 — Subtitle Live Preview',
+          subPreviewSample: 'معاينة مباشرة لشكل وخط الترجمة\nهمزة — Subtitle Live Preview',
           menuSubtitles: 'الترجمة',
           headingSubSync: 'تقديم وتأخير الترجمة',
           cmdSubEarlier: 'تقديم الترجمة (-0.25 ثانية)',
@@ -2171,20 +2171,92 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         inputEl.style.setProperty('--progress', `${pct}%`);
       }
 
+      // ---- Floating toast notices (auto-dismiss, hover/touch-pause, fullscreen-aware) ----
+      let noticeTimer = null;
+      let noticeLeaveTimer = null;
+      let noticeRemainingMs = 0;
+      let noticeStartedAt = 0;
+
+      function noticeDurationMs(message, isError, hasUndo) {
+        const len = String(message || '').length;
+        const base = isError ? 6000 : 3800;
+        const extra = Math.max(0, len - 48) * 45;
+        const ms = base + extra + (hasUndo ? 3000 : 0);
+        return Math.min(ms, 12000);
+      }
+
+      function hostNoticeElement() {
+        // Fullscreen only renders the fullscreen element's subtree, so move the toast inside it.
+        const fs = document.fullscreenElement;
+        const canHost = fs && !/^(VIDEO|AUDIO)$/.test(fs.tagName);
+        const host = canHost ? fs : document.body;
+        if (el.statusNotice.parentElement !== host) host.appendChild(el.statusNotice);
+      }
+
+      function clearNoticeTimers() {
+        if (noticeTimer) clearTimeout(noticeTimer);
+        if (noticeLeaveTimer) clearTimeout(noticeLeaveTimer);
+        noticeTimer = null;
+        noticeLeaveTimer = null;
+      }
+
+      function scheduleNoticeHide(ms) {
+        if (noticeTimer) clearTimeout(noticeTimer);
+        noticeRemainingMs = ms;
+        noticeStartedAt = Date.now();
+        noticeTimer = setTimeout(() => hideNotice(), ms);
+      }
+
+      function pauseNotice() {
+        if (el.statusNotice.hidden || !noticeTimer) return;
+        clearTimeout(noticeTimer);
+        noticeTimer = null;
+        noticeRemainingMs = Math.max(0, noticeRemainingMs - (Date.now() - noticeStartedAt));
+        el.statusNotice.classList.add('is-paused');
+      }
+
+      function resumeNotice() {
+        if (el.statusNotice.hidden || noticeTimer) return;
+        el.statusNotice.classList.remove('is-paused');
+        scheduleNoticeHide(Math.max(1500, noticeRemainingMs));
+      }
+
       function showNotice(message, isError = false, undoAction = null) {
+        clearNoticeTimers();
+        hostNoticeElement();
         el.statusNoticeText.textContent = message;
         el.statusNotice.classList.toggle('is-error', isError);
+        el.statusNotice.setAttribute('role', isError ? 'alert' : 'status');
         state.noticeUndoHandler = typeof undoAction === 'function' ? undoAction : null;
         if (el.noticeUndoBtn) {
           el.noticeUndoBtn.hidden = !state.noticeUndoHandler;
         }
+        const ms = noticeDurationMs(message, isError, !!state.noticeUndoHandler);
+        el.statusNotice.style.setProperty('--toast-ms', `${ms}ms`);
+        el.statusNotice.classList.remove('is-showing', 'is-leaving', 'is-paused');
         el.statusNotice.hidden = false;
+        void el.statusNotice.offsetWidth; // restart the enter + countdown animations
+        el.statusNotice.classList.add('is-showing');
+        scheduleNoticeHide(ms);
       }
 
-      function hideNotice() {
+      function hideNotice(immediate = false) {
+        clearNoticeTimers();
         state.noticeUndoHandler = null;
         if (el.noticeUndoBtn) el.noticeUndoBtn.hidden = true;
-        el.statusNotice.hidden = true;
+        if (el.statusNotice.hidden) return;
+        if (immediate === true) {
+          el.statusNotice.classList.remove('is-showing', 'is-leaving', 'is-paused');
+          el.statusNotice.hidden = true;
+          return;
+        }
+        el.statusNotice.classList.remove('is-showing', 'is-paused');
+        el.statusNotice.classList.add('is-leaving');
+        noticeLeaveTimer = setTimeout(() => {
+          el.statusNotice.classList.remove('is-leaving');
+          el.statusNotice.hidden = true;
+          noticeLeaveTimer = null;
+        }, 200);
       }
 
       function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-8') {
@@ -2325,7 +2397,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         }
 
-        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run AZ0 on Windows to open file paths directly).`);
+        showNotice(`Parsed ${locations.length} items from "${filename}". Open the folder containing those files first (or run همزة on Windows to open file paths directly).`);
       }
 
       /* =======================================================================
@@ -5238,7 +5310,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
 
         if (!track) {
           const isAndroid = Boolean(desktopBridge?.isAndroid);
-          el.nowPlayingKicker.textContent = 'AZ0';
+          el.nowPlayingKicker.textContent = 'همزة';
           el.trackTitle.textContent = t(isAndroid ? 'stageEmptyTitleMobile' : 'stageEmptyTitle');
           el.trackTitle.classList.add('is-empty');
           el.trackSubpath.textContent = t(isAndroid ? 'stageEmptySubMobile' : 'stageEmptySub');
@@ -5252,7 +5324,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           setRangeFill(el.seekBar, 0);
           setRangeFill(el.fsSeekBar, 0);
           if (el.mobileStageCta) el.mobileStageCta.hidden = !isAndroid;
-          document.title = 'AZ0';
+          document.title = 'همزة';
           notifyShellTabState();
           return;
         }
@@ -5273,7 +5345,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.dockNowTitle.title = track.name;
         el.dockNowMeta.textContent = `${pos} · ${track.ext} · ${state.folderName}`;
         el.fsTitleLabel.textContent = track.displayName;
-        document.title = `${track.displayName} — AZ0`;
+        document.title = `${track.displayName} — همزة`;
         notifyShellTabState();
       }
 
@@ -5283,8 +5355,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if (desktopBridge?.isAndroid && typeof desktopBridge.updateMediaSession === 'function') {
           Promise.resolve(
             desktopBridge.updateMediaSession({
-              title: track ? track.displayName || track.name || 'AZ0' : 'AZ0',
-              artist: state.folderName || 'AZ0',
+              title: track ? track.displayName || track.name || 'همزة' : 'همزة',
+              artist: state.folderName || 'همزة',
               isPlaying: Boolean(track && isPlaying),
               durationMs: Number.isFinite(el.media.duration) ? Math.round(el.media.duration * 1000) : 0,
               positionMs: Number.isFinite(el.media.currentTime) ? Math.round(el.media.currentTime * 1000) : 0,
@@ -5295,9 +5367,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         try {
           if (track && typeof MediaMetadata === 'function') {
             navigator.mediaSession.metadata = new MediaMetadata({
-              title: track.displayName || track.name || 'AZ0',
-              artist: state.folderName || 'AZ0',
-              album: 'AZ0',
+              title: track.displayName || track.name || 'همزة',
+              artist: state.folderName || 'همزة',
+              album: 'همزة',
             });
           } else if (!track) {
             navigator.mediaSession.metadata = null;
@@ -6345,7 +6417,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       // Suppress WebView2/Browser default context menu everywhere (except editable inputs)
-      // and open AZ0's custom themed context menu on the media stage
+      // and open Hamza's custom themed context menu on the media stage
       document.addEventListener('contextmenu', (e) => {
         if (e.target.closest('input[type="text"], input[type="search"], input:not([type]), textarea, [contenteditable="true"]')) {
           return;
@@ -7456,8 +7528,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               el.updateActionBtn.disabled = false;
               showNotice(
                 state.lang === 'ar'
-                  ? 'فعّل إذن "تثبيت التطبيقات غير المعروفة" لـ AZ0 ثم اضغط تثبيت مجدداً.'
-                  : (launched.message || "Allow 'Install unknown apps' for AZ0, then tap Install again."),
+                  ? 'فعّل إذن "تثبيت التطبيقات غير المعروفة" لـ همزة ثم اضغط تثبيت مجدداً.'
+                  : (launched.message || "Allow 'Install unknown apps' for همزة, then tap Install again."),
                 true
               );
             } else if (!launched || (typeof launched === 'object' && launched.status === 'error')) {
@@ -7647,7 +7719,15 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
         el.resumeBanner.hidden = true;
       });
-      el.closeNoticeBtn.addEventListener('click', hideNotice);
+      el.closeNoticeBtn.addEventListener('click', () => hideNotice());
+      // Toast stays while the user is reading/aiming at it, then resumes its countdown.
+      el.statusNotice.addEventListener('pointerenter', pauseNotice);
+      el.statusNotice.addEventListener('pointerleave', resumeNotice);
+      el.statusNotice.addEventListener('focusin', pauseNotice);
+      el.statusNotice.addEventListener('focusout', resumeNotice);
+      document.addEventListener('fullscreenchange', () => {
+        if (!el.statusNotice.hidden) hostNoticeElement();
+      });
       if (el.noticeUndoBtn) {
         el.noticeUndoBtn.addEventListener('click', () => {
           const fn = state.noticeUndoHandler;
@@ -8303,9 +8383,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               const ver = await desktopBridge.getAppVersion();
               if (ver) {
                 state.appVersion = ver;
-                el.menuVersionLabel.textContent = `AZ0 v${ver}`;
+                el.menuVersionLabel.textContent = `همزة v${ver}`;
                 const setVerLabel = document.getElementById('setAppVersionLabel');
-                if (setVerLabel) setVerLabel.textContent = `AZ0 v${ver}`;
+                if (setVerLabel) setVerLabel.textContent = `همزة v${ver}`;
               }
             } catch (err) {
               errorHandler.log('desktop.getAppVersion', err);
@@ -8499,7 +8579,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 showNotice(
                   state.lang === 'ar'
                     ? 'اضغط رجوع مرة أخرى للخروج من التطبيق.'
-                    : 'Press Back again to exit AZ0.'
+                    : 'Press Back again to exit همزة.'
                 );
               },
             });

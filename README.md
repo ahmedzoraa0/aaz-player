@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="desktop/assets/icon.png" alt="AZ0" width="96" height="96" />
-  <h1>AZ0</h1>
+  <img src="desktop/assets/icon.png" alt="همزة" width="96" height="96" />
+  <h1>همزة</h1>
   <p><strong>مشغّل الصوت والفيديو المحلي بتاعك — خفيف، سريع، وبيشتغل من غير نت</strong><br/>
   A lightweight local audio &amp; video player for Windows and Android</p>
   <p>
@@ -21,31 +21,31 @@
 
 ## 🇪🇬 العربية
 
-### إيه هو AZ0؟
+### إيه هو همزة؟
 مشغّل محلي لملفات الصوت والفيديو على ويندوز وأندرويد. يفتح الملفات والمجلدات وقوائم التشغيل من غير ما يحتاج نت ولا حسابات، وملفاتك بتفضل على جهازك — مفيش حاجة بتترفع لأي سيرفر.
 
 بتفتح ملفاتك على طول، والقائمة قدامك بكل تفاصيلها: الاسم، النوع، المدة، والحجم. الصوت شغال بمستوى حقيقي من 0 لـ 200%، والتقدّم بينحفظ حتى لو قفلت البرنامج ورجعت.
 
 <p align="center">
-  <img src="docs/screenshots/az0-desktop.png" alt="AZ0 على ويندوز — التشغيل وقائمة الانتظار" width="92%" />
+  <img src="docs/screenshots/az0-desktop.png" alt="همزة على ويندوز — التشغيل وقائمة الانتظار" width="92%" />
 </p>
 
 الموجات المتحركة بتتابع الصوت لحظة بلحظة بأكتر من شكل: طيف متناظر، موجة حريرية، هالة صوتية، وأعمدة استوديو — كلها جزء من البرنامج مش إضافات خارجية.
 
 <p align="center">
-  <img src="docs/screenshots/az0-visualizer.png" alt="المصور الموسيقي المتفاعل في AZ0" width="92%" />
+  <img src="docs/screenshots/az0-visualizer.png" alt="المصور الموسيقي المتفاعل في همزة" width="92%" />
 </p>
 
 شكل البرنامج على ذوقك: 16 ثيم كامل، كل واحد له وضع داكن وفاتح، من الكلاسيك الهادي لأشكال زي سايبر وماينكرافت وليجو — بتتبدل من قائمة العرض في ثانية، والأيقونات والألوان بتتظبط مع الثيم على طول.
 
 <p align="center">
-  <img src="docs/screenshots/az0-themes.png" alt="ثيم سايبر في AZ0" width="92%" />
+  <img src="docs/screenshots/az0-themes.png" alt="ثيم سايبر في همزة" width="92%" />
 </p>
 
 ونفس البرنامج على موبايلك: واجهة عربية كاملة بالاتجاه الصح، أزرار كبيرة مريحة للمس، وشريط تنقل سفلي بين المشغل والقائمة والمكتبة والمحفوظة — المشغل كامل بالعربي، في جيبك.
 
 <p align="center">
-  <img src="docs/screenshots/az0-phone.png" alt="AZ0 على أندرويد" width="30%" />
+  <img src="docs/screenshots/az0-phone.png" alt="همزة على أندرويد" width="30%" />
 </p>
 
 ### اللي بيميزه
@@ -69,7 +69,7 @@
 
 ## 🇬🇧 English
 
-AZ0 is a local audio &amp; video player for Windows and Android. It opens files, folders and playlists fully offline — no accounts, no uploads, your media stays on your device.
+Hamza (همزة) is a local audio &amp; video player for Windows and Android. It opens files, folders and playlists fully offline — no accounts, no uploads, your media stays on your device.
 
 - Browser-style multi-tab workspace with independent windows and exact session resume
 - Serious playlists: drag-and-drop, right-click actions, Up Next, `.XSPF` / `.M3U8` / `.PLS` export
@@ -110,5 +110,5 @@ To enable signed releases in your repository:
 ---
 
 <div align="center">
-  <sub>AZ0 — MIT License</sub>
+  <sub>همزة — MIT License</sub>
 </div>
