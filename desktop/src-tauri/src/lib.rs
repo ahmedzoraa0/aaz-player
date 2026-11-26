@@ -1727,9 +1727,7 @@ fn aaz_new_window() -> Result<bool, String> {
 #[cfg(not(target_os = "android"))]
 async fn aaz_select_folder(state: State<'_, AppState>) -> Result<Option<FolderResult>, String> {
     let result = tauri::async_runtime::spawn_blocking(|| {
-        let folder = rfd::FileDialog::new()
-            .set_title("همزة")
-            .pick_folder()?;
+        let folder = rfd::FileDialog::new().set_title("همزة").pick_folder()?;
         let mut entries = Vec::new();
         scan_local_directory(&folder, "", &mut entries);
         let folder_path = folder.to_string_lossy().into_owned();
