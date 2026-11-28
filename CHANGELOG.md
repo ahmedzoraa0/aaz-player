@@ -4,7 +4,22 @@ All notable changes to **AAZ Player** are documented in this file.
 
 ---
 
-## [Unreleased]
+## [1.11.0] - 2026-11-27
+
+### Added
+- **Split view**: show two players side by side (stacked automatically on phones and narrow windows). Start it from the new split button in the tab strip (open a file beside this tab, split with a new empty tab, or show any other open tab beside the current one), from **Media → Split View / Open Two Files Side by Side…**, or with `Ctrl+\`. Each side is a full player with its own controls and queue; the focused side owns the keyboard shortcuts, taskbar/media keys and window title (`Ctrl+Alt+←/→` switches side). Draggable divider (double-click or `Home` resets to 50%, arrow keys nudge), swap sides, switch layout, close split, and an optional "only the active side plays sound" mode. Layout and sound mode are remembered and included in settings backups.
+- **8 visualizer styles** with a saved picker: Symmetric Spectrum, Silk Wave, Audio Halo, Stereo Bars (real left/right channels), Studio LED, Heat Map (scrolling spectrogram), Beat Ripples and Off. Colour presets (Theme, Aurora, Sunset, Ocean, Mono), sensitivity, and a "show logo" switch. Style and options persist and are part of settings backups; press `V` to cycle styles.
+- Audio Halo and Beat Ripples show the Hamza logo in the centre and pulse with the beat.
+
+### Changed
+- New logo (`hamza-final.svg`) in the header, favicon, Windows icons (PNG/ICO) and the Android adaptive icon.
+- Visualizers now draw on a full-bleed background layer behind the track title instead of inside a boxed square, are centred/symmetric, DPR-aware and follow the active theme and skin colours.
+- Old saved styles migrate automatically (`wave` → Silk Wave, `orb` → Audio Halo).
+
+### Fixed
+- Visualizer colours were hard-coded green and ignored the 16 skins and light mode.
+- Visualizer scaling/centering went stale after resizing the window or toggling the sidebar; idle (paused) frames are now re-rendered on every resize.
+- Short audio stages (phones, split panes) no longer let the track text overlap the visualizer.
 
 ## [1.10.1] - 2026-11-26
 

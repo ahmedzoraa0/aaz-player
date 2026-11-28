@@ -36,6 +36,7 @@ export const DEFAULT_SHORTCUTS = Object.freeze([
   { id: 'speedFineDown', defaultKey: '[', labelEn: 'Speed Down Fine (-0.05x)', labelAr: 'خفض السرعة الدقيقة (-0.05×)' },
   { id: 'speedCoarseUp', defaultKey: '=', labelEn: 'Speed Up (+0.50x)', labelAr: 'زيادة السرعة (+0.50×)' },
   { id: 'speedCoarseDown', defaultKey: '-', labelEn: 'Speed Down (-0.50x)', labelAr: 'خفض السرعة (-0.50×)' },
+  { id: 'vizCycle', defaultKey: 'V', labelEn: 'Next Visualizer Style', labelAr: 'شكل المرئيات التالي' },
   { id: 'settings', defaultKey: 'Ctrl+,', labelEn: 'Open Playback Settings', labelAr: 'فتح إعدادات التشغيل' },
 ]);
 

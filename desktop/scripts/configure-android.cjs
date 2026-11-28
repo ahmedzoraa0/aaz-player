@@ -60,9 +60,9 @@ const adaptiveBgXml = `<?xml version="1.0" encoding="utf-8"?>
         <aapt:attr name="android:fillColor">
             <gradient
                 android:startX="0"
-                android:startY="0"
+                android:startY="108"
                 android:endX="108"
-                android:endY="108"
+                android:endY="0"
                 android:type="linear">
                 <item android:color="#83E6B6" android:offset="0.0" />
                 <item android:color="#14955F" android:offset="1.0" />
@@ -79,24 +79,34 @@ const adaptiveFgXml = `<?xml version="1.0" encoding="utf-8"?>
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Hamza glyph (public/brand/hamza-icon.svg geometry, 1024-unit space) scaled into the 66dp adaptive safe zone -->
+    <!-- Hamza glyph (public/brand/hamza-icon.svg geometry) scaled into the 66dp adaptive safe zone -->
     <group
         android:pivotX="0"
         android:pivotY="0"
-        android:scaleX="0.0794"
-        android:scaleY="0.0794"
-        android:translateX="15.73"
-        android:translateY="15.16">
-        <path
-            android:pathData="M411.0,290.7 L759.0,290.7 L661.0,488.7 L759.0,687.7 L205.0,687.7 L317.0,553.7 L317.0,418.7 Z M459.0,415.7 L459.0,559.7 L661.0,488.7 Z"
-            android:fillType="evenOdd">
-            <aapt:attr name="android:fillColor">
-                <gradient android:startX="0" android:startY="290" android:endX="0" android:endY="688" android:type="linear">
-                    <item android:color="#FFFFFF" android:offset="0.0" />
-                    <item android:color="#C0F2DE" android:offset="1.0" />
-                </gradient>
-            </aapt:attr>
-        </path>
+        android:scaleX="0.0578"
+        android:scaleY="0.0578"
+        android:translateX="10.13"
+        android:translateY="-7.32">
+        <group android:translateX="22" android:translateY="-8">
+            <path
+                android:pathData="M597.1,742.47h572.19l-161.13,325.56,161.13,327.2H304.55l138-220.33v-221.97l154.56-210.46Z"
+                android:fillType="evenOdd">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:startX="0" android:startY="742" android:endX="0" android:endY="1395" android:type="linear">
+                        <item android:color="#FFFFFF" android:offset="0.0" />
+                        <item android:color="#C0F2DE" android:offset="1.0" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+            <path android:pathData="M641.41,922.87v302.75c0,9.19,9.67,15.17,17.89,11.06l348.86-168.66-349.22-156.38c-8.19-3.77-17.53,2.21-17.53,11.23Z">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:startX="535" android:startY="0" android:endX="1006" android:endY="0" android:type="linear">
+                        <item android:color="#0A3C28" android:offset="0.0" />
+                        <item android:color="#1F7A4F" android:offset="1.0" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
     </group>
 </vector>
 `;

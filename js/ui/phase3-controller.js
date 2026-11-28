@@ -1410,6 +1410,7 @@ const LIB_FOLDER_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fil
       speedFineDown: () => api.adjustPlaybackSpeed?.(-0.05),
       speedCoarseUp: () => api.adjustPlaybackSpeed?.(0.5),
       speedCoarseDown: () => api.adjustPlaybackSpeed?.(-0.5),
+      vizCycle: () => api.cycleVizMode?.(),
       settings: () => openSettingsModal(),
     };
 

@@ -29,6 +29,12 @@ import {
   shiftWebVtt,
 } from '../utils/time-utils.js';
 import { appendQueryParam } from '../utils/file-utils.js';
+import {
+  createVisualizer,
+  sanitizeVizMode,
+  sanitizeVizPrefs,
+  VIZ_MODES,
+} from '../modules/visualizer.js';
 import { createErrorHandler, ErrorCategory } from '../utils/error-handler.js';
 import { createPhase3Controller } from '../ui/phase3-controller.js';
 import {
@@ -269,6 +275,12 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         mobileStageOpenLibBtn: document.getElementById('mobileStageOpenLibBtn'),
         visualizerCanvas: document.getElementById('visualizerCanvas'),
         vizModeBtns: Array.from(document.querySelectorAll('.viz-mode-btn')),
+        vizPickerBtn: document.getElementById('vizPickerBtn'),
+        vizPickerLabel: document.getElementById('vizPickerLabel'),
+        vizPopover: document.getElementById('vizPopover'),
+        vizPaletteBtns: Array.from(document.querySelectorAll('.viz-palette-btn')),
+        vizSensitivity: document.getElementById('vizSensitivity'),
+        vizLogoToggle: document.getElementById('vizLogoToggle'),
 
         eqDrawer: document.getElementById('eqDrawer'),
         eqToggleBtn: document.getElementById('eqToggleBtn'),
@@ -473,7 +485,13 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         theme: 'dark',                // 'dark' | 'light'
         skin: DEFAULT_SKIN,           // 12 green-identity visual skins
         lang: 'en',                   // 'en' | 'ar'
-        vizMode: 'spectrum',          // 'spectrum' | 'wave' | 'orb' | 'led'
+        vizMode: 'spectrum',          // see VIZ_MODES in modules/visualizer.js (legacy wave/orb are migrated)
+        vizPrefs: sanitizeVizPrefs(null), // { palette, sensitivity, showLogo } — persisted as aaz_viz_prefs
+        split: { active: false, focused: false, side: 'first', soloAudio: false }, // set by the shell (aaz-split-state)
+        splitAutoMuted: false,
+        splitPrevMuted: false,
+        splitFileRequest: false,
+        splitAutoPlayNext: false,
         videoAspect: 'default',       // 'default' | '16:9' | '4:3' | '21:9' | '16:10' | '1:1' | 'fill'
         videoZoom: 1,                 // 0.25 | 0.5 | 1 | 1.5 | 2
         videoCrop: 'default',         // 'default' | '16:9' | '21:9' | '4:3' | '1:1' | 'fill'
@@ -577,10 +595,27 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           orientLockedNotice: 'Screen rotation locked',
           orientUnlockedNotice: 'Auto-rotation unlocked',
           btnShowVideo: 'Switch to Video View',
-          vizSpectrum: 'Spectrum',
-          vizWave: 'Aurora Wave',
-          vizOrb: 'Pulse Orb',
+          cmdSplitToggle: 'Split View',
+          cmdSplitOpenTwo: 'Open Two Files Side by Side…',
+          splitOnlyTwoFiles: 'Choose at least two files to show them side by side.',
+          splitOpenWebHint: 'Pick two or more files — the second one opens in a split pane.',
+          vizSpectrum: 'Symmetric Spectrum',
+          vizSilk: 'Silk Wave',
+          vizHalo: 'Audio Halo',
+          vizStereo: 'Stereo Bars',
           vizLed: 'Studio LED',
+          vizHeat: 'Heat Map',
+          vizRipple: 'Beat Ripples',
+          vizOff: 'Off',
+          vizStyleTitle: 'Visual style',
+          vizPaletteTitle: 'Colours',
+          vizPalTheme: 'Theme',
+          vizPalAurora: 'Aurora',
+          vizPalSunset: 'Sunset',
+          vizPalOcean: 'Ocean',
+          vizPalMono: 'Mono',
+          vizSensitivityLabel: 'Sensitivity',
+          vizShowLogo: 'Show logo in the centre',
           tabQueue: 'Queue',
           tabSaved: 'Saved Playlists',
           tabSavedShort: 'Saved',
@@ -864,10 +899,27 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           orientLockedNotice: 'تم قفل اتجاه الشاشة',
           orientUnlockedNotice: 'تم فتح دوران الشاشة التلقائي',
           btnShowVideo: 'العودة إلى عرض الفيديو',
-          vizSpectrum: 'طيف متناظر',
-          vizWave: 'موجة حريرية',
-          vizOrb: 'هالة صوتية',
+          cmdSplitToggle: 'تقسيم الشاشة',
+          cmdSplitOpenTwo: 'فتح ملفين جنبًا إلى جنب…',
+          splitOnlyTwoFiles: 'اختر ملفين على الأقل لعرضهما جنبًا إلى جنب.',
+          splitOpenWebHint: 'اختر ملفين أو أكثر — الملف الثاني يُفتح في الجانب الآخر.',
+          vizSpectrum: 'طيف متماثل',
+          vizSilk: 'موجة حريرية',
+          vizHalo: 'هالة صوتية',
+          vizStereo: 'أعمدة ستيريو',
           vizLed: 'أعمدة استوديو',
+          vizHeat: 'خريطة حرارية',
+          vizRipple: 'تموّجات الإيقاع',
+          vizOff: 'إيقاف',
+          vizStyleTitle: 'شكل المرئيات',
+          vizPaletteTitle: 'الألوان',
+          vizPalTheme: 'حسب الثيم',
+          vizPalAurora: 'شفق',
+          vizPalSunset: 'غروب',
+          vizPalOcean: 'محيط',
+          vizPalMono: 'أحادي',
+          vizSensitivityLabel: 'الحساسية',
+          vizShowLogo: 'إظهار الشعار في المنتصف',
           tabQueue: 'قائمة التشغيل',
           tabSaved: 'القوائم المحفوظة',
           tabSavedShort: 'المحفوظة',
@@ -1344,14 +1396,44 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         syncCastButtonState();
         if (el.castModal && !el.castModal.hidden) renderCastDevices();
         if (phase3) phase3.applyTranslations();
+        syncVizPickerUI();
+      }
+
+      function vizModeLabel(mode) {
+        const dict = I18N[state.lang] || I18N.en;
+        const keyMap = {
+          spectrum: 'vizSpectrum',
+          silk: 'vizSilk',
+          halo: 'vizHalo',
+          stereo: 'vizStereo',
+          led: 'vizLed',
+          heat: 'vizHeat',
+          ripple: 'vizRipple',
+          off: 'vizOff',
+        };
+        return dict[keyMap[mode]] || I18N.en[keyMap[mode]] || mode;
+      }
+
+      function syncVizPickerUI() {
+        el.vizModeBtns.forEach((btn) => {
+          const active = btn.dataset.viz === state.vizMode;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('aria-pressed', String(active));
+        });
+        if (el.vizPickerLabel) el.vizPickerLabel.textContent = vizModeLabel(state.vizMode);
+        el.vizPaletteBtns.forEach((btn) => {
+          const active = btn.dataset.palette === state.vizPrefs.palette;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('aria-pressed', String(active));
+        });
+        if (el.vizSensitivity) el.vizSensitivity.value = String(state.vizPrefs.sensitivity);
+        if (el.vizLogoToggle) el.vizLogoToggle.checked = state.vizPrefs.showLogo;
       }
 
       function setVizMode(mode, persist = true) {
-        if (!['spectrum', 'wave', 'orb', 'led'].includes(mode)) mode = 'spectrum';
+        mode = sanitizeVizMode(mode);
         state.vizMode = mode;
-        el.vizModeBtns.forEach((btn) => {
-          btn.classList.toggle('is-active', btn.dataset.viz === mode);
-        });
+        syncVizPickerUI();
         if (persist) {
           try {
             localStorage.setItem('aaz_viz_mode', mode);
@@ -1359,7 +1441,36 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             errorHandler.log('storage.vizMode', err);
           }
         }
-        if (el.media.paused || el.media.ended) AudioStudio.renderIdleFrame();
+        if (AudioStudio.viz) AudioStudio.viz.setMode(mode);
+        else if (el.media.paused || el.media.ended) AudioStudio.renderIdleFrame();
+      }
+
+      /** 'V' shortcut: next visualizer style (skips "off"), announced as a short toast. */
+      function cycleVizMode() {
+        const order = VIZ_MODES.filter((m) => m !== 'off');
+        const idx = order.indexOf(state.vizMode);
+        const next = order[(idx + 1) % order.length];
+        setVizMode(next, true);
+        showNotice(`${t('vizStyleTitle')}: ${vizModeLabel(next)}`);
+      }
+
+      function setVizPrefs(partial, persist = true) {
+        state.vizPrefs = sanitizeVizPrefs({ ...state.vizPrefs, ...(partial || {}) });
+        syncVizPickerUI();
+        if (persist) {
+          try {
+            localStorage.setItem('aaz_viz_prefs', JSON.stringify(state.vizPrefs));
+          } catch (err) {
+            errorHandler.log('storage.vizPrefs', err);
+          }
+        }
+        if (AudioStudio.viz) AudioStudio.viz.setPrefs(state.vizPrefs);
+      }
+
+      function setVizPopoverOpen(open) {
+        if (!el.vizPopover || !el.vizPickerBtn) return;
+        el.vizPopover.hidden = !open;
+        el.vizPickerBtn.setAttribute('aria-expanded', String(open));
       }
 
       /* =======================================================================
@@ -1378,11 +1489,11 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         rafId: null,
         initialized: false,
         failed: false,
-        barLevels: new Array(40).fill(0),
-        barCaps: new Array(40).fill(0),
-        ledLevels: new Array(32).fill(0),
-        ledCaps: new Array(32).fill(0),
-        orbEnergy: 0,
+        analyserL: null,
+        analyserR: null,
+        freqDataL: null,
+        freqDataR: null,
+        viz: null,
         connecting: false,
         unlockListenerBound: false,
 
@@ -1474,8 +1585,10 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 }
 
                 this.analyser = this.ctx.createAnalyser();
-                this.analyser.fftSize = 256;
-                this.analyser.smoothingTimeConstant = 0.8;
+                this.analyser.fftSize = 2048;
+                this.analyser.smoothingTimeConstant = 0.72;
+                this.analyser.minDecibels = -92;
+                this.analyser.maxDecibels = -22;
                 this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
                 this.timeData = new Uint8Array(this.analyser.fftSize);
 
@@ -1488,6 +1601,28 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
                 this.preamp.connect(this.overdrive);
                 this.overdrive.connect(this.analyser);
                 this.analyser.connect(this.ctx.destination);
+
+                // Per-channel analysers (dead-end taps) power the Stereo Bars visualizer.
+                try {
+                  const splitter = this.ctx.createChannelSplitter(2);
+                  this.analyserL = this.ctx.createAnalyser();
+                  this.analyserR = this.ctx.createAnalyser();
+                  for (const an of [this.analyserL, this.analyserR]) {
+                    an.fftSize = 1024;
+                    an.smoothingTimeConstant = 0.72;
+                    an.minDecibels = -92;
+                    an.maxDecibels = -22;
+                  }
+                  this.freqDataL = new Uint8Array(this.analyserL.frequencyBinCount);
+                  this.freqDataR = new Uint8Array(this.analyserR.frequencyBinCount);
+                  this.overdrive.connect(splitter);
+                  splitter.connect(this.analyserL, 0);
+                  splitter.connect(this.analyserR, 1);
+                } catch (err) {
+                  this.analyserL = null;
+                  this.analyserR = null;
+                  errorHandler.log('audio.stereoAnalysers', err);
+                }
 
                 this.initialized = true;
                 this.connecting = false;
@@ -1571,386 +1706,54 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
         },
 
-        getPalette() {
-          const isLight = state.theme === 'light';
-          return isLight
-            ? {
-                low: 'rgba(18, 108, 66, 0.68)',
-                mid: 'rgba(24, 133, 81, 0.92)',
-                high: 'rgba(54, 178, 114, 0.98)',
-                reflect: 'rgba(24, 133, 81, 0.16)',
-                cap: '#b07b16',
-                idle: 'rgba(24, 133, 81, 0.24)',
-                line: 'rgba(24, 133, 81, 0.22)',
-                wave1: 'rgba(24, 133, 81, 0.85)',
-                wave2: 'rgba(176, 123, 22, 0.62)',
-                waveFill: 'rgba(24, 133, 81, 0.14)',
-                coreBg: '#e4efe7',
-                coreText: '#10251a'
-              }
-            : {
-                low: 'rgba(26, 108, 62, 0.72)',
-                mid: 'rgba(61, 196, 121, 0.94)',
-                high: 'rgba(146, 240, 184, 0.98)',
-                reflect: 'rgba(61, 196, 121, 0.17)',
-                cap: '#e0be72',
-                idle: 'rgba(61, 196, 121, 0.24)',
-                line: 'rgba(61, 196, 121, 0.18)',
-                wave1: 'rgba(72, 214, 136, 0.92)',
-                wave2: 'rgba(214, 178, 103, 0.65)',
-                waveFill: 'rgba(61, 196, 121, 0.15)',
-                coreBg: '#0c1c13',
-                coreText: '#edf5ef'
-              };
+        /** Refreshes the analyser byte arrays and hands them to the visualizer engine. */
+        getVizSources() {
+          if (!this.initialized || !this.analyser) return null;
+          this.analyser.getByteFrequencyData(this.freqData);
+          let freqL = null;
+          let freqR = null;
+          if (this.analyserL && this.analyserR) {
+            this.analyserL.getByteFrequencyData(this.freqDataL);
+            this.analyserR.getByteFrequencyData(this.freqDataR);
+            freqL = this.freqDataL;
+            freqR = this.freqDataR;
+          }
+          return {
+            freq: this.freqData,
+            freqL,
+            freqR,
+            sampleRate: this.ctx ? this.ctx.sampleRate : 48000,
+          };
         },
 
-        prepareCanvas() {
-          const canvas = el.visualizerCanvas;
-          const rect = canvas.getBoundingClientRect();
-          if (!rect.width || !rect.height) return null;
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          const w = Math.floor(rect.width * dpr);
-          const h = Math.floor(rect.height * dpr);
-          if (canvas.width !== w || canvas.height !== h) {
-            canvas.width = w;
-            canvas.height = h;
-          }
-          const ctx = canvas.getContext('2d');
-          ctx.clearRect(0, 0, w, h);
-          return { ctx, w, h, dpr };
+        ensureViz() {
+          if (this.viz || !el.visualizerCanvas) return this.viz;
+          this.viz = createVisualizer({
+            canvas: el.visualizerCanvas,
+            hero: el.audioStage ? el.audioStage.querySelector('.audio-hero-inner') : null,
+            getSources: () => this.getVizSources(),
+            isPlaying: () => !el.media.paused && !el.media.ended,
+            isVisible: () => Boolean(el.audioStage) && !el.audioStage.hidden,
+            logoUrl: './brand/hamza-icon.svg',
+          });
+          this.viz.setPrefs(state.vizPrefs);
+          this.viz.setMode(state.vizMode);
+          return this.viz;
         },
 
         startVisualizer() {
-          if (this.rafId !== null) return;
-          const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          const draw = () => {
-            this.renderFrame(prefersReduced);
-            if (!el.media.paused && !el.media.ended && !el.audioStage.hidden) {
-              this.rafId = requestAnimationFrame(draw);
-            } else {
-              this.rafId = null;
-              this.renderIdleFrame();
-            }
-          };
-          this.rafId = requestAnimationFrame(draw);
+          const viz = this.ensureViz();
+          if (viz) viz.start();
         },
 
         stopVisualizer() {
-          if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-          }
-          this.renderIdleFrame();
-        },
-
-        sampleLogBand(idx, total, prefersReduced, tSec) {
-          if (this.initialized && this.freqData && !prefersReduced) {
-            const len = this.freqData.length;
-            const start = Math.floor(Math.pow(idx / total, 1.55) * (len * 0.82));
-            const end = Math.max(start + 1, Math.floor(Math.pow((idx + 1) / total, 1.55) * (len * 0.82)));
-            let sum = 0;
-            for (let b = start; b < Math.min(len, end); b++) sum += this.freqData[b];
-            return Math.min(1, (sum / Math.max(1, end - start)) / 245);
-          }
-          return 0.14 + 0.14 * Math.abs(Math.sin(tSec * 2.6 + idx * 0.35));
+          const viz = this.ensureViz();
+          if (viz) viz.stop();
         },
 
         renderIdleFrame() {
-          const prep = this.prepareCanvas();
-          if (!prep) return;
-          const { ctx, w, h, dpr } = prep;
-          const pal = this.getPalette();
-          const mode = state.vizMode || 'spectrum';
-
-          if (mode === 'orb') {
-            const cx = w / 2;
-            const cy = h / 2;
-            const baseR = Math.min(w, h) * 0.25;
-            ctx.strokeStyle = pal.idle;
-            ctx.lineWidth = 2 * dpr;
-            ctx.beginPath();
-            ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.fillStyle = pal.coreBg;
-            ctx.beginPath();
-            ctx.arc(cx, cy, baseR * 0.72, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = pal.line;
-            ctx.stroke();
-
-            ctx.fillStyle = pal.coreText;
-            ctx.font = `700 ${Math.round(baseR * 0.38)}px "Cairo", "Plus Jakarta Sans", sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('همزة', cx, cy + 1 * dpr);
-            return;
-          }
-
-          if (mode === 'wave') {
-            ctx.strokeStyle = pal.idle;
-            ctx.lineWidth = 2 * dpr;
-            ctx.beginPath();
-            for (let x = 0; x <= w; x += 4 * dpr) {
-              const y = h / 2 + Math.sin((x / w) * Math.PI * 4) * (4 * dpr);
-              if (x === 0) ctx.moveTo(x, y);
-              else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-            return;
-          }
-
-          if (mode === 'led') {
-            const cols = 32;
-            const gap = 4 * dpr;
-            const colW = Math.max(3 * dpr, (w - gap * (cols - 1)) / cols);
-            const segH = 4 * dpr;
-            ctx.fillStyle = pal.idle;
-            for (let i = 0; i < cols; i++) {
-              const x = i * (colW + gap);
-              ctx.beginPath();
-              ctx.roundRect(x, h - segH - 4 * dpr, colW, segH, 1.5 * dpr);
-              ctx.fill();
-            }
-            return;
-          }
-
-          // Spectrum idle horizon
-          const horizonY = Math.round(h * 0.72);
-          ctx.strokeStyle = pal.line;
-          ctx.lineWidth = 1 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(0, horizonY);
-          ctx.lineTo(w, horizonY);
-          ctx.stroke();
-
-          const bars = 40;
-          const gap = 4 * dpr;
-          const barW = Math.max(3 * dpr, (w - gap * (bars - 1)) / bars);
-          ctx.fillStyle = pal.idle;
-          for (let i = 0; i < bars; i++) {
-            const distCenter = Math.abs(i - (bars - 1) / 2) / (bars / 2);
-            const restH = (4 + (1 - distCenter) * 7) * dpr;
-            const x = i * (barW + gap);
-            ctx.beginPath();
-            ctx.roundRect(x, horizonY - restH, barW, restH, 2 * dpr);
-            ctx.fill();
-          }
-        },
-
-        renderFrame(prefersReduced) {
-          const prep = this.prepareCanvas();
-          if (!prep) return;
-          const { ctx, w, h, dpr } = prep;
-          const pal = this.getPalette();
-          const tSec = Date.now() * 0.001;
-
-          if (this.initialized && this.analyser && !prefersReduced) {
-            this.analyser.getByteFrequencyData(this.freqData);
-            this.analyser.getByteTimeDomainData(this.timeData);
-          }
-
-          const mode = state.vizMode || 'spectrum';
-
-          /* --- MODE 1: Mirrored Peak-Hold Spectrum with Horizon Reflection --- */
-          if (mode === 'spectrum') {
-            const bars = 40;
-            const half = bars / 2;
-            const gap = 4 * dpr;
-            const barW = Math.max(3 * dpr, (w - gap * (bars - 1)) / bars);
-            const horizonY = Math.round(h * 0.74);
-            const maxBarH = horizonY - 10 * dpr;
-            const reflectMax = h - horizonY - 4 * dpr;
-
-            ctx.strokeStyle = pal.line;
-            ctx.lineWidth = 1 * dpr;
-            ctx.beginPath();
-            ctx.moveTo(0, horizonY);
-            ctx.lineTo(w, horizonY);
-            ctx.stroke();
-
-            const grad = ctx.createLinearGradient(0, horizonY, 0, 8 * dpr);
-            grad.addColorStop(0, pal.low);
-            grad.addColorStop(0.62, pal.mid);
-            grad.addColorStop(1, pal.high);
-
-            for (let i = 0; i < bars; i++) {
-              // Mirror center-out: bass in center, shimmering highs toward edges
-              const mirrorIdx = i < half ? (half - 1 - i) : (i - half);
-              const raw = this.sampleLogBand(mirrorIdx, half, prefersReduced, tSec);
-              this.barLevels[i] = Math.max(raw, this.barLevels[i] * 0.87);
-              this.barCaps[i] = Math.max(this.barLevels[i], this.barCaps[i] - 0.014);
-
-              const barH = Math.max(3 * dpr, this.barLevels[i] * maxBarH);
-              const capY = horizonY - Math.max(barH + 4 * dpr, this.barCaps[i] * maxBarH + 3 * dpr);
-              const x = i * (barW + gap);
-
-              ctx.fillStyle = grad;
-              ctx.beginPath();
-              ctx.roundRect(x, horizonY - barH, barW, barH, [3 * dpr, 3 * dpr, 1 * dpr, 1 * dpr]);
-              ctx.fill();
-
-              // Golden floating peak-hold cap
-              ctx.fillStyle = pal.cap;
-              ctx.beginPath();
-              ctx.roundRect(x, Math.max(2 * dpr, capY), barW, 2.5 * dpr, 1.5 * dpr);
-              ctx.fill();
-
-              // Soft mirror reflection beneath horizon
-              const refH = Math.min(reflectMax, barH * 0.32);
-              ctx.fillStyle = pal.reflect;
-              ctx.beginPath();
-              ctx.roundRect(x, horizonY + 2 * dpr, barW, refH, [1 * dpr, 1 * dpr, 2 * dpr, 2 * dpr]);
-              ctx.fill();
-            }
-            return;
-          }
-
-          /* --- MODE 2: Aurora Ribbon Wave (Layered Live Waveform) --- */
-          if (mode === 'wave') {
-            const cy = h * 0.5;
-            const amp = h * 0.4;
-            const samples = this.timeData && this.initialized && !prefersReduced ? this.timeData.length : 128;
-
-            const drawRibbon = (strokeColor, fillColor, phaseShift, scaleY, lineWidth) => {
-              ctx.beginPath();
-              for (let i = 0; i < samples; i++) {
-                const pct = i / (samples - 1);
-                const x = pct * w;
-                const envelope = Math.sin(pct * Math.PI); // Smooth tapered ends
-                let v = 0;
-                if (this.initialized && this.timeData && !prefersReduced) {
-                  v = ((this.timeData[i] - 128) / 128) * scaleY;
-                } else {
-                  v = Math.sin(pct * Math.PI * 5 + tSec * 3.5 + phaseShift) * 0.32 * scaleY;
-                }
-                const harmonic = Math.sin(pct * Math.PI * 3 + tSec * 2.2 + phaseShift) * 0.08 * scaleY;
-                const y = cy + (v + harmonic) * amp * envelope;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-              }
-              ctx.strokeStyle = strokeColor;
-              ctx.lineWidth = lineWidth * dpr;
-              ctx.lineJoin = 'round';
-              ctx.stroke();
-
-              if (fillColor) {
-                ctx.lineTo(w, cy);
-                ctx.lineTo(0, cy);
-                ctx.closePath();
-                ctx.fillStyle = fillColor;
-                ctx.fill();
-              }
-            };
-
-            // Center baseline
-            ctx.strokeStyle = pal.line;
-            ctx.lineWidth = 1 * dpr;
-            ctx.beginPath();
-            ctx.moveTo(0, cy);
-            ctx.lineTo(w, cy);
-            ctx.stroke();
-
-            drawRibbon(pal.wave2, null, 1.3, 0.72, 1.6);
-            drawRibbon(pal.wave1, pal.waveFill, 0, 1.05, 2.6);
-            return;
-          }
-
-          /* --- MODE 3: Radial Pulse Orb (360° Frequency Halo + Pulsing AAZ Core) --- */
-          if (mode === 'orb') {
-            const cx = w / 2;
-            const cy = h / 2;
-            const minDim = Math.min(w, h);
-            let bassSum = 0;
-            for (let b = 0; b < 6; b++) bassSum += this.sampleLogBand(b, 24, prefersReduced, tSec);
-            const bass = bassSum / 6;
-            this.orbEnergy = Math.max(bass, this.orbEnergy * 0.88);
-
-            const baseR = minDim * (0.23 + this.orbEnergy * 0.055);
-            const spokes = 64;
-            const maxRay = minDim * 0.22;
-
-            // Soft radial glow
-            const glow = ctx.createRadialGradient(cx, cy, baseR * 0.5, cx, cy, baseR + maxRay * 1.15);
-            glow.addColorStop(0, pal.waveFill);
-            glow.addColorStop(1, 'rgba(61, 196, 121, 0)');
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.arc(cx, cy, baseR + maxRay * 1.15, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 360° radiating bars
-            for (let i = 0; i < spokes; i++) {
-              const angle = (i / spokes) * Math.PI * 2 - Math.PI / 2;
-              const symIdx = i < spokes / 2 ? i : (spokes - 1 - i);
-              const val = this.sampleLogBand(symIdx, spokes / 2, prefersReduced, tSec);
-              const rayLen = 4 * dpr + val * maxRay;
-
-              const x1 = cx + Math.cos(angle) * (baseR + 3 * dpr);
-              const y1 = cy + Math.sin(angle) * (baseR + 3 * dpr);
-              const x2 = cx + Math.cos(angle) * (baseR + 3 * dpr + rayLen);
-              const y2 = cy + Math.sin(angle) * (baseR + 3 * dpr + rayLen);
-
-              ctx.strokeStyle = val > 0.72 ? pal.cap : pal.mid;
-              ctx.lineWidth = 2.4 * dpr;
-              ctx.lineCap = 'round';
-              ctx.beginPath();
-              ctx.moveTo(x1, y1);
-              ctx.lineTo(x2, y2);
-              ctx.stroke();
-            }
-
-            // Center AAZ Core
-            ctx.fillStyle = pal.coreBg;
-            ctx.beginPath();
-            ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = pal.mid;
-            ctx.lineWidth = 2 * dpr;
-            ctx.stroke();
-
-            ctx.fillStyle = pal.coreText;
-            ctx.font = `800 ${Math.round(baseR * 0.42)}px "Cairo", "Plus Jakarta Sans", sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('همزة', cx, cy + 1 * dpr);
-            return;
-          }
-
-          /* --- MODE 4: Pro Studio LED Meter (Segmented VU Blocks) --- */
-          const cols = 32;
-          const rows = 14;
-          const gapX = 4 * dpr;
-          const gapY = 3 * dpr;
-          const colW = Math.max(4 * dpr, (w - gapX * (cols - 1)) / cols);
-          const cellH = Math.max(3 * dpr, (h - 8 * dpr - gapY * (rows - 1)) / rows);
-
-          for (let c = 0; c < cols; c++) {
-            const raw = this.sampleLogBand(c, cols, prefersReduced, tSec);
-            this.ledLevels[c] = Math.max(raw, this.ledLevels[c] * 0.85);
-            this.ledCaps[c] = Math.max(this.ledLevels[c], this.ledCaps[c] - 0.016);
-
-            const litRows = Math.max(1, Math.round(this.ledLevels[c] * rows));
-            const capRow = Math.min(rows - 1, Math.floor(this.ledCaps[c] * rows));
-            const x = c * (colW + gapX);
-
-            for (let r = 0; r < rows; r++) {
-              const y = h - 4 * dpr - (r + 1) * cellH - r * gapY;
-              const isLit = r < litRows;
-              const isCap = r === capRow && this.ledCaps[c] > 0.1;
-
-              if (isCap) {
-                ctx.fillStyle = pal.cap;
-              } else if (isLit) {
-                ctx.fillStyle = r >= rows - 3 ? pal.high : r >= rows * 0.45 ? pal.mid : pal.low;
-              } else {
-                ctx.fillStyle = pal.line;
-              }
-              ctx.beginPath();
-              ctx.roundRect(x, y, colW, cellH, 1.5 * dpr);
-              ctx.fill();
-            }
-          }
+          const viz = this.ensureViz();
+          if (viz) viz.renderIdle();
         }
       };
 
@@ -3359,7 +3162,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           currentTime: cleanTime,
           duration: Number.isFinite(el.media.duration) ? el.media.duration : 0,
           volume: Number.isFinite(state.volume) ? state.volume : el.media.volume,
-          muted: el.media.muted,
+          muted: state.splitAutoMuted ? state.splitPrevMuted : el.media.muted,
           playbackRate: el.media.playbackRate,
           playlistMode: state.playlistMode,
           videoDisplayMode: state.videoDisplayMode,
@@ -3595,6 +3398,76 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           }
           showNotice(`Could not open folder: ${err?.message || 'Unknown error'}`, true);
         }
+      }
+
+      /* -------- Split view (pane side) -------- */
+      function applySplitState(msg) {
+        const wasAuto = state.splitAutoMuted;
+        state.split = {
+          active: Boolean(msg.active),
+          focused: Boolean(msg.focused),
+          side: msg.side === 'second' ? 'second' : 'first',
+          soloAudio: Boolean(msg.soloAudio),
+        };
+        document.documentElement.classList.toggle('is-split-pane', state.split.active);
+        document.documentElement.classList.toggle('is-split-focused', state.split.active && state.split.focused);
+        // "Only the active side plays sound": the unfocused pane is muted automatically, then restored.
+        const shouldAutoMute = state.split.active && state.split.soloAudio && !state.split.focused;
+        if (shouldAutoMute && !wasAuto) {
+          state.splitAutoMuted = true;
+          state.splitPrevMuted = el.media.muted;
+          el.media.muted = true;
+          updateVolumeUI();
+        } else if (!shouldAutoMute && wasAuto) {
+          state.splitAutoMuted = false;
+          el.media.muted = state.splitPrevMuted;
+          updateVolumeUI();
+        }
+      }
+
+      /** Loads a File list (from the file input or another split pane) like a normal "Open Files". */
+      function openFilesFromList(files) {
+        if (!files || files.length === 0) return;
+        state.splitAutoPlayNext = true;
+        try {
+          const dt = new DataTransfer();
+          Array.from(files).forEach((f) => dt.items.add(f));
+          el.filesInput.files = dt.files;
+          el.filesInput.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (err) {
+          errorHandler.log('split.openFiles', err);
+        }
+      }
+
+      /** Open two files at once: the first plays here, the second in a new split pane. */
+      async function openTwoFilesSplit() {
+        hideNotice();
+        if (!IS_TAB_FRAME) {
+          showNotice(t('splitOnlyTwoFiles'), true);
+          return;
+        }
+        if (desktopBridge && desktopBridge.selectFiles) {
+          const res = await desktopBridge.selectFiles();
+          if (!res || !Array.isArray(res.entries)) return;
+          const media = res.entries.filter((en) => en && en.fullPath && (en.kind === 'audio' || en.kind === 'video'));
+          if (media.length < 2) {
+            showNotice(t('splitOnlyTwoFiles'), true);
+            return;
+          }
+          const { tracks, subMap } = buildTracksFromElectronEntries([media[0]]);
+          if (tracks.length > 0) {
+            await applyLoadedTracks(tracks, subMap, t('currentQueue'), 'electron', {
+              restoreSavedPosition: true, autoPlay: true, nativeFolderPath: ''
+            });
+          }
+          postToShell('aaz-split-request', { action: 'open-paths', paths: [media[1].fullPath] });
+          return;
+        }
+        // Browser: pick files, then hand the second one to the new pane.
+        state.splitFileRequest = true;
+        showNotice(t('splitOpenWebHint'));
+        el.filesInput.value = '';
+        el.filesInput.click();
       }
 
       async function openFilesPicker() {
@@ -4537,6 +4410,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
       }
 
       function toggleMute() {
+        state.splitAutoMuted = false;
         el.media.muted = !el.media.muted;
         updateVolumeUI();
         persistPlaybackState();
@@ -6478,6 +6352,8 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           case 'open-folder': openFolderWithPersistence(false); break;
           case 'open-files': openFilesPicker(); break;
           case 'new-tab': postToShell('aaz-new-tab'); break;
+          case 'split-toggle': postToShell('aaz-split-request', { action: 'toggle' }); break;
+          case 'split-open-two': openTwoFilesSplit(); break;
           case 'new-window': openNewPlayerWindow(); break;
           case 'resume-session': handleResumeLastSession(); break;
           case 'save-to-library': openSavePlaylistPrompt(); break;
@@ -7508,7 +7384,38 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         el.themeGalleryLightBtn.addEventListener('click', () => applyTheme('light', true, true));
       }
       el.langToggleBtn.addEventListener('click', () => applyLanguage(state.lang === 'ar' ? 'en' : 'ar', true));
-      el.vizModeBtns.forEach((btn) => btn.addEventListener('click', () => setVizMode(btn.dataset.viz, true)));
+      el.vizModeBtns.forEach((btn) =>
+        btn.addEventListener('click', () => {
+          setVizMode(btn.dataset.viz, true);
+        })
+      );
+      if (el.vizPickerBtn && el.vizPopover) {
+        el.vizPickerBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          setVizPopoverOpen(el.vizPopover.hidden);
+        });
+        el.vizPopover.addEventListener('click', (ev) => ev.stopPropagation());
+        document.addEventListener('click', () => setVizPopoverOpen(false));
+        document.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Escape' && !el.vizPopover.hidden) {
+            setVizPopoverOpen(false);
+            el.vizPickerBtn.focus();
+          }
+        });
+      }
+      el.vizPaletteBtns.forEach((btn) =>
+        btn.addEventListener('click', () => setVizPrefs({ palette: btn.dataset.palette }, true))
+      );
+      if (el.vizSensitivity) {
+        el.vizSensitivity.addEventListener('input', () =>
+          setVizPrefs({ sensitivity: Number(el.vizSensitivity.value) }, true)
+        );
+      }
+      if (el.vizLogoToggle) {
+        el.vizLogoToggle.addEventListener('change', () =>
+          setVizPrefs({ showLogo: el.vizLogoToggle.checked }, true)
+        );
+      }
 
       el.updateActionBtn.addEventListener('click', async () => {
         if (!desktopBridge) return;
@@ -7610,7 +7517,27 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         const files = Array.from(e.target.files || []);
         const isAppend = state.appendModePending === 'files';
         state.appendModePending = null;
+        const autoPlayLoaded = state.splitAutoPlayNext === true;
+        state.splitAutoPlayNext = false;
+        const splitRequested = state.splitFileRequest === true;
+        state.splitFileRequest = false;
         if (files.length === 0) return;
+        if (splitRequested && IS_TAB_FRAME) {
+          // "Open two files side by side": first file plays here, the second in a new split pane.
+          const usable = files.filter((f) => buildTracksFromFileList([f]).tracks.length > 0);
+          if (usable.length < 2) {
+            showNotice(t('splitOnlyTwoFiles'), true);
+            return;
+          }
+          const firstBatch = buildTracksFromFileList([usable[0]]);
+          state.currentDirHandle = null;
+          state.activeSavedPlaylistId = null;
+          await applyLoadedTracks(firstBatch.tracks, firstBatch.subMap, firstBatch.folderName, 'input', {
+            restoreSavedPosition: true, autoPlay: true
+          });
+          postToShell('aaz-split-request', { action: 'open-files', files: [usable[1]] });
+          return;
+        }
         if (!isAppend && files.length === 1 && PLAYLIST_EXTENSIONS.has(getExtension(files[0].name))) {
           try {
             await handleImportedPlaylistContent(files[0].name, await files[0].text());
@@ -7630,7 +7557,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         }
         state.currentDirHandle = null;
         state.activeSavedPlaylistId = null;
-        await applyLoadedTracks(tracks, subMap, folderName, 'input', { restoreSavedPosition: true, autoPlay: false });
+        await applyLoadedTracks(tracks, subMap, folderName, 'input', { restoreSavedPosition: true, autoPlay: autoPlayLoaded });
       });
 
       el.playlistImportInput.addEventListener('change', async (e) => {
@@ -8103,6 +8030,16 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 't') {
           e.preventDefault();
           postToShell('aaz-new-tab');
+          return;
+        }
+        if (IS_TAB_FRAME && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === '\\') {
+          e.preventDefault();
+          postToShell('aaz-split-request', { action: 'toggle' });
+          return;
+        }
+        if (IS_TAB_FRAME && state.split.active && (e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+          e.preventDefault();
+          postToShell('aaz-split-request', { action: 'focus' });
           return;
         }
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'w') {
@@ -8752,8 +8689,22 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
               if (phase3) phase3.applyMiniPlayerVisuals(msg.enabled, msg.alwaysOnTop);
             } else if (msg.type === 'aaz-taskbar-action') {
               handleTaskbarMediaAction(msg.action);
+            } else if (msg.type === 'aaz-split-state') {
+              applySplitState(msg);
+            } else if (msg.type === 'aaz-open-picker') {
+              openFilesPicker();
+            } else if (msg.type === 'aaz-open-files') {
+              openFilesFromList(msg.files);
             }
           });
+
+          // Tell the shell which split side the user is working in (keyboard/pointer/focus).
+          const reportSplitFocus = () => {
+            if (state.split.active && !state.split.focused) postToShell('aaz-split-focus');
+          };
+          window.addEventListener('pointerdown', reportSplitFocus, true);
+          window.addEventListener('focus', reportSplitFocus);
+          window.addEventListener('keydown', reportSplitFocus, true);
         }
 
         // Apply saved Theme, Visual Skin, Language (RTL/LTR), Visualizer Style & Subtitle Styling
@@ -8761,11 +8712,14 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         let savedSkin = DEFAULT_SKIN;
         let savedLang = 'en';
         let savedViz = 'spectrum';
+        let savedVizPrefs = null;
         try {
           savedTheme = localStorage.getItem('aaz_theme') || 'dark';
           savedSkin = sanitizeSkin(localStorage.getItem(SKIN_STORAGE_KEY));
           savedLang = localStorage.getItem('aaz_lang') || 'en';
           savedViz = localStorage.getItem('aaz_viz_mode') || 'spectrum';
+          const savedVizPrefsRaw = localStorage.getItem('aaz_viz_prefs');
+          if (savedVizPrefsRaw) savedVizPrefs = JSON.parse(savedVizPrefsRaw);
           const savedSubRaw = localStorage.getItem(SUBTITLE_STYLE_KEY);
           if (savedSubRaw) {
             const parsedSub = JSON.parse(savedSubRaw);
@@ -8781,7 +8735,9 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
         syncSubtitleControlsUI();
         applyTheme(savedTheme, false, false);
         applySkin(savedSkin, false, false);
+        state.vizPrefs = sanitizeVizPrefs(savedVizPrefs);
         setVizMode(savedViz, false);
+        syncVizPickerUI();
         applyLanguage(savedLang, false, false);
 
         // Restore saved playlist sidebar width
@@ -8893,6 +8849,7 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
           setVolume: (vol) => setVolume(vol, true),
           setPlaybackRate: (rate) => setPlaybackRate(rate, true),
           adjustPlaybackSpeed: (delta) => adjustPlaybackSpeed(delta, true),
+          cycleVizMode: () => cycleVizMode(),
           setVideoAspect: (aspect) => {
             state.videoAspect = aspect || 'default';
             applyVideoTransform();
@@ -8929,6 +8886,17 @@ export function initPlayerApp({ currentTabId, isInitialTab, isTabFrame }) {
             if (prefs?.skin) applySkin(prefs.skin, true, true);
             if (prefs?.lang) applyLanguage(prefs.lang, true, true);
             if (prefs?.subtitleStyle) updateSubtitleStyle(prefs.subtitleStyle, true, true);
+            if (prefs?.viz) {
+              setVizPrefs(prefs.viz.prefs, true);
+              setVizMode(prefs.viz.mode, true);
+            }
+            if (prefs?.split) {
+              try {
+                localStorage.setItem('aaz_split_prefs', JSON.stringify(prefs.split));
+              } catch (err) {
+                errorHandler.log('storage.splitPrefs', err);
+              }
+            }
             renderSavedPlaylists();
             updateSidebarCounts();
           },

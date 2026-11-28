@@ -4,7 +4,7 @@
   <p><strong>مشغّل الصوت والفيديو المحلي بتاعك — خفيف، سريع، وبيشتغل من غير نت</strong><br/>
   A lightweight local audio &amp; video player for Windows and Android</p>
   <p>
-    <img src="https://img.shields.io/badge/v1.10.1-3dc479?style=for-the-badge" alt="v1.10.1" />
+    <img src="https://img.shields.io/badge/v1.11.0-3dc479?style=for-the-badge" alt="v1.11.0" />
     <img src="https://img.shields.io/badge/Windows-0f2d1d?style=for-the-badge&logo=windows" alt="Windows" />
     <img src="https://img.shields.io/badge/Android-0f2d1d?style=for-the-badge&logo=android" alt="Android" />
     <img src="https://img.shields.io/badge/Rust%20%2B%20Tauri%20v2-1f6f46?style=for-the-badge&logo=rust" alt="Rust + Tauri v2" />
@@ -30,10 +30,16 @@
   <img src="docs/screenshots/hamza-desktop.png" alt="همزة على ويندوز — التشغيل وقائمة الانتظار" width="92%" />
 </p>
 
-الموجات المتحركة بتتابع الصوت لحظة بلحظة بأكتر من شكل: طيف متناظر، موجة حريرية، هالة صوتية، وأعمدة استوديو — كلها جزء من البرنامج مش إضافات خارجية.
+الموجات المتحركة بتتابع الصوت لحظة بلحظة وبترسم على خلفية الشاشة كلها: طيف متماثل، موجة حريرية، هالة صوتية، أعمدة ستيريو (قناة يمين ويسار فعلًا)، أعمدة استوديو، خريطة حرارية، وتموّجات الإيقاع — وشعار همزة في قلب الهالة. تختار الشكل واللون والحساسية من قائمة الشكل أعلى الشاشة وبتتحفظ، أو تقلّب بين الأشكال بزر `V`.
 
 <p align="center">
   <img src="docs/screenshots/hamza-visualizer.png" alt="المصور الموسيقي المتفاعل في همزة" width="92%" />
+</p>
+
+**تقسيم الشاشة:** شغّل ملفين جنب بعض (فوق بعض تلقائيًا على الموبايل والنوافذ الضيقة). كل جانب مشغّل كامل بتحكماته وقائمته، والجانب النشط هو اللي بياخد الاختصارات. فاصل بيتسحب، تبديل الجانبين، وخيار "الصوت من الجانب النشط بس". تبدأه من زر التقسيم في شريط التبويبات أو من قائمة الوسائط أو بـ `Ctrl+\`.
+
+<p align="center">
+  <img src="docs/screenshots/hamza-split.png" alt="تقسيم الشاشة في همزة — فيديو وصوت جنب بعض" width="92%" />
 </p>
 
 شكل البرنامج على ذوقك: 16 ثيم كامل، كل واحد له وضع داكن وفاتح، من الكلاسيك الهادي لأشكال زي سايبر وماينكرافت وليجو — بتتبدل من قائمة العرض في ثانية، والأيقونات والألوان بتتظبط مع الثيم على طول.
@@ -51,6 +57,8 @@
 ### اللي بيميزه
 - **تبويبات ونوافذ مستقلة** زي المتصفح: كل تبويب مشغّل لوحده بصوته وقائمته، والبرنامج بيرجّع آخر جلسة زي ما كانت بالظبط
 - **قوائم تشغيل جدّية:** سحب وإفلات، كليك يمين، "التالي في القائمة"، حفظ وتصدير `.XSPF` / `.M3U8` / `.PLS`
+- **تقسيم الشاشة:** ملفين جنب بعض، لكل جانب تحكمه، وفاصل قابل للسحب
+- **8 أشكال للموجات الصوتية** برسم على خلفية الشاشة، بألوان الثيم أو ألوان جاهزة، وبتتحفظ
 - **16 ثيم كاملين** بداكن وفاتح (32 شكل)، منهم ماينكرافت وليجو وروبلوكس وأركيد وويندوز 95 الكلاسيكي — بتتبدل من قائمة العرض في ثانية
 - **مكتبة وسائط** للمجلدات اللي انت بتختارها بس، مع بحث وفلترة وفرز بالاسم أو التاريخ أو المدة، وسجل مشاهدة بيكمّل من آخر نقطة وقفت عندها
 - **تحكم حقيقي في الصوت:** شريط صوت من 0 لـ 200%، معادل 5 نطاقات، وتوجيه الصوت لكل تبويب أو نافذة لوحدها
@@ -73,6 +81,8 @@ Hamza (همزة) is a local audio &amp; video player for Windows and Android. It
 
 - Browser-style multi-tab workspace with independent windows and exact session resume
 - Serious playlists: drag-and-drop, right-click actions, Up Next, `.XSPF` / `.M3U8` / `.PLS` export
+- **Split view**: two players side by side (stacked on phones), each with its own controls, a draggable divider, swap, and an optional "active side plays sound" mode — open it from the tab strip, Media menu or `Ctrl+\`
+- **8 visualizer styles** drawn across the whole stage (Symmetric Spectrum, Silk Wave, Audio Halo, Stereo Bars, Studio LED, Heat Map, Beat Ripples, Off) with theme or preset colours, sensitivity and a saved picker; `V` cycles styles
 - 16 full themes in dark and light, switchable in one click from the View menu
 - Media library for the folders you choose, with search, filters, sorting and resumable watch history
 - Real 0–200% volume, 5-band EQ, and per-tab audio output routing

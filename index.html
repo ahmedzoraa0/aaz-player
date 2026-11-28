@@ -24,6 +24,9 @@
       </div>
       <div class="tabstrip-tabs" id="tabStripTabs"></div>
       <button type="button" class="tab-add-btn" id="newTabBtn" title="New Tab (Ctrl+T)" aria-label="Open new tab">+</button>
+      <button type="button" class="tab-add-btn tab-split-btn" id="splitBtn" title="Split view" aria-label="Split view" aria-haspopup="menu" aria-expanded="false" aria-pressed="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
+      </button>
       <div class="tabstrip-drag-spacer" id="tabDragSpacer"></div>
       <div class="win-controls" id="winControls" hidden>
         <button type="button" class="win-ctrl-btn" id="winMinBtn" title="Minimize" aria-label="Minimize">
@@ -91,6 +94,8 @@
               <button type="button" class="menu-action" data-cmd="open-files"><span class="menu-action-label" data-i18n="cmdOpenFiles">Open Files...</span><span class="menu-shortcut">Ctrl+Shift+O</span></button>
               <button type="button" class="menu-action" data-cmd="new-tab"><span class="menu-action-label" data-i18n="cmdNewTab">New Tab</span><span class="menu-shortcut">Ctrl+T</span></button>
               <button type="button" class="menu-action" data-cmd="new-window"><span class="menu-action-label" data-i18n="cmdNewWindow">New Window</span><span class="menu-shortcut">Ctrl+Shift+N</span></button>
+              <button type="button" class="menu-action" data-cmd="split-toggle"><span class="menu-action-label" data-i18n="cmdSplitToggle">Split View</span><span class="menu-shortcut">Ctrl+\</span></button>
+              <button type="button" class="menu-action" data-cmd="split-open-two"><span class="menu-action-label" data-i18n="cmdSplitOpenTwo">Open Two Files Side by Side…</span></button>
               <button type="button" class="menu-action" data-cmd="resume-session"><span class="menu-action-label" data-i18n="cmdResume">Resume Last Session</span></button>
               <div class="menu-sub" id="mediaRecentSubmenu">
                 <button type="button" class="menu-action menu-sub-trigger" aria-haspopup="true">
@@ -303,7 +308,7 @@
               <button type="button" class="menu-action" data-cmd="check-updates"><span class="menu-action-label" data-i18n="cmdCheckUpdates">Check for Updates...</span></button>
               <button type="button" class="menu-action" data-cmd="show-shortcuts"><span class="menu-action-label" data-i18n="cmdShortcuts">Keyboard Shortcuts</span><span class="menu-shortcut">?</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-heading" id="menuVersionLabel">همزة v1.10.1</div>
+              <div class="menu-heading" id="menuVersionLabel">همزة v1.11.0</div>
             </div>
           </div>
         </nav>
@@ -720,6 +725,67 @@
 
           <!-- AUDIO STUDIO STAGE -->
           <div class="audio-stage" id="audioStage">
+            <canvas id="visualizerCanvas" class="viz-bg-canvas" aria-hidden="true"></canvas>
+            <div class="viz-control" id="vizControl">
+              <button type="button" class="viz-picker-btn" id="vizPickerBtn" aria-haspopup="true" aria-expanded="false" aria-controls="vizPopover">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h2l2-6 3 12 3-9 2 6 2-3h4"/></svg>
+                <span id="vizPickerLabel">Symmetric Spectrum</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div class="viz-popover" id="vizPopover" role="dialog" aria-label="Visual style" hidden>
+                <div class="viz-pop-title" data-i18n="vizStyleTitle">Visual style</div>
+                <div class="viz-grid" id="vizModes" role="group" aria-label="Visualizer style">
+              <button type="button" class="viz-mode-btn is-active" data-viz="spectrum" aria-pressed="true">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><rect x="3" y="9" width="2.2" height="5" rx="1"/><rect x="6.6" y="5" width="2.2" height="9" rx="1"/><rect x="10.2" y="2" width="2.2" height="12" rx="1"/><rect x="13.8" y="5" width="2.2" height="9" rx="1"/><rect x="17.4" y="9" width="2.2" height="5" rx="1"/></svg>
+                <span data-i18n="vizSpectrum">Symmetric Spectrum</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="silk" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><path d="M2 9c3-6 5-6 8 0s5 6 8 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M2 12c3-5 6-5 9-1s5 4 7-1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".6"/></svg>
+                <span data-i18n="vizSilk">Silk Wave</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="halo" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 1.5v2M12 12.5v2M5.5 8h2M16.5 8h2M7.4 3.4l1.2 1.2M15.4 11.4l1.2 1.2M16.6 3.4l-1.2 1.2M8.6 11.4l-1.2 1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <span data-i18n="vizHalo">Audio Halo</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="stereo" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><rect x="2.5" y="8" width="2" height="6" rx="1"/><rect x="5.5" y="4" width="2" height="10" rx="1"/><rect x="8.5" y="6.5" width="2" height="7.5" rx="1"/><rect x="13.5" y="6.5" width="2" height="7.5" rx="1"/><rect x="16.5" y="4" width="2" height="10" rx="1"/><rect x="19.5" y="8" width="2" height="6" rx="1"/></svg>
+                <span data-i18n="vizStereo">Stereo Bars</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="led" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><g><rect x="3" y="2" width="3.2" height="2.6" rx=".7"/><rect x="3" y="6" width="3.2" height="2.6" rx=".7"/><rect x="3" y="10" width="3.2" height="2.6" rx=".7"/><rect x="8.4" y="6" width="3.2" height="2.6" rx=".7"/><rect x="8.4" y="10" width="3.2" height="2.6" rx=".7"/><rect x="13.8" y="10" width="3.2" height="2.6" rx=".7"/><rect x="19.2" y="2" width="1.8" height="2.6" rx=".7" opacity=".4"/></g></svg>
+                <span data-i18n="vizLed">Studio LED</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="heat" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="20" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="4.5" y="9" width="3" height="3" rx=".6" opacity=".45"/><rect x="9" y="6" width="3" height="6" rx=".6" opacity=".75"/><rect x="13.5" y="4" width="3" height="8" rx=".6"/><rect x="17.5" y="7" width="2" height="5" rx=".6" opacity=".6"/></svg>
+                <span data-i18n="vizHeat">Heat Map</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="ripple" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="1.8"/><circle cx="12" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".8"/><circle cx="12" cy="8" r="6.8" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".45"/></svg>
+                <span data-i18n="vizRipple">Beat Ripples</span>
+              </button>
+              <button type="button" class="viz-mode-btn" data-viz="off" aria-pressed="false">
+                <svg width="24" height="16" viewBox="0 0 24 16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12l8-8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <span data-i18n="vizOff">Off</span>
+              </button>
+                </div>
+                <div class="viz-pop-title" data-i18n="vizPaletteTitle">Colours</div>
+                <div class="viz-palettes" role="group" aria-label="Visualizer colours">
+              <button type="button" class="viz-palette-btn is-active" data-palette="theme" aria-pressed="true"><span class="viz-swatch" style="background:linear-gradient(90deg,var(--accent),var(--accent-hover,var(--accent)))"></span><span data-i18n="vizPalTheme">Theme</span></button>
+              <button type="button" class="viz-palette-btn" data-palette="aurora" aria-pressed="false"><span class="viz-swatch" style="background:linear-gradient(90deg,#20c997,#40e0d0,#a78bfa)"></span><span data-i18n="vizPalAurora">Aurora</span></button>
+              <button type="button" class="viz-palette-btn" data-palette="sunset" aria-pressed="false"><span class="viz-swatch" style="background:linear-gradient(90deg,#f4723d,#fb923c,#f472b6)"></span><span data-i18n="vizPalSunset">Sunset</span></button>
+              <button type="button" class="viz-palette-btn" data-palette="ocean" aria-pressed="false"><span class="viz-swatch" style="background:linear-gradient(90deg,#0e7490,#22d3ee,#818cf8)"></span><span data-i18n="vizPalOcean">Ocean</span></button>
+              <button type="button" class="viz-palette-btn" data-palette="mono" aria-pressed="false"><span class="viz-swatch" style="background:linear-gradient(90deg,#94a3b8,#e2e8f0,#ffffff)"></span><span data-i18n="vizPalMono">Mono</span></button>
+                </div>
+                <label class="viz-opt-row">
+                  <span data-i18n="vizSensitivityLabel">Sensitivity</span>
+                  <input type="range" class="range-input" id="vizSensitivity" min="0.5" max="1.6" step="0.05" value="1" aria-label="Sensitivity" />
+                </label>
+                <label class="viz-opt-row viz-opt-check">
+                  <input type="checkbox" id="vizLogoToggle" checked />
+                  <span data-i18n="vizShowLogo">Show logo in the centre</span>
+                </label>
+              </div>
+            </div>
             <button type="button" class="audio-fs-exit-btn" id="audioExitFsBtn" title="Exit Fullscreen (F)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 14h6v6"/>
@@ -748,18 +814,6 @@
               </div>
             </div>
 
-            <!-- Multi-Mode Studio Visualizer -->
-            <div class="visualizer-shell">
-              <div class="visualizer-wrap" aria-hidden="true">
-                <canvas id="visualizerCanvas"></canvas>
-              </div>
-              <div class="viz-modes" id="vizModes" role="tablist" aria-label="Visualizer style">
-                <button type="button" class="viz-mode-btn is-active" data-viz="spectrum" data-i18n="vizSpectrum">Spectrum</button>
-                <button type="button" class="viz-mode-btn" data-viz="wave" data-i18n="vizWave">Aurora Wave</button>
-                <button type="button" class="viz-mode-btn" data-viz="orb" data-i18n="vizOrb">Pulse Orb</button>
-                <button type="button" class="viz-mode-btn" data-viz="led" data-i18n="vizLed">Studio LED</button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -1348,7 +1402,7 @@
           <div class="settings-row">
             <div class="settings-label-col">
               <span class="settings-label" data-i18n="cmdCheckUpdates">Check for Updates...</span>
-              <span class="settings-sub" id="setAppVersionLabel">همزة v1.10.1</span>
+              <span class="settings-sub" id="setAppVersionLabel">همزة v1.11.0</span>
             </div>
             <div class="settings-control">
               <button type="button" class="btn btn-primary" id="setCheckUpdatesBtn" style="height:30px;font-size:12px" data-i18n="cmdCheckUpdates">Check for Updates...</button>

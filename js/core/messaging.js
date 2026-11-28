@@ -24,6 +24,8 @@ export const TAB_TO_SHELL_TYPES = Object.freeze(
     'aaz-sync-prefs',
     'aaz-tab-mini-mode',
     'aaz-window-action',
+    'aaz-split-focus',
+    'aaz-split-request',
   ])
 );
 
@@ -34,6 +36,9 @@ export const SHELL_TO_TAB_TYPES = Object.freeze(
     'aaz-update-status',
     'aaz-shell-mini-state',
     'aaz-taskbar-action',
+    'aaz-split-state',
+    'aaz-open-picker',
+    'aaz-open-files',
   ])
 );
 
@@ -42,6 +47,22 @@ const ALLOWED_LANGS = new Set(['en', 'ar']);
 const ALLOWED_KINDS = new Set(['', 'audio', 'video']);
 const ALLOWED_WINDOW_ACTIONS = new Set(['minimize', 'close', 'mini-preset', 'mini-drag-end']);
 const ALLOWED_TASKBAR_ACTIONS = new Set(['prev', 'toggle-play', 'next']);
+const ALLOWED_SPLIT_ACTIONS = new Set([
+  'toggle',
+  'new',
+  'new-picker',
+  'swap',
+  'rotate',
+  'close',
+  'focus',
+  'open-paths',
+  'open-files',
+]);
+
+/** File objects from another frame fail `instanceof File`, so use the brand tag. */
+function isFileLike(v) {
+  return Object.prototype.toString.call(v) === '[object File]';
+}
 
 function sanitizeString(val, maxLen = 256) {
   if (typeof val !== 'string') return '';
@@ -142,6 +163,31 @@ export function validateTabToShellMessage(data, expectedTabId) {
         alwaysOnTop: typeof data.alwaysOnTop === 'boolean' ? data.alwaysOnTop : undefined,
       };
 
+    case 'aaz-split-focus':
+      return { type, tabId };
+
+    case 'aaz-split-request': {
+      const action = typeof data.action === 'string' ? data.action.trim() : '';
+      if (!ALLOWED_SPLIT_ACTIONS.has(action)) return null;
+      const out = { type, tabId, action };
+      if (action === 'focus') out.dir = data.dir === -1 ? -1 : 1;
+      if (action === 'open-paths') {
+        if (!Array.isArray(data.paths)) return null;
+        const paths = data.paths
+          .filter((p) => typeof p === 'string' && p.trim().length > 0 && p.length <= 1024)
+          .slice(0, 50);
+        if (paths.length === 0) return null;
+        out.paths = paths;
+      }
+      if (action === 'open-files') {
+        if (!Array.isArray(data.files)) return null;
+        const files = data.files.filter(isFileLike).slice(0, 50);
+        if (files.length === 0) return null;
+        out.files = files;
+      }
+      return out;
+    }
+
     case 'aaz-window-action': {
       const action = typeof data.action === 'string' ? data.action.trim() : '';
       if (!ALLOWED_WINDOW_ACTIONS.has(action)) return null;
@@ -219,6 +265,25 @@ export function validateShellToTabMessage(data) {
       const action = typeof data.action === 'string' ? data.action.trim() : '';
       if (!ALLOWED_TASKBAR_ACTIONS.has(action)) return null;
       return { type, action };
+    }
+
+    case 'aaz-split-state':
+      return {
+        type,
+        active: Boolean(data.active),
+        focused: Boolean(data.focused),
+        side: data.side === 'second' ? 'second' : 'first',
+        soloAudio: Boolean(data.soloAudio),
+      };
+
+    case 'aaz-open-picker':
+      return { type };
+
+    case 'aaz-open-files': {
+      if (!Array.isArray(data.files)) return null;
+      const files = data.files.filter(isFileLike).slice(0, 50);
+      if (files.length === 0) return null;
+      return { type, files };
     }
 
     default:

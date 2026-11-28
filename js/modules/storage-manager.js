@@ -11,6 +11,8 @@
  */
 
 import { sanitizeSubtitleStyle } from './subtitle-style.js';
+import { sanitizeVizMode, sanitizeVizPrefs } from './visualizer.js';
+import { sanitizeSplitPrefs } from './split-view.js';
 
 export const SCHEMA_VERSION = 4;
 export const STORAGE_KEY = 'aaz_media_player_state_v4';
@@ -528,6 +530,26 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
     return { ok: false, state: latest, error: 'Storage quota exceeded or unavailable' };
   }
 
+  function readJsonPref(key) {
+    try {
+      const raw = safeGetItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readVizPrefs() {
+    return {
+      mode: sanitizeVizMode(safeGetItem('aaz_viz_mode')),
+      prefs: sanitizeVizPrefs(readJsonPref('aaz_viz_prefs')),
+    };
+  }
+
+  function readSplitPrefs() {
+    return sanitizeSplitPrefs(readJsonPref('aaz_split_prefs'));
+  }
+
   function exportBackupJson(extraPrefs = {}) {
     const state = load();
     const cleanSubStyle = extraPrefs.subtitleStyle
@@ -544,6 +566,8 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
         skin: typeof extraPrefs.skin === 'string' ? extraPrefs.skin : (safeGetItem('aaz_skin') || 'foliage'),
         lang: extraPrefs.lang === 'ar' ? 'ar' : (safeGetItem('aaz_lang') || 'en'),
         subtitleStyle: cleanSubStyle,
+        viz: readVizPrefs(),
+        split: readSplitPrefs(),
       },
     };
     return JSON.stringify(payload, null, 2);
@@ -596,6 +620,14 @@ export function createStorageManager(storage = typeof localStorage !== 'undefine
         subtitleStyle: parsed.prefs.subtitleStyle
           ? sanitizeSubtitleStyle(parsed.prefs.subtitleStyle)
           : undefined,
+        viz:
+          parsed.prefs.viz && typeof parsed.prefs.viz === 'object'
+            ? { mode: sanitizeVizMode(parsed.prefs.viz.mode), prefs: sanitizeVizPrefs(parsed.prefs.viz.prefs) }
+            : undefined,
+        split:
+          parsed.prefs.split && typeof parsed.prefs.split === 'object'
+            ? sanitizeSplitPrefs(parsed.prefs.split)
+            : undefined,
       };
     }
 

@@ -1810,6 +1810,128 @@ async function main() {
     assert.ok(css.includes('var(--accent-text, var(--accent))'), 'accent-coloured text must use --accent-text with accent fallback');
   });
 
+  // 42. Visualizer engine helpers
+  await runTest('Visualizer: mode/prefs sanitising, legacy ids migrate, log-band ranges are ordered and in-bounds', async () => {
+    const viz = await import(pathToFileURL(path.join(ROOT, 'js/modules/visualizer.js')).href);
+    assert.deepEqual([...viz.VIZ_MODES], ['spectrum', 'silk', 'halo', 'stereo', 'led', 'heat', 'ripple', 'off']);
+    assert.equal(viz.sanitizeVizMode('wave'), 'silk', 'legacy wave must migrate to silk');
+    assert.equal(viz.sanitizeVizMode('orb'), 'halo', 'legacy orb must migrate to halo');
+    assert.equal(viz.sanitizeVizMode('nonsense'), 'spectrum');
+    assert.equal(viz.sanitizeVizMode(null), 'spectrum');
+    const prefs = viz.sanitizeVizPrefs({ palette: 'evil', sensitivity: 99, showLogo: 'x' });
+    assert.equal(prefs.palette, 'theme');
+    assert.equal(prefs.sensitivity, 1.6);
+    assert.equal(prefs.showLogo, true);
+    assert.equal(viz.sanitizeVizPrefs({ sensitivity: -5 }).sensitivity, 0.5);
+    assert.equal(viz.sanitizeVizPrefs({ showLogo: false }).showLogo, false);
+    assert.deepEqual(viz.sanitizeVizPrefs(null), { palette: 'theme', sensitivity: 1, showLogo: true });
+    for (const [n, bins, sr] of [[24, 1024, 48000], [60, 512, 44100], [96, 1024, 96000]]) {
+      const ranges = viz.computeBandRanges(n, bins, sr);
+      assert.equal(ranges.length, n);
+      let prevLo = -1;
+      for (const [lo, hi] of ranges) {
+        assert.ok(lo >= 0 && hi <= bins && hi > lo, 'range must be inside the spectrum and non-empty');
+        assert.ok(lo >= prevLo, 'bands must be ordered low -> high');
+        prevLo = lo;
+      }
+    }
+  });
+
+  await runTest('Visualizer wiring: full-bleed canvas behind stage, picker with 8 modes, themed colours, resize-aware, logo in centre', () => {
+    const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const css = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    const engine = fs.readFileSync(path.join(ROOT, 'js/modules/visualizer.js'), 'utf8');
+    const stageStart = indexHtml.indexOf('id="audioStage"');
+    assert.ok(indexHtml.indexOf('id="visualizerCanvas"', stageStart) > stageStart, 'canvas must live inside the audio stage');
+    assert.ok(!indexHtml.includes('visualizer-wrap'), 'boxed visualizer wrapper must be gone');
+    const modeBtns = indexHtml.match(/class="viz-mode-btn[^"]*" data-viz="[a-z]+"/g) || [];
+    assert.equal(modeBtns.length, 8, 'picker must offer all 8 styles');
+    assert.ok(/\.viz-bg-canvas\s*\{[^}]*position:\s*absolute[^}]*inset:\s*0/.test(css), 'canvas must be a full-bleed absolute layer');
+    assert.ok(app.includes("localStorage.setItem('aaz_viz_prefs'") && app.includes("localStorage.setItem('aaz_viz_mode'"), 'style and options must persist');
+    assert.ok(engine.includes("getPropertyValue('--accent')"), 'colours must come from the active theme/skin');
+    assert.ok(engine.includes('ResizeObserver'), 'visuals must re-layout on resize (no stale scaling)');
+    assert.ok(engine.includes('drawLogo'), 'halo/ripple centre must use the logo');
+    assert.ok(!/AZ0|aaz-player/i.test(engine), 'no old app name inside the visualizers');
+  });
+
+  // 43. Split view helpers + messaging
+  await runTest('Split view: prefs, orientation, geometry fills the host exactly, pointer ratio clamps/snaps', async () => {
+    const sv = await import(pathToFileURL(path.join(ROOT, 'js/modules/split-view.js')).href);
+    assert.deepEqual(sv.sanitizeSplitPrefs(null), { ratio: 0.5, orientation: 'auto', soloAudio: false });
+    assert.equal(sv.sanitizeSplitPrefs({ ratio: 5 }).ratio, sv.SPLIT_MAX_RATIO);
+    assert.equal(sv.sanitizeSplitPrefs({ ratio: -1 }).ratio, sv.SPLIT_MIN_RATIO);
+    assert.equal(sv.sanitizeSplitPrefs({ orientation: 'diag' }).orientation, 'auto');
+    assert.equal(sv.resolveSplitOrientation('auto', 1280), 'h');
+    assert.equal(sv.resolveSplitOrientation('auto', 390), 'v', 'phones stack the two sides');
+    assert.equal(sv.resolveSplitOrientation('h', 400), 'v', 'side by side is refused on tiny widths');
+    assert.equal(sv.resolveSplitOrientation('v', 1600), 'v');
+    for (const [w, h, ratio, o] of [[1280, 724, 0.5, 'h'], [1001, 733, 0.37, 'h'], [390, 700, 0.5, 'v'], [777, 513, 0.8, 'v']]) {
+      const L = sv.computeSplitLayout({ ratio, orientation: o, hostWidth: w, hostHeight: h });
+      if (o === 'h') {
+        assert.equal(L.first.w + L.divider.w + L.second.w, w, 'horizontal layout must fill the width exactly');
+        assert.equal(L.first.h, h);
+        assert.equal(L.second.x, L.first.w + L.divider.w);
+      } else {
+        assert.equal(L.first.h + L.divider.h + L.second.h, h, 'stacked layout must fill the height exactly');
+        assert.equal(L.first.w, w);
+        assert.equal(L.second.y, L.first.h + L.divider.h);
+      }
+    }
+    assert.equal(sv.ratioFromPointer({ pointer: 640, hostWidth: 1280, hostHeight: 700, orientation: 'h' }), 0.5, 'centre snaps to 50%');
+    assert.equal(sv.ratioFromPointer({ pointer: 5, hostWidth: 1280, hostHeight: 700, orientation: 'h' }), sv.SPLIT_MIN_RATIO);
+    assert.equal(sv.ratioFromPointer({ pointer: 5000, hostWidth: 1280, hostHeight: 700, orientation: 'h' }), sv.SPLIT_MAX_RATIO);
+    assert.deepEqual(sv.listSplitCandidates([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 'b').map((t) => t.id), ['a', 'c']);
+  });
+
+  await runTest('Split view messaging: strict validation of split requests/state, forged payloads rejected', async () => {
+    const m = await import(pathToFileURL(path.join(ROOT, 'js/core/messaging.js')).href);
+    const origin = 'http://127.0.0.1:3000';
+    const fakeWin = {};
+    const resolveTab = (w) => (w === fakeWin ? { id: 'tab_1' } : null);
+    const recv = (data) => m.receiveTabMessage({ origin, source: fakeWin, data }, resolveTab, origin);
+    const ok = recv({ type: 'aaz-split-request', tabId: 'tab_1', action: 'swap' });
+    assert.ok(ok && ok.message.action === 'swap', 'valid split request must pass');
+    assert.equal(recv({ type: 'aaz-split-request', tabId: 'tab_1', action: 'format-disk' }), null, 'unknown action rejected');
+    assert.equal(recv({ type: 'aaz-split-request', tabId: 'tab_1', action: 'open-paths', paths: [] }), null, 'empty path list rejected');
+    const withPaths = recv({ type: 'aaz-split-request', tabId: 'tab_1', action: 'open-paths', paths: ['C:\\a.mp4', 42, ''] });
+    assert.deepEqual(withPaths.message.paths, ['C:\\a.mp4'], 'non-string / empty paths are dropped');
+    assert.equal(recv({ type: 'aaz-split-request', tabId: 'tab_1', action: 'open-files', files: [{ name: 'fake.mp4' }] }), null, 'plain objects are not Files');
+    assert.ok(recv({ type: 'aaz-split-focus', tabId: 'tab_1' }), 'focus report must pass');
+    // Shell -> pane direction
+    const shellWin = {};
+    const recvPane = (data) => m.receiveShellMessage({ origin, source: shellWin, data }, shellWin, origin);
+    const st = recvPane({ type: 'aaz-split-state', active: 1, focused: 0, side: 'bogus', soloAudio: 'yes' });
+    assert.ok(st, 'valid split state must pass');
+    assert.equal(st.active, true);
+    assert.equal(st.side, 'first', 'unknown side falls back');
+    assert.equal(recvPane({ type: 'aaz-open-files', files: ['nope'] }), null);
+    const src = fs.readFileSync(path.join(ROOT, 'js/core/messaging.js'), 'utf8');
+    for (const t of ['aaz-split-focus', 'aaz-split-request', 'aaz-split-state', 'aaz-open-picker', 'aaz-open-files']) {
+      assert.ok(src.includes(`'${t}'`), `${t} must be an allow-listed message type`);
+    }
+  });
+
+  await runTest('Split view wiring: shell layout/divider/menu, pane-side focus + solo audio, backup carries viz & split prefs', async () => {
+    const shell = fs.readFileSync(path.join(ROOT, 'js/ui/workspace-shell.js'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'js/app/player-app.js'), 'utf8');
+    const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    const css = fs.readFileSync(path.join(ROOT, 'css/styles.css'), 'utf8');
+    assert.ok(html.includes('id="splitBtn"'), 'tab strip must expose the split button');
+    for (const fn of ['function layoutSplit', 'function startSplit', 'function endSplit', 'function swapSplitSides', 'function rotateSplitLayout', 'function openSplitMenu']) {
+      assert.ok(shell.includes(fn), `${fn} missing in shell`);
+    }
+    assert.ok(shell.includes('setPointerCapture'), 'divider must be draggable via pointer capture');
+    assert.ok(shell.includes("'aaz-split-state'"), 'shell must tell each pane its split state');
+    assert.ok(app.includes('function applySplitState') && app.includes("postToShell('aaz-split-focus')"), 'panes must report focus and apply state');
+    assert.ok(app.includes('splitAutoMuted'), 'solo-audio auto-mute must restore the user mute state');
+    assert.ok(app.includes('function openTwoFilesSplit'), 'open two files side by side must exist');
+    assert.ok(css.includes('.split-divider') && css.includes('.tab-frame.is-split'), 'split styles missing');
+    assert.ok(/data-cmd="split-toggle"/.test(html) && /data-cmd="split-open-two"/.test(html), 'menu entries missing');
+    const sm = fs.readFileSync(path.join(ROOT, 'js/modules/storage-manager.js'), 'utf8');
+    assert.ok(sm.includes('viz: readVizPrefs()') && sm.includes('split: readSplitPrefs()'), 'backup must include viz and split prefs');
+  });
+
   // 40. Arabic init regression: Phase 3 UI must apply translations during startup, not only on language toggle
   await runTest('Arabic init: phase3 applyTranslations runs at startup (Scan Device/Library/Player localized on fresh load)', () => {
     const p3 = fs.readFileSync(path.join(ROOT, 'js/ui/phase3-controller.js'), 'utf8');
